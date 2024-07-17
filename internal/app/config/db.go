@@ -32,12 +32,11 @@ func InitializeDB() (*gorm.DB, error) {
 
 	err := verifyDbFile(dbPath)
 	if err != nil {
-		logger.Errorf("database opening error: %v", err)
+		logger.Errorf("creating database error: %v", err)
 		return nil, err
 	}
 
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
-
 	if err != nil {
 		logger.Errorf("database opening error: %v", err)
 		return nil, err
@@ -45,7 +44,6 @@ func InitializeDB() (*gorm.DB, error) {
 
 	// Migrate Schema
 	err = db.AutoMigrate(&schemas.Toggle{}, &schemas.ToggleAudit{})
-
 	if err != nil {
 		logger.Errorf("database automigration error: %v", err)
 		return nil, err

@@ -6,9 +6,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func initialize(router *gin.Engine) {
+func Init(router *gin.Engine) {
+	handler.Init()
+
 	v1 := router.Group("/api/v1")
 	{
 		v1.GET("/toggles", handler.ListToggles)
+		v1.POST("/toggles", handler.CreateToggles)
 	}
 }

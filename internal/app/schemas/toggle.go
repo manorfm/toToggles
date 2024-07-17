@@ -8,10 +8,11 @@ import (
 
 type Toggle struct {
 	gorm.Model
-	On          bool
-	Name        string
-	ToggleChild uint
-	Toggle      *Toggle `gorm:"foreignKey:ToggleChild"`
+	//Id      uint   `json:"id" gorm:"unique;primaryKey;autoIncrement"`
+	On       bool   `json:"on"`
+	Name     string `json:"name"`
+	ParentID uint
+	Parent   *Toggle `json:"parent"`
 }
 
 type ToggleAudit struct {
@@ -21,4 +22,11 @@ type ToggleAudit struct {
 	FieldName string
 	OldValue  string
 	NewValue  string
+}
+
+type ToggleResponse struct {
+	ID   uint   `json:"id"`
+	On   bool   `json:"on"`
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
