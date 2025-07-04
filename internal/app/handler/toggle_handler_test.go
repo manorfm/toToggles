@@ -91,60 +91,45 @@ func TestToggleHandler_GetToggleStatus(t *testing.T) {
 	tests := []struct {
 		name           string
 		appID          string
-		path           string
+		toggleID       string
 		setupMock      func(*usecase.MockToggleRepository, *usecase.MockApplicationRepository)
 		expectedStatus int
-		expected       bool
+		enabled        bool
 		expectedError  string
 	}{
 		{
-			name:  "enabled toggle",
-			appID: "app123",
-			path:  "test.feature",
+			name:     "enabled toggle",
+			appID:    "app123",
+			toggleID: "toggle1",
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
-				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
-					Path:    "test.feature",
-					AppID:   "app123",
-					Enabled: true,
-				}
+				appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{ID: "toggle1", Path: "test.feature", AppID: "app123", Enabled: true}
 			},
 			expectedStatus: http.StatusOK,
-			expected:       true,
+			enabled:        true,
 			expectedError:  "",
 		},
 		{
-			name:  "disabled toggle",
-			appID: "app123",
-			path:  "test.feature",
+			name:     "disabled toggle",
+			appID:    "app123",
+			toggleID: "toggle1",
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
-				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
-					Path:    "test.feature",
-					AppID:   "app123",
-					Enabled: false,
-				}
+				appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{ID: "toggle1", Path: "test.feature", AppID: "app123", Enabled: false}
 			},
 			expectedStatus: http.StatusOK,
-			expected:       false,
+			enabled:        false,
 			expectedError:  "",
 		},
 		{
-			name:           "empty path",
-			appID:          "app123",
-			path:           "",
-			setupMock:      func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {},
-			expectedStatus: http.StatusBadRequest,
-			expected:       false,
-			expectedError:  "toggle path is required",
-		},
-		{
-			name:           "toggle not found",
-			appID:          "app123",
-			path:           "nonexistent.feature",
-			setupMock:      func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {},
+			name:     "toggle not found",
+			appID:    "app123",
+			toggleID: "notfound",
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+			},
 			expectedStatus: http.StatusNotFound,
-			expected:       false,
+			enabled:        false,
 			expectedError:  "toggle not found",
 		},
 	}
@@ -160,20 +145,14 @@ func TestToggleHandler_GetToggleStatus(t *testing.T) {
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
 			handler := NewToggleHandler(toggleUseCase)
 
-			router.GET("/applications/:id/toggles/status", handler.GetToggleStatus)
+			router.GET("/applications/:id/toggles/:toggleId", handler.GetToggleStatus)
 
-			// Create request
-			url := "/applications/" + tt.appID + "/toggles/status"
-			if tt.path != "" {
-				url += "?path=" + tt.path
-			}
+			url := "/applications/" + tt.appID + "/toggles/" + tt.toggleID
 			req, _ := http.NewRequest("GET", url, nil)
 
-			// Execute request
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			// Assertions
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
@@ -187,8 +166,8 @@ func TestToggleHandler_GetToggleStatus(t *testing.T) {
 			} else {
 				var response map[string]interface{}
 				json.Unmarshal(w.Body.Bytes(), &response)
-				if enabled, exists := response["enabled"]; !exists || enabled != tt.expected {
-					t.Errorf("Expected enabled %v, got %v", tt.expected, enabled)
+				if enabled, exists := response["enabled"]; !exists || enabled != tt.enabled {
+					t.Errorf("Expected enabled %v, got %v", tt.enabled, enabled)
 				}
 			}
 		})
@@ -199,38 +178,36 @@ func TestToggleHandler_UpdateToggle(t *testing.T) {
 	tests := []struct {
 		name           string
 		appID          string
-		path           string
+		toggleID       string
 		requestBody    map[string]interface{}
 		setupMock      func(*usecase.MockToggleRepository, *usecase.MockApplicationRepository)
 		expectedStatus int
 		expectedError  string
 	}{
 		{
-			name:  "successful update",
-			appID: "app123",
-			path:  "test.feature",
+			name:     "successful update",
+			appID:    "app123",
+			toggleID: "toggle1",
 			requestBody: map[string]interface{}{
 				"enabled": false,
 			},
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
-				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
-					Path:    "test.feature",
-					AppID:   "app123",
-					Enabled: true,
-				}
+				appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{ID: "toggle1", Path: "test.feature", AppID: "app123", Enabled: true}
 			},
 			expectedStatus: http.StatusOK,
 			expectedError:  "",
 		},
 		{
-			name:  "toggle not found",
-			appID: "app123",
-			path:  "nonexistent.feature",
+			name:     "toggle not found",
+			appID:    "app123",
+			toggleID: "notfound",
 			requestBody: map[string]interface{}{
 				"enabled": false,
 			},
-			setupMock:      func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {},
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+			},
 			expectedStatus: http.StatusNotFound,
 			expectedError:  "toggle not found",
 		},
@@ -247,22 +224,16 @@ func TestToggleHandler_UpdateToggle(t *testing.T) {
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
 			handler := NewToggleHandler(toggleUseCase)
 
-			router.PUT("/applications/:id/toggles", handler.UpdateToggle)
+			router.PUT("/applications/:id/toggles/:toggleId", handler.UpdateToggle)
 
-			// Create request
-			url := "/applications/" + tt.appID + "/toggles"
-			if tt.path != "" {
-				url += "?path=" + tt.path
-			}
+			url := "/applications/" + tt.appID + "/toggles/" + tt.toggleID
 			jsonBody, _ := json.Marshal(tt.requestBody)
 			req, _ := http.NewRequest("PUT", url, bytes.NewBuffer(jsonBody))
 			req.Header.Set("Content-Type", "application/json")
 
-			// Execute request
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			// Assertions
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
 			}

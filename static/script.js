@@ -211,132 +211,101 @@ async function handleCreateToggle(event) {
 
 async function handleUpdateToggle(event) {
     event.preventDefault();
-    
-    const path = document.getElementById('edit-toggle-path-input').value.trim();
     const enabled = document.getElementById('edit-toggle-enabled-input').checked;
-    if (!path) return;
-
+    if (!editingToggleId) return;
     try {
-        const response = await apiCall(`/applications/${currentAppId}/toggles?hierarchy=true`);
-        const found = findToggleByPath(response.toggles, path);
-        // Se está editando e mudou o caminho, deleta o antigo e cria o novo
-        if (lastEditedTogglePath && lastEditedTogglePath !== path) {
-            // Deleta o antigo
-            await apiCall(`/applications/${currentAppId}/toggles?path=${encodeURIComponent(lastEditedTogglePath)}`, {
-                method: 'DELETE'
-            });
-            // Cria o novo
-            await apiCall(`/applications/${currentAppId}/toggles`, {
-                method: 'POST',
-                body: JSON.stringify({ toggle: path })
-            });
-            // Atualiza o enabled
-            if (found) {
-                await apiCall(`/applications/${currentAppId}/toggle/${found.id}`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ enabled })
-                });
-            }
-            showSuccess('Toggle atualizado com sucesso!');
-        } else if (found) {
-            // Atualiza o enabled
-            await apiCall(`/applications/${currentAppId}/toggle/${found.id}`, {
-                method: 'PUT',
-                body: JSON.stringify({ enabled })
-            });
-            showSuccess('Toggle atualizado com sucesso!');
-        } else {
-            // Cria novo
-            await apiCall(`/applications/${currentAppId}/toggles`, {
-                method: 'POST',
-                body: JSON.stringify({ toggle: path })
-            });
-            showSuccess('Toggle criado com sucesso!');
-        }
+        await apiCall(`/applications/${currentAppId}/toggles/${editingToggleId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ enabled })
+        });
+        showSuccess('Toggle atualizado com sucesso!');
         closeModal('edit-toggle-modal');
         loadToggles(currentAppId);
-        lastEditedTogglePath = null;
+        editingToggleId = null;
     } catch (error) {
         showError('Erro ao salvar toggle');
     }
 }
 
 function renderToggles(toggles) {
-    if (!toggles || Object.keys(toggles).length === 0) {
+    if (!toggles || toggles.length === 0) {
         showEmptyState(togglesList, 'Nenhum toggle encontrado', 'Crie seu primeiro toggle para começar!');
         return;
     }
-    // Extrair apenas os nós folhas da árvore hierárquica
-    const leafNodes = extractLeafNodes(toggles);
+    // Extrair todos os caminhos folha
+    const leafNodes = [];
+    function traverse(node, path = [], enabledPath = [], idPath = []) {
+        const newPath = [...path, node.value];
+        const newEnabledPath = [...enabledPath, node.enabled];
+        const newIdPath = [...idPath, node.id];
+        if (!node.toggles || node.toggles.length === 0) {
+            leafNodes.push({
+                id: node.id,
+                path: newPath,
+                enabledPath: newEnabledPath,
+                idPath: newIdPath
+            });
+        } else {
+            node.toggles.forEach(child => traverse(child, newPath, newEnabledPath, newIdPath));
+        }
+    }
+    toggles.forEach(root => traverse(root));
+
     togglesList.innerHTML = leafNodes.map(toggle => {
-        // Dividir o caminho em partes e criar links clicáveis
-        const pathParts = toggle.value.split('.');
-        const pathLinks = pathParts.map((part, index) => {
-            const partialPath = pathParts.slice(0, index + 1).join('.');
-            return `<a href="#" class="path-link" onclick="editTogglePath('${partialPath}'); return false;">${part}</a>`;
+        // Status: verde (todos true), vermelho (todos false), amarelo (misto)
+        const allEnabled = toggle.enabledPath.every(e => e);
+        const allDisabled = toggle.enabledPath.every(e => !e);
+        let status = 'yellow';
+        if (allEnabled) status = 'green';
+        else if (allDisabled) status = 'red';
+
+        // SVG marcador
+        let statusSVG = '';
+        if (status === 'green') {
+            statusSVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M9 12l2 2l4-4"/></svg>`;
+        } else if (status === 'yellow') {
+            statusSVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`;
+        } else {
+            statusSVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>`;
+        }
+
+        // Caminho concatenado
+        const pathStr = toggle.path.join('.');
+        // Links: aplicar disabled a partir do primeiro false
+        let disabledFound = false;
+        const pathLinks = toggle.path.map((part, idx) => {
+            if (!disabledFound && !toggle.enabledPath[idx]) disabledFound = true;
+            const linkClass = disabledFound ? 'path-link disabled' : 'path-link';
+            const toggleId = toggle.idPath[idx];
+            return `<a href="#" class="${linkClass}" onclick="editTogglePath('${toggleId}'); return false;">${part}</a>`;
         }).join('<span class="path-separator">.</span>');
-        
+
         return `
-            <div class="toggle-card">
-                <div class="card-header">
-                    <div class="card-title-col">
-                        <h3 class="toggle-title">${pathLinks}</h3>
-                        <div class="toggle-badges-row">
-                            <span class="toggle-status-badge ${toggle.enabled ? 'enabled' : 'disabled'}" title="${toggle.enabled ? 'Habilitado' : 'Desabilitado'}">
-                                ${toggle.enabled ? '<svg width=13 height=13 viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'#22c55e\' stroke-width=2><circle cx=12 cy=12 r=8/><path d=\'M9 12l2 2l4-4\'/></svg>' : '<svg width=13 height=13 viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'#ef4444\' stroke-width=2><circle cx=12 cy=12 r=8/><line x1=9 y1=9 x2=15 y2=15/><line x1=15 y1=9 x2=9 y2=15/></svg>'}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="card-actions">
-                        <button class="icon-btn" title="Editar Toggle" onclick="editToggle('${toggle.value}', ${toggle.enabled})">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                        </button>
-                        <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${toggle.value}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3,6 5,6 21,6"/>
-                                <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                                <line x1="10" y1="11" x2="10" y2="17"/>
-                                <line x1="14" y1="11" x2="14" y2="17"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
+            <div class="toggle-card toggle-line">
+                <span class="toggle-status-dot">${statusSVG}</span>
+                <span class="toggle-path-line">${pathLinks}</span>
+                <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${pathStr}')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3,6 5,6 21,6"/>
+                        <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                </button>
             </div>
         `;
     }).join('');
 }
 
-// Função para extrair apenas os nós folhas da árvore hierárquica
-function extractLeafNodes(toggles) {
-    const leafNodes = [];
-    
-    function traverse(node, parentEnabled = true) {
-        const currentEnabled = node.enabled && parentEnabled;
-        
-        if (!node.toggles || node.toggles.length === 0) {
-            // É um nó folha
-            leafNodes.push({
-                id: node.id,
-                value: node.value,
-                enabled: currentEnabled
-            });
-        } else {
-            // É um nó intermediário, percorre os filhos
-            node.toggles.forEach(child => {
-                traverse(child, currentEnabled);
-            });
-        }
+// Função auxiliar para buscar o nó de um path parcial
+function getNodeByPath(rootNode, pathParts) {
+    let node = rootNode;
+    for (let i = 1; i < pathParts.length; i++) {
+        if (!node.toggles) return null;
+        node = node.toggles.find(child => child.value === pathParts[i]);
+        if (!node) return null;
     }
-    
-    // Percorre todos os nós raiz
-    Object.values(toggles).forEach(node => {
-        traverse(node);
-    });
-    
-    return leafNodes;
+    return node;
 }
 
 // Funções de Edição
@@ -348,20 +317,14 @@ function editToggle(path, enabled) {
     openModal('edit-toggle-modal');
 }
 
-async function editTogglePath(partialPath) {
-    // Buscar se existe toggle para esse nível
+async function editTogglePath(toggleId) {
     try {
-        const res = await apiCall(`/applications/${currentAppId}/toggles?hierarchy=true`);
-        const found = findToggleByPath(res.toggles, partialPath);
-        if (found) {
-            editToggle(found.value, found.enabled);
-        } else {
-            // Permitir criar novo toggle para esse nível
-            document.getElementById('edit-toggle-path-input').value = partialPath;
-            document.getElementById('edit-toggle-enabled-input').checked = true;
-            document.getElementById('edit-toggle-title').textContent = 'Criar Toggle para nível intermediário';
-            openModal('edit-toggle-modal');
-        }
+        const toggle = await apiCall(`/applications/${currentAppId}/toggles/${toggleId}`);
+        editingToggleId = toggle.id;
+        document.getElementById('edit-toggle-path-input').value = toggle.path;
+        document.getElementById('edit-toggle-enabled-input').checked = toggle.enabled;
+        document.getElementById('edit-toggle-title').textContent = 'Editar Toggle';
+        openModal('edit-toggle-modal');
     } catch (e) {
         showError('Erro ao buscar toggle para edição');
     }
@@ -369,24 +332,17 @@ async function editTogglePath(partialPath) {
 
 // Função para encontrar toggle por path na estrutura hierárquica
 function findToggleByPath(toggles, path) {
-    function traverse(node) {
-        if (node.value === path) {
-            return node;
-        }
-        if (node.toggles) {
-            for (const child of node.toggles) {
-                const found = traverse(child);
-                if (found) return found;
-            }
-        }
-        return null;
+    const parts = path.split('.');
+    let nodes = toggles;
+    let node = null;
+    for (let i = 0; i < parts.length; i++) {
+        node = Array.isArray(nodes)
+            ? nodes.find(n => n.value === parts[i])
+            : null;
+        if (!node) return null;
+        nodes = node.toggles || [];
     }
-    
-    for (const node of Object.values(toggles)) {
-        const found = traverse(node);
-        if (found) return found;
-    }
-    return null;
+    return node;
 }
 
 async function deleteToggle(path) {

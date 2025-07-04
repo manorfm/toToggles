@@ -213,7 +213,7 @@ func (uc *ToggleUseCase) GetAllTogglesByApp(appID string) ([]*entity.Toggle, err
 }
 
 // GetToggleHierarchy retorna a estrutura hierárquica dos toggles
-func (uc *ToggleUseCase) GetToggleHierarchy(appID string) (map[string]interface{}, error) {
+func (uc *ToggleUseCase) GetToggleHierarchy(appID string) ([]map[string]interface{}, error) {
 	if appID == "" {
 		return nil, entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
 	}
@@ -223,12 +223,12 @@ func (uc *ToggleUseCase) GetToggleHierarchy(appID string) (map[string]interface{
 		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching toggle hierarchy")
 	}
 
-	return uc.buildHierarchyMap(toggles), nil
+	return uc.buildHierarchyArray(toggles), nil
 }
 
-// buildHierarchyMap constrói o mapa hierárquico dos toggles
-func (uc *ToggleUseCase) buildHierarchyMap(toggles []*entity.Toggle) map[string]interface{} {
-	hierarchy := make(map[string]interface{})
+// buildHierarchyArray constrói a hierarquia como array
+func (uc *ToggleUseCase) buildHierarchyArray(toggles []*entity.Toggle) []map[string]interface{} {
+	var result []map[string]interface{}
 
 	// Agrupa toggles por nível
 	byLevel := make(map[int][]*entity.Toggle)
@@ -238,34 +238,32 @@ func (uc *ToggleUseCase) buildHierarchyMap(toggles []*entity.Toggle) map[string]
 
 	// Constrói a hierarquia começando pelos toggles raiz (nível 0)
 	for _, toggle := range byLevel[0] {
-		hierarchy[toggle.Value] = uc.buildToggleNode(toggle, byLevel)
+		result = append(result, uc.buildToggleNodeArray(toggle, byLevel))
 	}
 
-	return hierarchy
+	return result
 }
 
-// buildToggleNode constrói um nó da hierarquia
-func (uc *ToggleUseCase) buildToggleNode(toggle *entity.Toggle, byLevel map[int][]*entity.Toggle) map[string]interface{} {
-	return uc.buildToggleNodeRecursive(toggle, byLevel, toggle.Enabled, toggle.Path)
+// buildToggleNodeArray constrói um nó da hierarquia (sem editable, value só o nome)
+func (uc *ToggleUseCase) buildToggleNodeArray(toggle *entity.Toggle, byLevel map[int][]*entity.Toggle) map[string]interface{} {
+	return uc.buildToggleNodeRecursiveArray(toggle, byLevel, toggle.Enabled)
 }
 
-// buildToggleNodeRecursive constrói um nó propagando enabled e value completo
-// ATUALIZADO: Agora retorna o caminho completo em vez de apenas o valor do nó
-func (uc *ToggleUseCase) buildToggleNodeRecursive(toggle *entity.Toggle, byLevel map[int][]*entity.Toggle, parentEnabled bool, parentPath string) map[string]interface{} {
+// buildToggleNodeRecursiveArray constrói um nó propagando enabled e value só o nome
+func (uc *ToggleUseCase) buildToggleNodeRecursiveArray(toggle *entity.Toggle, byLevel map[int][]*entity.Toggle, parentEnabled bool) map[string]interface{} {
 	enabled := toggle.Enabled && parentEnabled
 
 	node := map[string]interface{}{
-		"id":       toggle.ID,
-		"value":    toggle.Path, // caminho completo em vez de apenas o valor do nó
-		"enabled":  enabled,
-		"editable": toggle.Editable,
+		"id":      toggle.ID,
+		"value":   toggle.Value, // apenas o nome do nível
+		"enabled": enabled,
 	}
 
 	// Busca filhos
 	var children []map[string]interface{}
 	for _, child := range byLevel[toggle.Level+1] {
 		if child.ParentID != nil && *child.ParentID == toggle.ID {
-			children = append(children, uc.buildToggleNodeRecursive(child, byLevel, enabled, child.Path))
+			children = append(children, uc.buildToggleNodeRecursiveArray(child, byLevel, enabled))
 		}
 	}
 
@@ -299,6 +297,40 @@ func (uc *ToggleUseCase) UpdateEnabledRecursively(toggleID string, enabled bool,
 		if err := uc.UpdateEnabledRecursively(child.ID, enabled, appID); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// GetToggleByID busca um toggle por ID e appID
+func (uc *ToggleUseCase) GetToggleByID(toggleID string, appID string) (*entity.Toggle, error) {
+	if toggleID == "" || appID == "" {
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
+	}
+	toggle, err := uc.toggleRepo.GetByID(toggleID)
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+	if toggle.AppID != appID {
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
+	}
+	return toggle, nil
+}
+
+// UpdateToggleByID atualiza o enabled de um toggle por ID e appID
+func (uc *ToggleUseCase) UpdateToggleByID(toggleID string, enabled bool, appID string) error {
+	if toggleID == "" || appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
+	}
+	toggle, err := uc.toggleRepo.GetByID(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+	if toggle.AppID != appID {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
+	}
+	toggle.Enabled = enabled
+	if err := uc.toggleRepo.Update(toggle); err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
 	}
 	return nil
 }

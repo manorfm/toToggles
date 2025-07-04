@@ -312,3 +312,59 @@ func TestToggleUseCase_GetAllTogglesByApp(t *testing.T) {
 		})
 	}
 }
+
+func TestToggleUseCase_GetToggleByID(t *testing.T) {
+	toggleMock := NewMockToggleRepository()
+	appMock := NewMockApplicationRepository()
+	appID := "app123"
+	toggleID := "toggle1"
+	appMock.Applications[appID] = &entity.Application{ID: appID, Name: "Test App"}
+	toggleMock.Toggles[toggleID] = &entity.Toggle{ID: toggleID, AppID: appID, Path: "test.path", Enabled: true}
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	toggle, err := useCase.GetToggleByID(toggleID, appID)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if toggle == nil || toggle.ID != toggleID {
+		t.Errorf("Expected toggle with ID %s", toggleID)
+	}
+
+	_, err = useCase.GetToggleByID("notfound", appID)
+	if err == nil {
+		t.Errorf("Expected error for not found toggle")
+	}
+
+	_, err = useCase.GetToggleByID(toggleID, "wrongapp")
+	if err == nil {
+		t.Errorf("Expected error for wrong appID")
+	}
+}
+
+func TestToggleUseCase_UpdateToggleByID(t *testing.T) {
+	toggleMock := NewMockToggleRepository()
+	appMock := NewMockApplicationRepository()
+	appID := "app123"
+	toggleID := "toggle1"
+	appMock.Applications[appID] = &entity.Application{ID: appID, Name: "Test App"}
+	toggleMock.Toggles[toggleID] = &entity.Toggle{ID: toggleID, AppID: appID, Path: "test.path", Enabled: false}
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	err := useCase.UpdateToggleByID(toggleID, true, appID)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if !toggleMock.Toggles[toggleID].Enabled {
+		t.Errorf("Expected toggle to be enabled")
+	}
+
+	err = useCase.UpdateToggleByID("notfound", true, appID)
+	if err == nil {
+		t.Errorf("Expected error for not found toggle")
+	}
+
+	err = useCase.UpdateToggleByID(toggleID, true, "wrongapp")
+	if err == nil {
+		t.Errorf("Expected error for wrong appID")
+	}
+}

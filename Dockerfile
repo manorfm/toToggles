@@ -29,7 +29,7 @@ COPY --from=builder /app/totoogle .
 RUN mkdir -p db
 
 # Expose port
-EXPOSE 8081
+EXPOSE 3056
 
 # Run the application
 CMD ["./totoogle"] 

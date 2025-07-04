@@ -89,27 +89,19 @@ func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 	})
 }
 
-// GetToggleStatus verifica se um toggle está habilitado
+// GetToggleStatus busca o status de um toggle por ID
 func (h *ToggleHandler) GetToggleStatus(c *gin.Context) {
 	appID := c.Param("id")
-	if appID == "" {
+	toggleID := c.Param("toggleId")
+	if appID == "" || toggleID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
+			"message": "application ID and toggle ID are required",
 		})
 		return
 	}
 
-	path := c.Query("path")
-	if path == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "toggle path is required",
-		})
-		return
-	}
-
-	enabled, err := h.toggleUseCase.GetToggleStatus(path, appID)
+	toggle, err := h.toggleUseCase.GetToggleByID(toggleID, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
@@ -130,42 +122,33 @@ func (h *ToggleHandler) GetToggleStatus(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ToggleStatusResponse{
-		Path:    path,
-		Enabled: enabled,
-	})
+	c.JSON(http.StatusOK, toggle)
 }
 
-// UpdateToggle atualiza um toggle
+// UpdateToggle atualiza um toggle por ID
 func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 	appID := c.Param("id")
-	if appID == "" {
+	toggleID := c.Param("toggleId")
+	if appID == "" || toggleID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
+			"message": "application ID and toggle ID are required",
 		})
 		return
 	}
 
-	path := c.Query("path")
-	if path == "" {
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    entity.ErrCodeValidation,
-			"message": "toggle path is required",
+			"message": "invalid request body: 'enabled' is required",
 		})
 		return
 	}
 
-	var req UpdateToggleRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "invalid request body: " + err.Error(),
-		})
-		return
-	}
-
-	err := h.toggleUseCase.UpdateToggle(path, req.Enabled, appID)
+	err := h.toggleUseCase.UpdateToggleByID(toggleID, *req.Enabled, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
@@ -186,11 +169,7 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "toggle updated successfully",
-		"path":    path,
-		"enabled": req.Enabled,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "toggle updated successfully"})
 }
 
 // DeleteToggle remove um toggle
@@ -255,7 +234,7 @@ func (h *ToggleHandler) GetAllToggles(c *gin.Context) {
 	hierarchy := c.Query("hierarchy") == "true"
 
 	if hierarchy {
-		hierarchyMap, err := h.toggleUseCase.GetToggleHierarchy(appID)
+		hierarchyArr, err := h.toggleUseCase.GetToggleHierarchy(appID)
 		if err != nil {
 			appErr, ok := err.(*entity.AppError)
 			if ok {
@@ -278,7 +257,7 @@ func (h *ToggleHandler) GetAllToggles(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"application": appID,
-			"toggles":     hierarchyMap,
+			"toggles":     hierarchyArr,
 		})
 		return
 	}

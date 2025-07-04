@@ -35,9 +35,9 @@ func TestInit(t *testing.T) {
 		"DELETE /applications/:id",
 		"POST /applications/:id/toggles",
 		"GET /applications/:id/toggles",
-		"GET /applications/:id/toggles/status",
-		"PUT /applications/:id/toggles",
-		"DELETE /applications/:id/toggles",
+		"GET /applications/:id/toggles/:toggleId",
+		"PUT /applications/:id/toggles/:toggleId",
+		"DELETE /applications/:id/toggles/:toggleId",
 	}
 
 	foundRoutes := make(map[string]bool)

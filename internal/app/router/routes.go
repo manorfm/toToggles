@@ -27,9 +27,12 @@ func Init(router *gin.Engine) {
 	{
 		toggles.POST("", handler.CreateToggle)
 		toggles.GET("", handler.GetAllToggles)
-		toggles.GET("/status", handler.GetToggleStatus)
-		toggles.PUT("", handler.UpdateToggle)
-		toggles.DELETE("", handler.DeleteToggle)
+	}
+	toggleById := router.Group("/applications/:id/toggles/:toggleId")
+	{
+		toggleById.GET("", handler.GetToggleStatus)
+		toggleById.PUT("", handler.UpdateToggle)
+		toggleById.DELETE("", handler.DeleteToggle)
 	}
 
 	// Rota para atualizar enabled recursivamente

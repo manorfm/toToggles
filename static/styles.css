@@ -656,8 +656,66 @@ main {
     text-decoration: underline;
 }
 
+.path-link.disabled {
+    color: #ef4444;
+    opacity: 0.7;
+}
+
+.path-link.disabled:hover {
+    background: #ffeaea;
+    color: #dc2626;
+    text-decoration: underline;
+}
+
 .path-separator {
     color: #6c757d;
     font-weight: 400;
     margin: 0 2px;
+}
+
+/* Estilos para estrutura hierárquica */
+.toggle-children {
+    margin-left: 20px;
+    margin-top: 10px;
+    padding-left: 15px;
+    border-left: 2px solid #e3eaf5;
+}
+
+.toggle-children .toggle-card {
+    margin-bottom: 8px;
+}
+
+.toggle-children .toggle-children {
+    margin-left: 15px;
+    padding-left: 12px;
+}
+
+/* Linha única para cada toggle */
+.toggle-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border-radius: 12px;
+    background: #f8fbff;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 4px 0 rgba(0, 123, 255, 0.04);
+}
+.toggle-status-dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+}
+.toggle-path-line {
+    flex: 1;
+    font-size: 1.13rem;
+    font-weight: 700;
+    color: #2563eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.toggle-line .icon-btn {
+    margin-left: 8px;
 } 

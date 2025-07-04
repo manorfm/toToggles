@@ -34,6 +34,6 @@ docker-build: ## Constrói a imagem Docker
 	docker build -t $(APP_NAME) .
 
 docker-run: ## Roda o container Docker
-	docker run -p 8081:8081 -v $(PWD)/db:/root/db $(APP_NAME)
+	docker run -p 3056:3056 -v $(PWD)/db:/root/db $(APP_NAME)
 
 dev: migrate-up run ## Roda em modo desenvolvimento (migrate + run) 
