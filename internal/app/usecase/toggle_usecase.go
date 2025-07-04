@@ -37,7 +37,7 @@ func (uc *ToggleUseCase) CreateToggle(path string, enabled bool, editable bool, 
 		return entity.NewAppError(entity.ErrCodeNotFound, "application not found")
 	}
 
-	// Verifica se o toggle já existe
+	// Verifica se o toggle final já existe
 	exists, err := uc.toggleRepo.Exists(path, appID)
 	if err != nil {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error checking toggle existence")
@@ -73,7 +73,18 @@ func (uc *ToggleUseCase) createToggleHierarchy(parts []string, enabled bool, edi
 	}
 
 	// Toggle não existe, cria ele
-	toggle := entity.NewToggle(currentPart, enabled, editable, currentPath, level, parentID, appID)
+	// Para o toggle final (último nível), usa os parâmetros fornecidos
+	// Para os toggles intermediários, usa enabled=true e editable=true
+	isFinalToggle := level == len(parts)-1
+	toggleEnabled := enabled
+	toggleEditable := editable
+
+	if !isFinalToggle {
+		toggleEnabled = true
+		toggleEditable = true
+	}
+
+	toggle := entity.NewToggle(currentPart, toggleEnabled, toggleEditable, currentPath, level, parentID, appID)
 
 	err = uc.toggleRepo.Create(toggle)
 	if err != nil {
@@ -239,14 +250,15 @@ func (uc *ToggleUseCase) buildToggleNode(toggle *entity.Toggle, byLevel map[int]
 }
 
 // buildToggleNodeRecursive constrói um nó propagando enabled e value completo
+// ATUALIZADO: Agora retorna o caminho completo em vez de apenas o valor do nó
 func (uc *ToggleUseCase) buildToggleNodeRecursive(toggle *entity.Toggle, byLevel map[int][]*entity.Toggle, parentEnabled bool, parentPath string) map[string]interface{} {
 	enabled := toggle.Enabled && parentEnabled
-	value := toggle.Path // já é o caminho completo
 
 	node := map[string]interface{}{
-		"id":      toggle.ID,
-		"value":   value,
-		"enabled": enabled,
+		"id":       toggle.ID,
+		"value":    toggle.Path, // caminho completo em vez de apenas o valor do nó
+		"enabled":  enabled,
+		"editable": toggle.Editable,
 	}
 
 	// Busca filhos

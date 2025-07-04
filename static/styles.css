@@ -636,6 +636,28 @@ main {
     display: flex;
     gap: 8px;
     align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 0;
+    margin-top: 4px;
+}
+
+/* Estilos para links do caminho */
+.path-link {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    background: transparent;
+}
+
+.path-link:hover {
+    background: #e3f2fd;
+    color: #1976d2;
+    text-decoration: underline;
+}
+
+.path-separator {
+    color: #6c757d;
+    font-weight: 400;
+    margin: 0 2px;
 } 

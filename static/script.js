@@ -269,11 +269,18 @@ function renderToggles(toggles) {
     // Extrair apenas os nós folhas da árvore hierárquica
     const leafNodes = extractLeafNodes(toggles);
     togglesList.innerHTML = leafNodes.map(toggle => {
+        // Dividir o caminho em partes e criar links clicáveis
+        const pathParts = toggle.value.split('.');
+        const pathLinks = pathParts.map((part, index) => {
+            const partialPath = pathParts.slice(0, index + 1).join('.');
+            return `<a href="#" class="path-link" onclick="editTogglePath('${partialPath}'); return false;">${part}</a>`;
+        }).join('<span class="path-separator">.</span>');
+        
         return `
             <div class="toggle-card">
                 <div class="card-header">
                     <div class="card-title-col">
-                        <h3 class="toggle-title">${toggle.value}</h3>
+                        <h3 class="toggle-title">${pathLinks}</h3>
                         <div class="toggle-badges-row">
                             <span class="toggle-status-badge ${toggle.enabled ? 'enabled' : 'disabled'}" title="${toggle.enabled ? 'Habilitado' : 'Desabilitado'}">
                                 ${toggle.enabled ? '<svg width=13 height=13 viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'#22c55e\' stroke-width=2><circle cx=12 cy=12 r=8/><path d=\'M9 12l2 2l4-4\'/></svg>' : '<svg width=13 height=13 viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'#ef4444\' stroke-width=2><circle cx=12 cy=12 r=8/><line x1=9 y1=9 x2=15 y2=15/><line x1=15 y1=9 x2=9 y2=15/></svg>'}
