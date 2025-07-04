@@ -282,16 +282,23 @@ function renderToggles(toggles) {
 
         return `
             <div class="toggle-card toggle-line">
-                <span class="toggle-status-dot">${statusSVG}</span>
-                <span class="toggle-path-line">${pathLinks}</span>
-                <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${pathStr}')">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3,6 5,6 21,6"/>
-                        <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                        <line x1="10" y1="11" x2="10" y2="17"/>
-                        <line x1="14" y1="11" x2="14" y2="17"/>
-                    </svg>
-                </button>
+                <div class="toggle-card-header">
+                    <div class="toggle-header-left"><span class="toggle-status-dot">${statusSVG}</span></div>
+                    <div class="toggle-header-right">
+                        <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${pathStr}')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3,6 5,6 21,6"/>
+                                <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+                                <line x1="10" y1="11" x2="10" y2="17"/>
+                                <line x1="14" y1="11" x2="14" y2="17"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="toggle-divider"></div>
+                <div class="toggle-card-body">
+                    <span class="toggle-path-line">${pathLinks}</span>
+                </div>
             </div>
         `;
     }).join('');
