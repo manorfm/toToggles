@@ -23,7 +23,7 @@ func InitHandlers(db *gorm.DB) {
 	toggleUseCase := usecase.NewToggleUseCase(toggleRepo, appRepo)
 
 	// Inicializa handlers
-	appHandler = NewApplicationHandler(appUseCase)
+	appHandler = NewApplicationHandler(appUseCase, toggleUseCase)
 	toggleHandler = NewToggleHandler(toggleUseCase)
 }
 
@@ -66,4 +66,8 @@ func UpdateToggle(c *gin.Context) {
 
 func DeleteToggle(c *gin.Context) {
 	toggleHandler.DeleteToggle(c)
+}
+
+func UpdateEnabled(c *gin.Context) {
+	toggleHandler.UpdateEnabled(c)
 }

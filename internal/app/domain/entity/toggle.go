@@ -10,6 +10,7 @@ type Toggle struct {
 	ID        string    `json:"id" gorm:"primaryKey;type:varchar(26)"`
 	Value     string    `json:"value" gorm:"not null;type:varchar(255)"`
 	Enabled   bool      `json:"enabled" gorm:"not null;default:true"`
+	Editable  bool      `json:"editable" gorm:"not null;default:true"`
 	Path      string    `json:"path" gorm:"not null;type:varchar(1000)"`
 	Level     int       `json:"level" gorm:"not null;default:0"`
 	ParentID  *string   `json:"parent_id" gorm:"type:varchar(26)"`
@@ -23,11 +24,12 @@ type Toggle struct {
 }
 
 // NewToggle cria uma nova instância de Toggle
-func NewToggle(value string, enabled bool, path string, level int, parentID *string, appID string) *Toggle {
+func NewToggle(value string, enabled bool, editable bool, path string, level int, parentID *string, appID string) *Toggle {
 	return &Toggle{
 		ID:       generateULID(),
 		Value:    value,
 		Enabled:  enabled,
+		Editable: editable,
 		Path:     path,
 		Level:    level,
 		ParentID: parentID,

@@ -12,7 +12,7 @@ func TestNewToggle(t *testing.T) {
 	parentID := "parent123"
 	appID := "app123"
 
-	toggle := NewToggle(value, enabled, path, level, &parentID, appID)
+	toggle := NewToggle(value, enabled, true, path, level, &parentID, appID)
 
 	if toggle.Value != value {
 		t.Errorf("Expected value %s, got %s", value, toggle.Value)

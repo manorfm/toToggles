@@ -6,6 +6,12 @@ import (
 )
 
 func Init(router *gin.Engine) {
+	// Middleware para servir arquivos estáticos
+	router.Use(handler.ServeStatic)
+
+	// Rotas de arquivos estáticos
+	router.Static("/static", "./static")
+
 	// Rotas de aplicações
 	applications := router.Group("/applications")
 	{
@@ -25,4 +31,12 @@ func Init(router *gin.Engine) {
 		toggles.PUT("", handler.UpdateToggle)
 		toggles.DELETE("", handler.DeleteToggle)
 	}
+
+	// Rota para atualizar enabled recursivamente
+	router.PUT("/applications/:id/toggle/:toggleId", handler.UpdateEnabled)
+
+	// Rota raiz serve o frontend
+	router.GET("/", func(c *gin.Context) {
+		c.File("static/index.html")
+	})
 }

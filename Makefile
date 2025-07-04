@@ -1,4 +1,4 @@
-APP_NAME = totoogle
+APP_NAME = toToogle
 DB_PATH = ./db/toggles.db
 MIGRATIONS_DIR = ./db/migrations
 GOOSE = goose

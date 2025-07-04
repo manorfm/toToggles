@@ -36,6 +36,11 @@ type ToggleStatusResponse struct {
 	Enabled bool   `json:"enabled"`
 }
 
+// UpdateEnabledRequest representa a requisição para atualizar enabled
+type UpdateEnabledRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
 // CreateToggle cria um novo toggle
 func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 	appID := c.Param("id")
@@ -56,7 +61,7 @@ func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 		return
 	}
 
-	err := h.toggleUseCase.CreateToggle(req.Toggle, true, appID)
+	err := h.toggleUseCase.CreateToggle(req.Toggle, true, true, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
@@ -300,4 +305,34 @@ func (h *ToggleHandler) GetAllToggles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, toggles)
+}
+
+// UpdateEnabled atualiza o campo enabled de um toggle e seus descendentes
+func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
+	appID := c.Param("id")
+	toggleID := c.Param("toggleId")
+	if appID == "" || toggleID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "application ID and toggle ID are required"})
+		return
+	}
+	var req UpdateEnabledRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body: " + err.Error()})
+		return
+	}
+	err := h.toggleUseCase.UpdateEnabledRecursively(toggleID, req.Enabled, appID)
+	if err != nil {
+		appErr, ok := err.(*entity.AppError)
+		if ok {
+			status := http.StatusBadRequest
+			if appErr.Code == entity.ErrCodeNotFound {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, gin.H{"code": appErr.Code, "message": appErr.Message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": entity.ErrCodeInternal, "message": "internal server error"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "toggle enabled updated successfully"})
 }

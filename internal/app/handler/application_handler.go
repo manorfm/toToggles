@@ -10,13 +10,15 @@ import (
 
 // ApplicationHandler gerencia as requisições HTTP para aplicações
 type ApplicationHandler struct {
-	appUseCase *usecase.ApplicationUseCase
+	appUseCase    *usecase.ApplicationUseCase
+	toggleUseCase *usecase.ToggleUseCase
 }
 
 // NewApplicationHandler cria uma nova instância de ApplicationHandler
-func NewApplicationHandler(appUseCase *usecase.ApplicationUseCase) *ApplicationHandler {
+func NewApplicationHandler(appUseCase *usecase.ApplicationUseCase, toggleUseCase *usecase.ToggleUseCase) *ApplicationHandler {
 	return &ApplicationHandler{
-		appUseCase: appUseCase,
+		appUseCase:    appUseCase,
+		toggleUseCase: toggleUseCase,
 	}
 }
 
@@ -115,7 +117,33 @@ func (h *ApplicationHandler) GetAllApplications(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, apps)
+	// Buscar contagem de toggles para cada aplicação
+	toggleUseCase := h.toggleUseCase // Precisa garantir que o handler tem acesso ao ToggleUseCase
+	var result []gin.H
+	for _, app := range apps {
+		toggles, _ := toggleUseCase.GetAllTogglesByApp(app.ID)
+		total := len(toggles)
+		enabled := 0
+		disabled := 0
+		for _, t := range toggles {
+			if t.Enabled {
+				enabled++
+			} else {
+				disabled++
+			}
+		}
+		result = append(result, gin.H{
+			"id":               app.ID,
+			"name":             app.Name,
+			"created_at":       app.CreatedAt,
+			"updated_at":       app.UpdatedAt,
+			"toggles_total":    total,
+			"toggles_enabled":  enabled,
+			"toggles_disabled": disabled,
+		})
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // UpdateApplication atualiza uma aplicação

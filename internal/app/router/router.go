@@ -14,5 +14,5 @@ func Initialize() {
 
 	Init(router)
 
-	router.Run(":8081")
+	router.Run(":3056")
 }

@@ -60,7 +60,7 @@ func TestToggleUseCase_CreateToggle(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			useCase := NewToggleUseCase(toggleMock, appMock)
-			err := useCase.CreateToggle(tt.path, tt.enabled, tt.appID)
+			err := useCase.CreateToggle(tt.path, tt.enabled, true, tt.appID)
 
 			if tt.expectedError != "" {
 				if err == nil {
@@ -99,10 +99,11 @@ func TestToggleUseCase_GetToggleStatus(t *testing.T) {
 			appID: "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
-					Path:    "test.path",
-					AppID:   "app123",
-					Enabled: true,
+					ID:       "toggle1",
+					Path:     "test.path",
+					AppID:    "app123",
+					Enabled:  true,
+					Editable: true,
 				}
 			},
 			expected:      true,
@@ -114,10 +115,11 @@ func TestToggleUseCase_GetToggleStatus(t *testing.T) {
 			appID: "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
-					Path:    "test.path",
-					AppID:   "app123",
-					Enabled: false,
+					ID:       "toggle1",
+					Path:     "test.path",
+					AppID:    "app123",
+					Enabled:  false,
+					Editable: true,
 				}
 			},
 			expected:      false,
@@ -192,10 +194,11 @@ func TestToggleUseCase_UpdateToggle(t *testing.T) {
 			appID:   "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
-					Path:    "test.path",
-					AppID:   "app123",
-					Enabled: true,
+					ID:       "toggle1",
+					Path:     "test.path",
+					AppID:    "app123",
+					Enabled:  true,
+					Editable: true,
 				}
 			},
 			expectedError: "",

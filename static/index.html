@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ToToogle - Feature Toggle Manager</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎛️ ToToogle</h1>
+            <p>Feature Toggle Manager</p>
+        </header>
+
+        <main>
+            <!-- Seção de Aplicações -->
+            <section id="applications-section">
+                <div class="section-header">
+                    <h2>📱 Aplicações</h2>
+                    <button id="new-app-btn" class="btn btn-primary">+ Nova Aplicação</button>
+                </div>
+                
+                <div id="applications-list" class="grid-container">
+                    <!-- Aplicações serão carregadas aqui -->
+                </div>
+            </section>
+
+            <!-- Seção de Toggles (inicialmente oculta) -->
+            <section id="toggles-section" class="hidden">
+                <div class="section-header">
+                    <button id="back-to-apps" class="btn btn-secondary">← Voltar para Aplicações</button>
+                    <h2 id="app-name">Toggles da Aplicação</h2>
+                    <button id="new-toggle-btn" class="btn btn-primary">+ Novo Toggle</button>
+                </div>
+                
+                <div id="toggles-list" class="grid-container">
+                    <!-- Toggles serão carregados aqui -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal para criar/editar aplicação -->
+    <div id="app-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="app-modal-title">Nova Aplicação</h3>
+                <button class="close-btn" onclick="closeModal('app-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="app-form">
+                    <div class="form-group">
+                        <label for="app-name-input">Nome da Aplicação:</label>
+                        <input type="text" id="app-name-input" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para criar/editar toggle -->
+    <div id="toggle-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="toggle-modal-title">Novo Toggle</h3>
+                <button class="close-btn" onclick="closeModal('toggle-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="toggle-form">
+                    <div class="form-group">
+                        <label for="toggle-path-input">Caminho do Toggle:</label>
+                        <input type="text" id="toggle-path-input" placeholder="ex: minha.funcionalidade.subfuncionalidade" required>
+                        <small>Use pontos para separar níveis hierárquicos</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="toggle-enabled-input">
+                            <input type="checkbox" id="toggle-enabled-input" checked>
+                            Habilitado
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('toggle-modal')">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para editar toggle inline -->
+    <div id="edit-toggle-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="edit-toggle-title">Editar Toggle</h3>
+                <button class="close-btn" onclick="closeModal('edit-toggle-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-toggle-form">
+                    <div class="form-group">
+                        <label for="edit-toggle-path-input">Caminho do Toggle:</label>
+                        <input type="text" id="edit-toggle-path-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-toggle-enabled-input">
+                            <input type="checkbox" id="edit-toggle-enabled-input" checked>
+                            Habilitado
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-toggle-modal')">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html> 

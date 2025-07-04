@@ -190,17 +190,17 @@ Ou teste manualmente usando curl:
 
 ```bash
 # Criar aplicação
-curl -X POST http://localhost:8080/applications \
+curl -X POST http://localhost:3056/applications \
   -H "Content-Type: application/json" \
   -d '{"name": "Minha Aplicação"}'
 
 # Criar toggle
-curl -X POST http://localhost:8080/applications/{app_id}/toggles \
+curl -X POST http://localhost:3056/applications/{app_id}/toggles \
   -H "Content-Type: application/json" \
   -d '{"toggle": "esse.campo.pode.ser.extenso", "enabled": true}'
 
 # Verificar status
-curl -X GET "http://localhost:8080/applications/{app_id}/toggles/status?path=esse.campo.pode"
+curl -X GET "http://localhost:3056/applications/{app_id}/toggles/status?path=esse.campo.pode"
 ```
 
 ## Estrutura do Projeto
