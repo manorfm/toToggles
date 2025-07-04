@@ -1,0 +1,245 @@
+package usecase
+
+import (
+	"strings"
+
+	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/domain/repository"
+)
+
+// ToggleUseCase define os casos de uso para toggles
+type ToggleUseCase struct {
+	toggleRepo repository.ToggleRepository
+	appRepo    repository.ApplicationRepository
+}
+
+// NewToggleUseCase cria uma nova instância de ToggleUseCase
+func NewToggleUseCase(toggleRepo repository.ToggleRepository, appRepo repository.ApplicationRepository) *ToggleUseCase {
+	return &ToggleUseCase{
+		toggleRepo: toggleRepo,
+		appRepo:    appRepo,
+	}
+}
+
+// CreateToggle cria um novo toggle com estrutura hierárquica
+func (uc *ToggleUseCase) CreateToggle(path string, enabled bool, appID string) error {
+	if path == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle path is required")
+	}
+
+	if appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+
+	// Verifica se a aplicação existe
+	_, err := uc.appRepo.GetByID(appID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "application not found")
+	}
+
+	// Verifica se o toggle já existe
+	exists, err := uc.toggleRepo.Exists(path, appID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error checking toggle existence")
+	}
+
+	if exists {
+		return entity.NewAppError(entity.ErrCodeAlreadyExists, "toggle already exists")
+	}
+
+	// Cria a estrutura hierárquica
+	parts := entity.ParseTogglePath(path)
+	return uc.createToggleHierarchy(parts, enabled, appID, nil, 0)
+}
+
+// createToggleHierarchy cria a estrutura hierárquica de toggles
+func (uc *ToggleUseCase) createToggleHierarchy(parts []string, enabled bool, appID string, parentID *string, level int) error {
+	if level >= len(parts) {
+		return nil
+	}
+
+	currentPart := parts[level]
+	currentPath := strings.Join(parts[:level+1], ".")
+
+	// Cria o toggle atual
+	toggle := entity.NewToggle(currentPart, enabled, currentPath, level, parentID, appID)
+
+	err := uc.toggleRepo.Create(toggle)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error creating toggle")
+	}
+
+	// Se há mais partes, cria os filhos
+	if level+1 < len(parts) {
+		nextParentID := toggle.ID
+		return uc.createToggleHierarchy(parts, enabled, appID, &nextParentID, level+1)
+	}
+
+	return nil
+}
+
+// GetToggleStatus verifica se um toggle está habilitado
+func (uc *ToggleUseCase) GetToggleStatus(path string, appID string) (bool, error) {
+	if path == "" {
+		return false, entity.NewAppError(entity.ErrCodeValidation, "toggle path is required")
+	}
+
+	if appID == "" {
+		return false, entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+
+	// Busca o toggle específico
+	toggle, err := uc.toggleRepo.GetByPath(path, appID)
+	if err != nil {
+		return false, entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+
+	// Verifica se está habilitado considerando a hierarquia
+	return uc.isToggleEnabled(toggle), nil
+}
+
+// isToggleEnabled verifica se um toggle está habilitado considerando a hierarquia
+func (uc *ToggleUseCase) isToggleEnabled(toggle *entity.Toggle) bool {
+	if !toggle.Enabled {
+		return false
+	}
+
+	// Se tem pai, verifica se o pai também está habilitado
+	if toggle.ParentID != nil {
+		parent, err := uc.toggleRepo.GetByID(*toggle.ParentID)
+		if err != nil {
+			return false
+		}
+		return uc.isToggleEnabled(parent)
+	}
+
+	return true
+}
+
+// UpdateToggle atualiza um toggle
+func (uc *ToggleUseCase) UpdateToggle(path string, enabled bool, appID string) error {
+	if path == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle path is required")
+	}
+
+	if appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+
+	toggle, err := uc.toggleRepo.GetByPath(path, appID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+
+	toggle.Enabled = enabled
+
+	err = uc.toggleRepo.Update(toggle)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
+	}
+
+	return nil
+}
+
+// DeleteToggle remove um toggle e seus filhos
+func (uc *ToggleUseCase) DeleteToggle(path string, appID string) error {
+	if path == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle path is required")
+	}
+
+	if appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+
+	// Verifica se o toggle existe
+	exists, err := uc.toggleRepo.Exists(path, appID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error checking toggle existence")
+	}
+
+	if !exists {
+		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+
+	// Remove o toggle e seus filhos
+	err = uc.toggleRepo.DeleteByPath(path, appID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
+	}
+
+	return nil
+}
+
+// GetAllTogglesByApp busca todos os toggles de uma aplicação
+func (uc *ToggleUseCase) GetAllTogglesByApp(appID string) ([]*entity.Toggle, error) {
+	if appID == "" {
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+
+	// Verifica se a aplicação existe
+	_, err := uc.appRepo.GetByID(appID)
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeNotFound, "application not found")
+	}
+
+	toggles, err := uc.toggleRepo.GetHierarchyByAppID(appID)
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching toggles")
+	}
+
+	return toggles, nil
+}
+
+// GetToggleHierarchy retorna a estrutura hierárquica dos toggles
+func (uc *ToggleUseCase) GetToggleHierarchy(appID string) (map[string]interface{}, error) {
+	if appID == "" {
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+
+	toggles, err := uc.toggleRepo.GetHierarchyByAppID(appID)
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching toggle hierarchy")
+	}
+
+	return uc.buildHierarchyMap(toggles), nil
+}
+
+// buildHierarchyMap constrói o mapa hierárquico dos toggles
+func (uc *ToggleUseCase) buildHierarchyMap(toggles []*entity.Toggle) map[string]interface{} {
+	hierarchy := make(map[string]interface{})
+
+	// Agrupa toggles por nível
+	byLevel := make(map[int][]*entity.Toggle)
+	for _, toggle := range toggles {
+		byLevel[toggle.Level] = append(byLevel[toggle.Level], toggle)
+	}
+
+	// Constrói a hierarquia começando pelos toggles raiz (nível 0)
+	for _, toggle := range byLevel[0] {
+		hierarchy[toggle.Value] = uc.buildToggleNode(toggle, byLevel)
+	}
+
+	return hierarchy
+}
+
+// buildToggleNode constrói um nó da hierarquia
+func (uc *ToggleUseCase) buildToggleNode(toggle *entity.Toggle, byLevel map[int][]*entity.Toggle) map[string]interface{} {
+	node := map[string]interface{}{
+		"value":   toggle.Value,
+		"enabled": toggle.Enabled,
+	}
+
+	// Busca filhos
+	var children []map[string]interface{}
+	for _, child := range byLevel[toggle.Level+1] {
+		if child.ParentID != nil && *child.ParentID == toggle.ID {
+			children = append(children, uc.buildToggleNode(child, byLevel))
+		}
+	}
+
+	if len(children) > 0 {
+		node["toggle"] = children
+	}
+
+	return node
+}

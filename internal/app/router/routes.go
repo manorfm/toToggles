@@ -1,17 +1,28 @@
 package router
 
 import (
-	"github.com/manorfm/totoogle/internal/app/handler"
-
 	"github.com/gin-gonic/gin"
+	"github.com/manorfm/totoogle/internal/app/handler"
 )
 
 func Init(router *gin.Engine) {
-	handler.Init()
-
-	v1 := router.Group("/api/v1")
+	// Rotas de aplicações
+	applications := router.Group("/applications")
 	{
-		v1.GET("/toggles", handler.ListToggles)
-		v1.POST("/toggles", handler.CreateToggles)
+		applications.POST("", handler.CreateApplication)
+		applications.GET("", handler.GetAllApplications)
+		applications.GET("/:id", handler.GetApplication)
+		applications.PUT("/:id", handler.UpdateApplication)
+		applications.DELETE("/:id", handler.DeleteApplication)
+	}
+
+	// Rotas de toggles
+	toggles := router.Group("/applications/:id/toggles")
+	{
+		toggles.POST("", handler.CreateToggle)
+		toggles.GET("", handler.GetAllToggles)
+		toggles.GET("/status", handler.GetToggleStatus)
+		toggles.PUT("", handler.UpdateToggle)
+		toggles.DELETE("", handler.DeleteToggle)
 	}
 }

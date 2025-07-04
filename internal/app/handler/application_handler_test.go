@@ -1,0 +1,364 @@
+package handler
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/usecase"
+)
+
+func setupTestRouter() *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	return gin.New()
+}
+
+func TestApplicationHandler_CreateApplication(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBody    map[string]interface{}
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name: "successful creation",
+			requestBody: map[string]interface{}{
+				"name": "Test Application",
+			},
+			expectedStatus: http.StatusCreated,
+			expectedError:  "",
+		},
+		{
+			name: "missing name",
+			requestBody: map[string]interface{}{
+				"name": "",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid request body: Key: 'CreateApplicationRequest.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+		},
+		{
+			name: "invalid JSON",
+			requestBody: map[string]interface{}{
+				"invalid": "json",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid request body: Key: 'CreateApplicationRequest.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			router := setupTestRouter()
+			mockRepo := usecase.NewMockApplicationRepository()
+			useCase := usecase.NewApplicationUseCase(mockRepo)
+			handler := NewApplicationHandler(useCase)
+
+			router.POST("/applications", handler.CreateApplication)
+
+			// Create request
+			jsonBody, _ := json.Marshal(tt.requestBody)
+			req, _ := http.NewRequest("POST", "/applications", bytes.NewBuffer(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+
+			// Execute request
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assertions
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			if tt.expectedError != "" {
+				var response map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if message, exists := response["message"]; !exists || message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%v'", tt.expectedError, message)
+				}
+			} else {
+				var response entity.Application
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if response.Name == "" {
+					t.Error("Expected application name in response")
+				}
+			}
+		})
+	}
+}
+
+func TestApplicationHandler_GetApplication(t *testing.T) {
+	tests := []struct {
+		name           string
+		appID          string
+		setupMock      func(*usecase.MockApplicationRepository)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name:  "successful retrieval",
+			appID: "test123",
+			setupMock: func(mock *usecase.MockApplicationRepository) {
+				mock.Applications["test123"] = &entity.Application{
+					ID:   "test123",
+					Name: "Test App",
+				}
+			},
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
+		},
+		{
+			name:           "empty ID",
+			appID:          "",
+			setupMock:      func(mock *usecase.MockApplicationRepository) {},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "application not found",
+		},
+		{
+			name:  "not found",
+			appID: "nonexistent",
+			setupMock: func(mock *usecase.MockApplicationRepository) {
+				// No app with this ID
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "application not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			router := setupTestRouter()
+			mockRepo := usecase.NewMockApplicationRepository()
+			tt.setupMock(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo)
+			handler := NewApplicationHandler(useCase)
+
+			router.GET("/applications/:id", handler.GetApplication)
+
+			// Create request
+			req, _ := http.NewRequest("GET", "/applications/"+tt.appID, nil)
+
+			// Execute request
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assertions
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			if tt.expectedError != "" {
+				if w.Code == http.StatusNotFound && w.Body.Len() == 0 {
+					// Aceita corpo vazio para 404
+					return
+				}
+				var response map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if message, exists := response["message"]; !exists || message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%v'", tt.expectedError, message)
+				}
+			} else {
+				var response entity.Application
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if response.ID != tt.appID {
+					t.Errorf("Expected app ID '%s', got '%s'", tt.appID, response.ID)
+				}
+			}
+		})
+	}
+}
+
+func TestApplicationHandler_GetAllApplications(t *testing.T) {
+	// Setup
+	router := setupTestRouter()
+	mockRepo := usecase.NewMockApplicationRepository()
+	mockRepo.Applications = map[string]*entity.Application{
+		"app1": {ID: "app1", Name: "App 1"},
+		"app2": {ID: "app2", Name: "App 2"},
+	}
+	useCase := usecase.NewApplicationUseCase(mockRepo)
+	handler := NewApplicationHandler(useCase)
+
+	router.GET("/applications", handler.GetAllApplications)
+
+	// Create request
+	req, _ := http.NewRequest("GET", "/applications", nil)
+
+	// Execute request
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assertions
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var response []entity.Application
+	json.Unmarshal(w.Body.Bytes(), &response)
+	if len(response) != 2 {
+		t.Errorf("Expected 2 applications, got %d", len(response))
+	}
+}
+
+func TestApplicationHandler_UpdateApplication(t *testing.T) {
+	tests := []struct {
+		name           string
+		appID          string
+		requestBody    map[string]interface{}
+		setupMock      func(*usecase.MockApplicationRepository)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name:  "successful update",
+			appID: "test123",
+			requestBody: map[string]interface{}{
+				"name": "Updated App",
+			},
+			setupMock: func(mock *usecase.MockApplicationRepository) {
+				mock.Applications["test123"] = &entity.Application{
+					ID:   "test123",
+					Name: "Original Name",
+				}
+			},
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
+		},
+		{
+			name:  "empty ID",
+			appID: "",
+			requestBody: map[string]interface{}{
+				"name": "Updated App",
+			},
+			setupMock:      func(mock *usecase.MockApplicationRepository) {},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "application not found",
+		},
+		{
+			name:  "empty name",
+			appID: "test123",
+			requestBody: map[string]interface{}{
+				"name": "",
+			},
+			setupMock:      func(mock *usecase.MockApplicationRepository) {},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid request body: Key: 'UpdateApplicationRequest.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			router := setupTestRouter()
+			mockRepo := usecase.NewMockApplicationRepository()
+			tt.setupMock(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo)
+			handler := NewApplicationHandler(useCase)
+
+			router.PUT("/applications/:id", handler.UpdateApplication)
+
+			// Create request
+			jsonBody, _ := json.Marshal(tt.requestBody)
+			req, _ := http.NewRequest("PUT", "/applications/"+tt.appID, bytes.NewBuffer(jsonBody))
+			req.Header.Set("Content-Type", "application/json")
+
+			// Execute request
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assertions
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			if tt.expectedError != "" {
+				var response map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if message, exists := response["message"]; !exists || message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%v'", tt.expectedError, message)
+				}
+			} else {
+				var response entity.Application
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if response.Name != tt.requestBody["name"] {
+					t.Errorf("Expected app name '%s', got '%s'", tt.requestBody["name"], response.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestApplicationHandler_DeleteApplication(t *testing.T) {
+	tests := []struct {
+		name           string
+		appID          string
+		setupMock      func(*usecase.MockApplicationRepository)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name:  "successful deletion",
+			appID: "test123",
+			setupMock: func(mock *usecase.MockApplicationRepository) {
+				mock.Applications["test123"] = &entity.Application{ID: "test123", Name: "Test App"}
+			},
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
+		},
+		{
+			name:           "empty ID",
+			appID:          "",
+			setupMock:      func(mock *usecase.MockApplicationRepository) {},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "application not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			router := setupTestRouter()
+			mockRepo := usecase.NewMockApplicationRepository()
+			tt.setupMock(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo)
+			handler := NewApplicationHandler(useCase)
+
+			router.DELETE("/applications/:id", handler.DeleteApplication)
+
+			// Create request
+			req, _ := http.NewRequest("DELETE", "/applications/"+tt.appID, nil)
+
+			// Execute request
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// Assertions
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			if tt.expectedError != "" {
+				if w.Code == http.StatusNotFound && w.Body.Len() == 0 {
+					// Aceita corpo vazio para 404
+					return
+				}
+				var response map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if message, exists := response["message"]; !exists || message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%v'", tt.expectedError, message)
+				}
+			} else {
+				var response map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if message, exists := response["message"]; !exists || message != "application deleted successfully" {
+					t.Error("Expected success message")
+				}
+			}
+		})
+	}
+}
