@@ -99,11 +99,10 @@ func TestToggleUseCase_GetToggleStatus(t *testing.T) {
 			appID: "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "test.path",
-					AppID:    "app123",
-					Enabled:  true,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "test.path",
+					AppID:   "app123",
+					Enabled: true,
 				}
 			},
 			expected:      true,
@@ -115,11 +114,10 @@ func TestToggleUseCase_GetToggleStatus(t *testing.T) {
 			appID: "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "test.path",
-					AppID:    "app123",
-					Enabled:  false,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "test.path",
+					AppID:   "app123",
+					Enabled: false,
 				}
 			},
 			expected:      false,
@@ -194,11 +192,10 @@ func TestToggleUseCase_UpdateToggle(t *testing.T) {
 			appID:   "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "test.path",
-					AppID:    "app123",
-					Enabled:  true,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "test.path",
+					AppID:   "app123",
+					Enabled: true,
 				}
 			},
 			expectedError: "",
@@ -383,11 +380,10 @@ func TestToggleUseCase_DeleteToggle(t *testing.T) {
 			appID: "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "test.path",
-					AppID:    "app123",
-					Enabled:  true,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "test.path",
+					AppID:   "app123",
+					Enabled: true,
 				}
 			},
 			expectedError: "",
@@ -458,13 +454,12 @@ func TestToggleUseCase_GetToggleHierarchy(t *testing.T) {
 			appID: "app123",
 			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "parent",
-					AppID:    "app123",
-					Value:    "parent",
-					Level:    0,
-					Enabled:  true,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "parent",
+					AppID:   "app123",
+					Value:   "parent",
+					Level:   0,
+					Enabled: true,
 				}
 				toggleMock.Toggles["toggle2"] = &entity.Toggle{
 					ID:       "toggle2",
@@ -474,7 +469,6 @@ func TestToggleUseCase_GetToggleHierarchy(t *testing.T) {
 					Level:    1,
 					ParentID: &[]string{"toggle1"}[0],
 					Enabled:  true,
-					Editable: true,
 				}
 			},
 			expectedError: "",

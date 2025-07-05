@@ -48,9 +48,30 @@ func (r *ApplicationRepositoryImpl) Update(app *entity.Application) error {
 	return r.db.Save(app).Error
 }
 
-// Delete remove uma aplicação
+// Delete remove uma aplicação e todas as suas toggles em cascata
 func (r *ApplicationRepositoryImpl) Delete(id string) error {
-	return r.db.Where("id = ?", id).Delete(&entity.Application{}).Error
+	// Inicia uma transação
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// Deleta todas as toggles da aplicação primeiro
+	err := tx.Where("app_id = ?", id).Delete(&entity.Toggle{}).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Deleta a aplicação
+	err = tx.Where("id = ?", id).Delete(&entity.Application{}).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Commit da transação
+	return tx.Commit().Error
 }
 
 // Exists verifica se uma aplicação existe

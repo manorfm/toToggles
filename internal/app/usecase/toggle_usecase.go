@@ -77,14 +77,12 @@ func (uc *ToggleUseCase) createToggleHierarchy(parts []string, enabled bool, edi
 	// Para os toggles intermediários, usa enabled=true e editable=true
 	isFinalToggle := level == len(parts)-1
 	toggleEnabled := enabled
-	toggleEditable := editable
 
 	if !isFinalToggle {
 		toggleEnabled = true
-		toggleEditable = true
 	}
 
-	toggle := entity.NewToggle(currentPart, toggleEnabled, toggleEditable, currentPath, level, parentID, appID)
+	toggle := entity.NewToggle(currentPart, toggleEnabled, currentPath, level, parentID, appID)
 
 	err = uc.toggleRepo.Create(toggle)
 	if err != nil {

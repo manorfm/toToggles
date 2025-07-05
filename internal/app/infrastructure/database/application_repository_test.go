@@ -184,3 +184,59 @@ func TestApplicationRepository_Exists(t *testing.T) {
 		t.Error("Expected application to not exist")
 	}
 }
+
+func TestApplicationRepository_DeleteWithCascade(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewApplicationRepository(db)
+	toggleRepo := NewToggleRepository(db)
+
+	// Create test application
+	app := entity.NewApplication("Test Application")
+	err := repo.Create(app)
+	if err != nil {
+		t.Fatalf("Failed to create test application: %v", err)
+	}
+
+	// Create test toggles for the application
+	toggle1 := entity.NewToggle("feature1", true, "feature1", 0, nil, app.ID)
+	err = toggleRepo.Create(toggle1)
+	if err != nil {
+		t.Fatalf("Failed to create test toggle 1: %v", err)
+	}
+
+	toggle2 := entity.NewToggle("feature2", true, "feature2", 0, nil, app.ID)
+	err = toggleRepo.Create(toggle2)
+	if err != nil {
+		t.Fatalf("Failed to create test toggle 2: %v", err)
+	}
+
+	// Verify toggles exist
+	toggles, err := toggleRepo.GetByAppID(app.ID)
+	if err != nil {
+		t.Fatalf("Failed to get toggles: %v", err)
+	}
+	if len(toggles) != 2 {
+		t.Errorf("Expected 2 toggles, got %d", len(toggles))
+	}
+
+	// Delete application (should cascade to toggles)
+	err = repo.Delete(app.ID)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	// Verify application is deleted
+	_, err = repo.GetByID(app.ID)
+	if err == nil {
+		t.Error("Expected error for deleted application")
+	}
+
+	// Verify toggles are also deleted
+	toggles, err = toggleRepo.GetByAppID(app.ID)
+	if err != nil {
+		t.Fatalf("Failed to get toggles after deletion: %v", err)
+	}
+	if len(toggles) != 0 {
+		t.Errorf("Expected 0 toggles after cascade deletion, got %d", len(toggles))
+	}
+}

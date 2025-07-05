@@ -18,7 +18,7 @@ func TestToggleRepository_Create(t *testing.T) {
 		t.Fatalf("Failed to create test application: %v", err)
 	}
 
-	toggle := entity.NewToggle("test", true, true, "test.feature", 1, nil, app.ID)
+	toggle := entity.NewToggle("test", true, "test.feature", 1, nil, app.ID)
 
 	err = repo.Create(toggle)
 	if err != nil {
@@ -43,7 +43,7 @@ func TestToggleRepository_GetByPath(t *testing.T) {
 	}
 
 	// Create toggle
-	toggle := entity.NewToggle("test", true, true, "test.feature", 1, nil, app.ID)
+	toggle := entity.NewToggle("test", true, "test.feature", 1, nil, app.ID)
 	err = repo.Create(toggle)
 	if err != nil {
 		t.Fatalf("Failed to create test toggle: %v", err)
@@ -83,8 +83,8 @@ func TestToggleRepository_GetByAppID(t *testing.T) {
 	}
 
 	// Create toggles
-	toggle1 := entity.NewToggle("test1", true, true, "test1.feature", 1, nil, app.ID)
-	toggle2 := entity.NewToggle("test2", false, true, "test2.feature", 1, nil, app.ID)
+	toggle1 := entity.NewToggle("test1", true, "test1.feature", 1, nil, app.ID)
+	toggle2 := entity.NewToggle("test2", false, "test2.feature", 1, nil, app.ID)
 
 	err = repo.Create(toggle1)
 	if err != nil {
@@ -120,7 +120,7 @@ func TestToggleRepository_Update(t *testing.T) {
 	}
 
 	// Create toggle
-	toggle := entity.NewToggle("test", true, true, "test.feature", 1, nil, app.ID)
+	toggle := entity.NewToggle("test", true, "test.feature", 1, nil, app.ID)
 	err = repo.Create(toggle)
 	if err != nil {
 		t.Fatalf("Failed to create test toggle: %v", err)
@@ -157,7 +157,7 @@ func TestToggleRepository_DeleteByPath(t *testing.T) {
 	}
 
 	// Create toggle
-	toggle := entity.NewToggle("test", true, true, "test.feature", 1, nil, app.ID)
+	toggle := entity.NewToggle("test", true, "test.feature", 1, nil, app.ID)
 	err = repo.Create(toggle)
 	if err != nil {
 		t.Fatalf("Failed to create test toggle: %v", err)
@@ -189,7 +189,7 @@ func TestToggleRepository_Exists(t *testing.T) {
 	}
 
 	// Create toggle
-	toggle := entity.NewToggle("test", true, true, "test.feature", 1, nil, app.ID)
+	toggle := entity.NewToggle("test", true, "test.feature", 1, nil, app.ID)
 	err = repo.Create(toggle)
 	if err != nil {
 		t.Fatalf("Failed to create test toggle: %v", err)
@@ -222,13 +222,12 @@ func TestToggleRepository_GetByID(t *testing.T) {
 
 	// Criar toggle de teste
 	toggle := &entity.Toggle{
-		ID:       "test-toggle",
-		Path:     "test.feature",
-		AppID:    "test-app",
-		Value:    "test",
-		Level:    0,
-		Enabled:  true,
-		Editable: true,
+		ID:      "test-toggle",
+		Path:    "test.feature",
+		AppID:   "test-app",
+		Value:   "test",
+		Level:   0,
+		Enabled: true,
 	}
 	err := repo.Create(toggle)
 	if err != nil {
@@ -260,13 +259,12 @@ func TestToggleRepository_GetHierarchyByAppID(t *testing.T) {
 
 	// Criar toggles de teste com hierarquia
 	parent := &entity.Toggle{
-		ID:       "parent",
-		Path:     "parent",
-		AppID:    "test-app",
-		Value:    "parent",
-		Level:    0,
-		Enabled:  true,
-		Editable: true,
+		ID:      "parent",
+		Path:    "parent",
+		AppID:   "test-app",
+		Value:   "parent",
+		Level:   0,
+		Enabled: true,
 	}
 	err := repo.Create(parent)
 	if err != nil {
@@ -281,7 +279,6 @@ func TestToggleRepository_GetHierarchyByAppID(t *testing.T) {
 		Level:    1,
 		ParentID: &parent.ID,
 		Enabled:  true,
-		Editable: true,
 	}
 	err = repo.Create(child)
 	if err != nil {
@@ -304,13 +301,12 @@ func TestToggleRepository_Delete(t *testing.T) {
 
 	// Criar toggle de teste
 	toggle := &entity.Toggle{
-		ID:       "test-toggle",
-		Path:     "test.feature",
-		AppID:    "test-app",
-		Value:    "test",
-		Level:    0,
-		Enabled:  true,
-		Editable: true,
+		ID:      "test-toggle",
+		Path:    "test.feature",
+		AppID:   "test-app",
+		Value:   "test",
+		Level:   0,
+		Enabled: true,
 	}
 	err := repo.Create(toggle)
 	if err != nil {
@@ -336,13 +332,12 @@ func TestToggleRepository_GetChildren(t *testing.T) {
 
 	// Criar toggles de teste com hierarquia
 	parent := &entity.Toggle{
-		ID:       "parent",
-		Path:     "parent",
-		AppID:    "test-app",
-		Value:    "parent",
-		Level:    0,
-		Enabled:  true,
-		Editable: true,
+		ID:      "parent",
+		Path:    "parent",
+		AppID:   "test-app",
+		Value:   "parent",
+		Level:   0,
+		Enabled: true,
 	}
 	err := repo.Create(parent)
 	if err != nil {
@@ -357,7 +352,6 @@ func TestToggleRepository_GetChildren(t *testing.T) {
 		Level:    1,
 		ParentID: &parent.ID,
 		Enabled:  true,
-		Editable: true,
 	}
 	err = repo.Create(child1)
 	if err != nil {
@@ -372,7 +366,6 @@ func TestToggleRepository_GetChildren(t *testing.T) {
 		Level:    1,
 		ParentID: &parent.ID,
 		Enabled:  true,
-		Editable: true,
 	}
 	err = repo.Create(child2)
 	if err != nil {
@@ -404,13 +397,12 @@ func TestToggleRepository_DeleteWithChildren(t *testing.T) {
 
 	// Criar toggles de teste com hierarquia
 	parent := &entity.Toggle{
-		ID:       "parent",
-		Path:     "parent",
-		AppID:    "test-app",
-		Value:    "parent",
-		Level:    0,
-		Enabled:  true,
-		Editable: true,
+		ID:      "parent",
+		Path:    "parent",
+		AppID:   "test-app",
+		Value:   "parent",
+		Level:   0,
+		Enabled: true,
 	}
 	err := repo.Create(parent)
 	if err != nil {
@@ -425,7 +417,6 @@ func TestToggleRepository_DeleteWithChildren(t *testing.T) {
 		Level:    1,
 		ParentID: &parent.ID,
 		Enabled:  true,
-		Editable: true,
 	}
 	err = repo.Create(child)
 	if err != nil {

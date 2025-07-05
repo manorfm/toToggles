@@ -343,11 +343,10 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 			path:  "test.feature",
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "test.feature",
-					AppID:    "app123",
-					Enabled:  true,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "test.feature",
+					AppID:   "app123",
+					Enabled: true,
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -430,11 +429,10 @@ func TestToggleHandler_UpdateEnabled(t *testing.T) {
 			},
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
 				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:       "toggle1",
-					Path:     "test.feature",
-					AppID:    "app123",
-					Enabled:  true,
-					Editable: true,
+					ID:      "toggle1",
+					Path:    "test.feature",
+					AppID:   "app123",
+					Enabled: true,
 				}
 			},
 			expectedStatus: http.StatusOK,
