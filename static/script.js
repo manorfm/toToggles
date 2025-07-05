@@ -527,29 +527,22 @@ function showEmptyState(container, title, message = '') {
     `;
 }
 
-function showError(message) {
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error';
-    errorDiv.textContent = message;
-    
-    document.querySelector('main').insertBefore(errorDiv, document.querySelector('main').firstChild);
-    
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = message;
+    container.appendChild(toast);
     setTimeout(() => {
-        errorDiv.remove();
-    }, 5000);
+        toast.remove();
+    }, 4000);
 }
 
-function showSuccess(message) {
-    const successDiv = document.createElement('div');
-    successDiv.className = 'success';
-    successDiv.textContent = message;
-    
-    document.querySelector('main').insertBefore(successDiv, document.querySelector('main').firstChild);
-    
-    setTimeout(() => {
-        successDiv.remove();
-    }, 3000);
-}
+function showSuccess(msg) { showToast(msg, 'success'); }
+function showError(msg) { showToast(msg, 'error'); }
+function showInfo(msg) { showToast(msg, 'info'); }
+function showWarning(msg) { showToast(msg, 'warning'); }
 
 // Fechar modais ao clicar fora
 window.addEventListener('click', function(event) {
