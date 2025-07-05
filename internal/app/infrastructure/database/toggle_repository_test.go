@@ -215,3 +215,237 @@ func TestToggleRepository_Exists(t *testing.T) {
 		t.Error("Expected toggle to not exist")
 	}
 }
+
+func TestToggleRepository_GetByID(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewToggleRepository(db)
+
+	// Criar toggle de teste
+	toggle := &entity.Toggle{
+		ID:       "test-toggle",
+		Path:     "test.feature",
+		AppID:    "test-app",
+		Value:    "test",
+		Level:    0,
+		Enabled:  true,
+		Editable: true,
+	}
+	err := repo.Create(toggle)
+	if err != nil {
+		t.Fatalf("Failed to create toggle: %v", err)
+	}
+
+	// Testar busca por ID
+	found, err := repo.GetByID("test-toggle")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if found == nil {
+		t.Error("Expected toggle to be found")
+	}
+	if found.ID != "test-toggle" {
+		t.Errorf("Expected ID 'test-toggle', got %s", found.ID)
+	}
+
+	// Testar toggle inexistente
+	_, err = repo.GetByID("nonexistent")
+	if err == nil {
+		t.Error("Expected error for nonexistent toggle")
+	}
+}
+
+func TestToggleRepository_GetHierarchyByAppID(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewToggleRepository(db)
+
+	// Criar toggles de teste com hierarquia
+	parent := &entity.Toggle{
+		ID:       "parent",
+		Path:     "parent",
+		AppID:    "test-app",
+		Value:    "parent",
+		Level:    0,
+		Enabled:  true,
+		Editable: true,
+	}
+	err := repo.Create(parent)
+	if err != nil {
+		t.Fatalf("Failed to create parent toggle: %v", err)
+	}
+
+	child := &entity.Toggle{
+		ID:       "child",
+		Path:     "parent.child",
+		AppID:    "test-app",
+		Value:    "child",
+		Level:    1,
+		ParentID: &parent.ID,
+		Enabled:  true,
+		Editable: true,
+	}
+	err = repo.Create(child)
+	if err != nil {
+		t.Fatalf("Failed to create child toggle: %v", err)
+	}
+
+	// Testar busca hierárquica
+	toggles, err := repo.GetHierarchyByAppID("test-app")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if len(toggles) != 2 {
+		t.Errorf("Expected 2 toggles, got %d", len(toggles))
+	}
+}
+
+func TestToggleRepository_Delete(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewToggleRepository(db)
+
+	// Criar toggle de teste
+	toggle := &entity.Toggle{
+		ID:       "test-toggle",
+		Path:     "test.feature",
+		AppID:    "test-app",
+		Value:    "test",
+		Level:    0,
+		Enabled:  true,
+		Editable: true,
+	}
+	err := repo.Create(toggle)
+	if err != nil {
+		t.Fatalf("Failed to create toggle: %v", err)
+	}
+
+	// Testar remoção
+	err = repo.Delete("test-toggle")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	// Verificar se foi removido
+	_, err = repo.GetByID("test-toggle")
+	if err == nil {
+		t.Error("Expected toggle to be deleted")
+	}
+}
+
+func TestToggleRepository_GetChildren(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewToggleRepository(db)
+
+	// Criar toggles de teste com hierarquia
+	parent := &entity.Toggle{
+		ID:       "parent",
+		Path:     "parent",
+		AppID:    "test-app",
+		Value:    "parent",
+		Level:    0,
+		Enabled:  true,
+		Editable: true,
+	}
+	err := repo.Create(parent)
+	if err != nil {
+		t.Fatalf("Failed to create parent toggle: %v", err)
+	}
+
+	child1 := &entity.Toggle{
+		ID:       "child1",
+		Path:     "parent.child1",
+		AppID:    "test-app",
+		Value:    "child1",
+		Level:    1,
+		ParentID: &parent.ID,
+		Enabled:  true,
+		Editable: true,
+	}
+	err = repo.Create(child1)
+	if err != nil {
+		t.Fatalf("Failed to create child1 toggle: %v", err)
+	}
+
+	child2 := &entity.Toggle{
+		ID:       "child2",
+		Path:     "parent.child2",
+		AppID:    "test-app",
+		Value:    "child2",
+		Level:    1,
+		ParentID: &parent.ID,
+		Enabled:  true,
+		Editable: true,
+	}
+	err = repo.Create(child2)
+	if err != nil {
+		t.Fatalf("Failed to create child2 toggle: %v", err)
+	}
+
+	// Testar busca de filhos
+	children, err := repo.GetChildren("parent")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if len(children) != 2 {
+		t.Errorf("Expected 2 children, got %d", len(children))
+	}
+
+	// Testar busca de filhos de toggle sem filhos
+	children, err = repo.GetChildren("child1")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if len(children) != 0 {
+		t.Errorf("Expected 0 children, got %d", len(children))
+	}
+}
+
+func TestToggleRepository_DeleteWithChildren(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewToggleRepository(db)
+
+	// Criar toggles de teste com hierarquia
+	parent := &entity.Toggle{
+		ID:       "parent",
+		Path:     "parent",
+		AppID:    "test-app",
+		Value:    "parent",
+		Level:    0,
+		Enabled:  true,
+		Editable: true,
+	}
+	err := repo.Create(parent)
+	if err != nil {
+		t.Fatalf("Failed to create parent toggle: %v", err)
+	}
+
+	child := &entity.Toggle{
+		ID:       "child",
+		Path:     "parent.child",
+		AppID:    "test-app",
+		Value:    "child",
+		Level:    1,
+		ParentID: &parent.ID,
+		Enabled:  true,
+		Editable: true,
+	}
+	err = repo.Create(child)
+	if err != nil {
+		t.Fatalf("Failed to create child toggle: %v", err)
+	}
+
+	// Testar remoção com filhos
+	err = repo.Delete("parent")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	// Verificar se pai e filho foram removidos
+	_, err = repo.GetByID("parent")
+	if err == nil {
+		t.Error("Expected parent to be deleted")
+	}
+
+	_, err = repo.GetByID("child")
+	if err == nil {
+		t.Error("Expected child to be deleted")
+	}
+}

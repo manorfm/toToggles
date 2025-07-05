@@ -368,3 +368,361 @@ func TestToggleUseCase_UpdateToggleByID(t *testing.T) {
 		t.Errorf("Expected error for wrong appID")
 	}
 }
+
+func TestToggleUseCase_DeleteToggle(t *testing.T) {
+	tests := []struct {
+		name          string
+		path          string
+		appID         string
+		setupMock     func(*MockToggleRepository, *MockApplicationRepository)
+		expectedError string
+	}{
+		{
+			name:  "successful deletion",
+			path:  "test.path",
+			appID: "app123",
+			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{
+					ID:       "toggle1",
+					Path:     "test.path",
+					AppID:    "app123",
+					Enabled:  true,
+					Editable: true,
+				}
+			},
+			expectedError: "",
+		},
+		{
+			name:          "toggle not found",
+			path:          "nonexistent.path",
+			appID:         "app123",
+			setupMock:     func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {},
+			expectedError: "toggle not found",
+		},
+		{
+			name:          "empty path",
+			path:          "",
+			appID:         "app123",
+			setupMock:     func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {},
+			expectedError: "toggle path is required",
+		},
+		{
+			name:          "empty appID",
+			path:          "test.path",
+			appID:         "",
+			setupMock:     func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {},
+			expectedError: "application ID is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toggleMock := NewMockToggleRepository()
+			appMock := NewMockApplicationRepository()
+			tt.setupMock(toggleMock, appMock)
+
+			useCase := NewToggleUseCase(toggleMock, appMock)
+			err := useCase.DeleteToggle(tt.path, tt.appID)
+
+			if tt.expectedError != "" {
+				if err == nil {
+					t.Errorf("Expected error containing '%s', got nil", tt.expectedError)
+					return
+				}
+				appErr, ok := err.(*entity.AppError)
+				if !ok {
+					t.Errorf("Expected AppError, got %T", err)
+					return
+				}
+				if appErr.Message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%s'", tt.expectedError, appErr.Message)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestToggleUseCase_GetToggleHierarchy(t *testing.T) {
+	tests := []struct {
+		name          string
+		appID         string
+		setupMock     func(*MockToggleRepository, *MockApplicationRepository)
+		expectedError string
+	}{
+		{
+			name:  "successful hierarchy retrieval",
+			appID: "app123",
+			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{
+					ID:       "toggle1",
+					Path:     "parent",
+					AppID:    "app123",
+					Value:    "parent",
+					Level:    0,
+					Enabled:  true,
+					Editable: true,
+				}
+				toggleMock.Toggles["toggle2"] = &entity.Toggle{
+					ID:       "toggle2",
+					Path:     "parent.child",
+					AppID:    "app123",
+					Value:    "child",
+					Level:    1,
+					ParentID: &[]string{"toggle1"}[0],
+					Enabled:  true,
+					Editable: true,
+				}
+			},
+			expectedError: "",
+		},
+		{
+			name:          "empty appID",
+			appID:         "",
+			setupMock:     func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {},
+			expectedError: "application ID is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toggleMock := NewMockToggleRepository()
+			appMock := NewMockApplicationRepository()
+			tt.setupMock(toggleMock, appMock)
+
+			useCase := NewToggleUseCase(toggleMock, appMock)
+			hierarchy, err := useCase.GetToggleHierarchy(tt.appID)
+
+			if tt.expectedError != "" {
+				if err == nil {
+					t.Errorf("Expected error containing '%s', got nil", tt.expectedError)
+					return
+				}
+				appErr, ok := err.(*entity.AppError)
+				if !ok {
+					t.Errorf("Expected AppError, got %T", err)
+					return
+				}
+				if appErr.Message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%s'", tt.expectedError, appErr.Message)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got %v", err)
+					return
+				}
+				if hierarchy == nil {
+					t.Error("Expected hierarchy to be returned")
+				}
+			}
+		})
+	}
+}
+
+func TestToggleUseCase_buildHierarchyArray(t *testing.T) {
+	useCase := NewToggleUseCase(nil, nil)
+
+	toggles := []*entity.Toggle{
+		{
+			ID:      "parent",
+			Path:    "parent",
+			Value:   "parent",
+			Level:   0,
+			Enabled: true,
+		},
+		{
+			ID:       "child",
+			Path:     "parent.child",
+			Value:    "child",
+			Level:    1,
+			ParentID: &[]string{"parent"}[0],
+			Enabled:  true,
+		},
+	}
+
+	result := useCase.buildHierarchyArray(toggles)
+
+	if len(result) == 0 {
+		t.Error("Expected hierarchy array to be built")
+	}
+
+	if len(result) != 1 {
+		t.Errorf("Expected 1 root node, got %d", len(result))
+	}
+
+	parent := result[0]
+	if parent["value"] != "parent" {
+		t.Errorf("Expected parent value 'parent', got %v", parent["value"])
+	}
+}
+
+func TestToggleUseCase_buildToggleNodeArray(t *testing.T) {
+	useCase := NewToggleUseCase(nil, nil)
+
+	toggle := &entity.Toggle{
+		ID:      "test",
+		Path:    "test",
+		Value:   "test",
+		Level:   0,
+		Enabled: true,
+	}
+
+	byLevel := map[int][]*entity.Toggle{
+		0: {toggle},
+	}
+
+	result := useCase.buildToggleNodeArray(toggle, byLevel)
+
+	if result["value"] != "test" {
+		t.Errorf("Expected value 'test', got %v", result["value"])
+	}
+
+	if result["enabled"] != true {
+		t.Errorf("Expected enabled true, got %v", result["enabled"])
+	}
+}
+
+func TestToggleUseCase_buildToggleNodeRecursiveArray(t *testing.T) {
+	useCase := NewToggleUseCase(nil, nil)
+
+	parent := &entity.Toggle{
+		ID:      "parent",
+		Path:    "parent",
+		Value:   "parent",
+		Level:   0,
+		Enabled: true,
+	}
+
+	child := &entity.Toggle{
+		ID:       "child",
+		Path:     "parent.child",
+		Value:    "child",
+		Level:    1,
+		ParentID: &[]string{"parent"}[0],
+		Enabled:  true,
+	}
+
+	byLevel := map[int][]*entity.Toggle{
+		0: {parent},
+		1: {child},
+	}
+
+	result := useCase.buildToggleNodeRecursiveArray(parent, byLevel, true)
+
+	if result["value"] != "parent" {
+		t.Errorf("Expected parent value 'parent', got %v", result["value"])
+	}
+
+	if result["enabled"] != true {
+		t.Errorf("Expected enabled true, got %v", result["enabled"])
+	}
+
+	children, ok := result["toggles"].([]map[string]interface{})
+	if !ok {
+		t.Error("Expected children to be present")
+	}
+
+	if len(children) != 1 {
+		t.Errorf("Expected 1 child, got %d", len(children))
+	}
+
+	if children[0]["value"] != "child" {
+		t.Errorf("Expected child value 'child', got %v", children[0]["value"])
+	}
+}
+
+func TestToggleUseCase_UpdateEnabledRecursively(t *testing.T) {
+	tests := []struct {
+		name          string
+		toggleID      string
+		enabled       bool
+		appID         string
+		setupMock     func(*MockToggleRepository, *MockApplicationRepository)
+		expectedError string
+	}{
+		{
+			name:     "successful recursive update",
+			toggleID: "toggle1",
+			enabled:  false,
+			appID:    "app123",
+			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{
+					ID:      "toggle1",
+					Path:    "parent",
+					AppID:   "app123",
+					Value:   "parent",
+					Level:   0,
+					Enabled: true,
+				}
+				toggleMock.Toggles["toggle2"] = &entity.Toggle{
+					ID:       "toggle2",
+					Path:     "parent.child",
+					AppID:    "app123",
+					Value:    "child",
+					Level:    1,
+					ParentID: &[]string{"toggle1"}[0],
+					Enabled:  true,
+				}
+			},
+			expectedError: "",
+		},
+		{
+			name:          "toggle not found",
+			toggleID:      "nonexistent",
+			enabled:       false,
+			appID:         "app123",
+			setupMock:     func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {},
+			expectedError: "toggle not found",
+		},
+		{
+			name:     "wrong appID",
+			toggleID: "toggle1",
+			enabled:  false,
+			appID:    "wrongapp",
+			setupMock: func(toggleMock *MockToggleRepository, appMock *MockApplicationRepository) {
+				toggleMock.Toggles["toggle1"] = &entity.Toggle{
+					ID:      "toggle1",
+					Path:    "parent",
+					AppID:   "app123",
+					Value:   "parent",
+					Level:   0,
+					Enabled: true,
+				}
+			},
+			expectedError: "toggle does not belong to this application",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toggleMock := NewMockToggleRepository()
+			appMock := NewMockApplicationRepository()
+			tt.setupMock(toggleMock, appMock)
+
+			useCase := NewToggleUseCase(toggleMock, appMock)
+			err := useCase.UpdateEnabledRecursively(tt.toggleID, tt.enabled, tt.appID)
+
+			if tt.expectedError != "" {
+				if err == nil {
+					t.Errorf("Expected error containing '%s', got nil", tt.expectedError)
+					return
+				}
+				appErr, ok := err.(*entity.AppError)
+				if !ok {
+					t.Errorf("Expected AppError, got %T", err)
+					return
+				}
+				if appErr.Message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%s'", tt.expectedError, appErr.Message)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got %v", err)
+				}
+			}
+		})
+	}
+}

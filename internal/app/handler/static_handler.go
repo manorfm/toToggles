@@ -13,6 +13,11 @@ func ServeStatic(c *gin.Context) {
 		c.Next()
 		return
 	}
+	// NÃO intercepta a rota LICENSE
+	if c.Request.URL.Path == "/LICENSE" {
+		c.Next()
+		return
+	}
 	// Se a rota não for para uma API, serve o index.html
 	if !isAPIRoute(c.Request.URL.Path) {
 		c.File("static/index.html")

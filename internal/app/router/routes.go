@@ -38,6 +38,11 @@ func Init(router *gin.Engine) {
 	// Rota para atualizar enabled recursivamente
 	router.PUT("/applications/:id/toggle/:toggleId", handler.UpdateEnabled)
 
+	// Rota para servir o arquivo LICENSE da raiz
+	router.GET("/LICENSE", func(c *gin.Context) {
+		c.File("LICENSE")
+	})
+
 	// Rota raiz serve o frontend
 	router.GET("/", func(c *gin.Context) {
 		c.File("static/index.html")
