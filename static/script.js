@@ -25,6 +25,13 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('app-form').addEventListener('submit', handleCreateApplication);
     document.getElementById('toggle-form').addEventListener('submit', handleCreateToggle);
     document.getElementById('edit-toggle-form').addEventListener('submit', handleUpdateToggle);
+
+    // Após carregar aplicações, verificar se deve abrir tela de toggles
+    const savedAppId = localStorage.getItem('currentAppId');
+    const savedAppName = localStorage.getItem('currentAppName');
+    if (savedAppId && savedAppName) {
+        showToggles(savedAppId, savedAppName);
+    }
 });
 
 // Funções de Modal
@@ -54,16 +61,20 @@ function showApplications() {
     togglesSection.classList.add('hidden');
     currentAppId = null;
     currentAppName = null;
+    // Limpar localStorage
+    localStorage.removeItem('currentAppId');
+    localStorage.removeItem('currentAppName');
 }
 
 function showToggles(appId, appName) {
     currentAppId = appId;
     currentAppName = appName;
     appNameElement.textContent = `Toggles de ${appName}`;
-    
     applicationsSection.classList.add('hidden');
     togglesSection.classList.remove('hidden');
-    
+    // Persistir no localStorage
+    localStorage.setItem('currentAppId', appId);
+    localStorage.setItem('currentAppName', appName);
     loadToggles(appId);
 }
 
@@ -137,19 +148,10 @@ function renderApplications(applications) {
         showEmptyState(applicationsList, 'Nenhuma aplicação encontrada', 'Crie sua primeira aplicação para começar!');
         return;
     }
-    
     applicationsList.innerHTML = applications.map(app => `
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title-col">
-                    <h3 class="app-title">${app.name}</h3>
-                    <div class="app-counters-row">
-                        <span title="Toggles habilitados" class="counter enabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M9 12l2 2l4-4"/></svg> ${app.toggles_enabled}</span>
-                        <span title="Toggles desabilitados" class="counter disabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg> ${app.toggles_disabled}</span>
-                        <span title="Total de toggles" class="counter total"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg> ${app.toggles_total}</span>
-                    </div>
-                </div>
-                <div class="card-actions">
+        <div class="card app-card" data-app-id="${app.id}">
+            <div class="app-card-header">
+                <div class="app-card-header-right">
                     <button class="icon-btn" title="Ver Toggles" onclick="event.stopPropagation(); showToggles('${app.id}', '${app.name}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -172,8 +174,108 @@ function renderApplications(applications) {
                     </button>
                 </div>
             </div>
+            <div class="toggle-divider"></div>
+            <div class="app-card-body">
+                <div class="app-title-row">
+                    <a href="#" class="app-title-link" onclick="event.preventDefault(); showToggles('${app.id}', '${app.name}')">${app.name}</a>
+                </div>
+                <div class="app-counters-row">
+                    <span title="Toggles habilitados" class="counter enabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M9 12l2 2l4-4"/></svg> ${app.toggles_enabled}</span>
+                    <span title="Toggles desabilitados" class="counter disabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg> ${app.toggles_disabled}</span>
+                    <span title="Total de toggles" class="counter total"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg> ${app.toggles_total}</span>
+                </div>
+                <div class="app-toggles-list" id="app-toggles-list-${app.id}" style="display:none;"></div>
+            </div>
         </div>
     `).join('');
+}
+
+// Função para expandir/colapsar toggles da aplicação
+async function toggleAppToggles(appId) {
+    const togglesDiv = document.getElementById(`app-toggles-list-${appId}`);
+    if (!togglesDiv) return;
+    if (togglesDiv.style.display === 'none') {
+        togglesDiv.innerHTML = '<div style="padding: 8px 0; color: #888; text-align:center;">Carregando toggles...</div>';
+        togglesDiv.style.display = 'block';
+        try {
+            const response = await apiCall(`/applications/${appId}/toggles?hierarchy=true`);
+            if (!response.toggles || response.toggles.length === 0) {
+                showEmptyState(togglesDiv, 'Nenhum toggle encontrado', 'Crie seu primeiro toggle para começar!');
+            } else {
+                // Extrair todos os caminhos folha
+                const leafNodes = [];
+                function traverse(node, path = [], enabledPath = [], idPath = []) {
+                    const newPath = [...path, node.value];
+                    const newEnabledPath = [...enabledPath, node.enabled];
+                    const newIdPath = [...idPath, node.id];
+                    if (!node.toggles || node.toggles.length === 0) {
+                        leafNodes.push({
+                            id: node.id,
+                            path: newPath,
+                            enabledPath: newEnabledPath,
+                            idPath: newIdPath
+                        });
+                    } else {
+                        node.toggles.forEach(child => traverse(child, newPath, newEnabledPath, newIdPath));
+                    }
+                }
+                response.toggles.forEach(root => traverse(root));
+                togglesDiv.innerHTML = leafNodes.map(toggle => {
+                    // Status: verde (todos true), vermelho (todos false), amarelo (misto)
+                    const allEnabled = toggle.enabledPath.every(e => e);
+                    const allDisabled = toggle.enabledPath.every(e => !e);
+                    let status = 'yellow';
+                    if (allEnabled) status = 'green';
+                    else if (allDisabled) status = 'red';
+                    // SVG marcador
+                    let statusSVG = '';
+                    if (status === 'green') {
+                        statusSVG = `<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#22c55e\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"8\"/><path d=\"M9 12l2 2l4-4\"/></svg>`;
+                    } else if (status === 'yellow') {
+                        statusSVG = `<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#eab308\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"8\"/><line x1=\"8\" y1=\"12\" x2=\"16\" y2=\"12\"/></svg>`;
+                    } else {
+                        statusSVG = `<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#ef4444\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"8\"/><line x1=\"9\" y1=\"9\" x2=\"15\" y2=\"15\"/><line x1=\"15\" y1=\"9\" x2=\"9\" y2=\"15\"/></svg>`;
+                    }
+                    // Caminho concatenado
+                    const pathStr = toggle.path.join('.');
+                    // Links: aplicar disabled a partir do primeiro false
+                    let disabledFound = false;
+                    const pathLinks = toggle.path.map((part, idx) => {
+                        if (!disabledFound && !toggle.enabledPath[idx]) disabledFound = true;
+                        const linkClass = disabledFound ? 'path-link disabled' : 'path-link';
+                        const toggleId = toggle.idPath[idx];
+                        return `<a href=\"#\" class=\"${linkClass}\" onclick=\"editTogglePath('${toggleId}'); return false;\">${part}</a>`;
+                    }).join('<span class=\"path-separator\">.</span>');
+                    return `
+                        <div class=\"toggle-card toggle-line\">
+                            <div class=\"toggle-card-header\">
+                                <div class=\"toggle-header-left\"><span class=\"toggle-status-dot\">${statusSVG}</span></div>
+                                <div class=\"toggle-header-right\">
+                                    <button class=\"icon-btn danger\" title=\"Excluir Toggle\" onclick=\"deleteToggle('${pathStr}')\">
+                                        <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">
+                                            <polyline points=\"3,6 5,6 21,6\"/>
+                                            <path d=\"m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2\"/>
+                                            <line x1=\"10\" y1=\"11\" x2=\"10\" y2=\"17\"/>
+                                            <line x1=\"14\" y1=\"11\" x2=\"14\" y2=\"17\"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class=\"toggle-divider\"></div>
+                            <div class=\"toggle-card-body\">
+                                <span class=\"toggle-path-line\">${pathLinks}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        } catch (e) {
+            showEmptyState(togglesDiv, 'Erro ao carregar toggles');
+        }
+    } else {
+        togglesDiv.style.display = 'none';
+        togglesDiv.innerHTML = '';
+    }
 }
 
 // Funções de Toggle

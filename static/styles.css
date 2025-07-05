@@ -463,8 +463,16 @@ main {
 
 .empty-state {
     text-align: center;
-    padding: 60px 20px;
-    color: #6c757d;
+    padding: 2em 0 2em 0;
+    color: #888;
+    font-size: 1.08em;
+    width: 100%;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
 }
 
 .empty-state h3 {
@@ -765,4 +773,76 @@ main {
     word-break: break-all;
     text-align: left;
     width: 100%;
+}
+
+.app-card {
+    background: linear-gradient(135deg, #f8fbff 80%, #e3f0ff 100%);
+    border: 1.5px solid #e3eaf5;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px 0 rgba(0, 123, 255, 0.06);
+    padding: 0;
+    transition: box-shadow 0.2s, border-color 0.2s, background 0.2s;
+    min-width: 260px;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden;
+    margin-bottom: 1em;
+}
+.app-card-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0.3em 0.7em 0.1em 0.7em;
+    min-height: 32px;
+    border-bottom: none;
+    width: 100%;
+}
+.app-card-header-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+.app-card-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.7em 1em 0.7em 1em;
+    width: 100%;
+}
+.app-title-row {
+    margin-bottom: 0.3em;
+}
+.app-title-link {
+    font-size: 1.13rem;
+    font-weight: 700;
+    color: #2563eb;
+    margin: 0 0 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.18s;
+}
+.app-title-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+.app-toggles-list {
+    width: 100%;
+    margin-top: 0.5em;
+}
+
+#applications-section, #toggles-section {
+    min-height: 60vh;
+}
+
+.grid-container .empty-state,
+.grid-container .empty-state-center {
+    grid-column: 2 / 3;
+    justify-self: center;
 } 
