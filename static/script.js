@@ -61,9 +61,10 @@ function showApplications() {
     togglesSection.classList.add('hidden');
     currentAppId = null;
     currentAppName = null;
-    // Limpar localStorage
+    // Clear localStorage
     localStorage.removeItem('currentAppId');
     localStorage.removeItem('currentAppName');
+    loadApplications();
 }
 
 function showToggles(appId, appName) {
