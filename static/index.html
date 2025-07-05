@@ -14,106 +14,99 @@
         </header>
 
         <main>
-            <!-- Seção de Aplicações -->
+            <!-- Section: Applications -->
             <section id="applications-section">
                 <div class="section-header">
-                    <h2>📱 Aplicações</h2>
-                    <button id="new-app-btn" class="btn btn-primary">+ Nova Aplicação</button>
+                    <h2>📱 Applications</h2>
+                    <button id="new-app-btn" class="btn btn-primary">+ New Application</button>
                 </div>
                 
                 <div id="applications-list" class="grid-container">
-                    <!-- Aplicações serão carregadas aqui -->
+                    <!-- Applications will be loaded here -->
                 </div>
             </section>
 
-            <!-- Seção de Toggles (inicialmente oculta) -->
+            <!-- Section: Toggles (initially hidden) -->
             <section id="toggles-section" class="hidden">
                 <div class="section-header">
-                    <button id="back-to-apps" class="btn btn-secondary">← Voltar para Aplicações</button>
-                    <h2 id="app-name">Toggles da Aplicação</h2>
-                    <button id="new-toggle-btn" class="btn btn-primary">+ Novo Toggle</button>
+                    <button id="back-to-apps" class="btn btn-secondary">← Back to Applications</button>
+                    <h2 id="app-name">Application Toggles</h2>
+                    <button id="new-toggle-btn" class="btn btn-primary">+ New Toggle</button>
                 </div>
                 
                 <div id="toggles-list" class="grid-container">
-                    <!-- Toggles serão carregados aqui -->
+                    <!-- Toggles will be loaded here -->
                 </div>
             </section>
         </main>
     </div>
 
-    <!-- Modal para criar/editar aplicação -->
+    <!-- Modal for creating/editing application -->
     <div id="app-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="app-modal-title">Nova Aplicação</h3>
+                <h3 id="app-modal-title">New Application</h3>
                 <button class="close-btn" onclick="closeModal('app-modal')">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="app-form">
                     <div class="form-group">
-                        <label for="app-name-input">Nome da Aplicação:</label>
+                        <label for="app-name-input">Application Name:</label>
                         <input type="text" id="app-name-input" required>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Salvar</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Modal para criar/editar toggle -->
+    <!-- Modal for creating/editing toggle -->
     <div id="toggle-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="toggle-modal-title">Novo Toggle</h3>
+                <h3 id="toggle-modal-title">New Toggle</h3>
                 <button class="close-btn" onclick="closeModal('toggle-modal')">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="toggle-form">
                     <div class="form-group">
-                        <label for="toggle-path-input">Caminho do Toggle:</label>
-                        <input type="text" id="toggle-path-input" placeholder="ex: minha.funcionalidade.subfuncionalidade" required>
-                        <small>Use pontos para separar níveis hierárquicos</small>
+                        <label for="toggle-path-input">Toggle Path:</label>
+                        <input type="text" id="toggle-path-input" required>
                     </div>
                     <div class="form-group">
-                        <label for="toggle-enabled-input">
-                            <input type="checkbox" id="toggle-enabled-input" checked>
-                            Habilitado
-                        </label>
+                        <label for="toggle-enabled-input"><input type="checkbox" id="toggle-enabled-input"> Enabled</label>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('toggle-modal')">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Salvar</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('toggle-modal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Modal para editar toggle inline -->
+    <!-- Modal for editing toggle -->
     <div id="edit-toggle-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="edit-toggle-title">Editar Toggle</h3>
+                <h3 id="edit-toggle-title">Edit Toggle</h3>
                 <button class="close-btn" onclick="closeModal('edit-toggle-modal')">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="edit-toggle-form">
                     <div class="form-group">
-                        <label for="edit-toggle-path-input">Caminho do Toggle:</label>
-                        <input type="text" id="edit-toggle-path-input" required>
+                        <label for="edit-toggle-path-input">Toggle Path:</label>
+                        <input type="text" id="edit-toggle-path-input" required disabled>
                     </div>
                     <div class="form-group">
-                        <label for="edit-toggle-enabled-input">
-                            <input type="checkbox" id="edit-toggle-enabled-input" checked>
-                            Habilitado
-                        </label>
+                        <label for="edit-toggle-enabled-input"><input type="checkbox" id="edit-toggle-enabled-input"> Enabled</label>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-toggle-modal')">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Salvar</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-toggle-modal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
                     </div>
                 </form>
             </div>

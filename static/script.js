@@ -44,11 +44,11 @@ function closeModal(modalId) {
     // Limpar formulários
     if (modalId === 'app-modal') {
         document.getElementById('app-form').reset();
-        document.getElementById('app-modal-title').textContent = 'Nova Aplicação';
+        document.getElementById('app-modal-title').textContent = 'New Application';
         currentEditingAppId = null;
     } else if (modalId === 'toggle-modal') {
         document.getElementById('toggle-form').reset();
-        document.getElementById('toggle-modal-title').textContent = 'Novo Toggle';
+        document.getElementById('toggle-modal-title').textContent = 'New Toggle';
     } else if (modalId === 'edit-toggle-modal') {
         document.getElementById('edit-toggle-form').reset();
         editingToggleId = null;
@@ -69,7 +69,7 @@ function showApplications() {
 function showToggles(appId, appName) {
     currentAppId = appId;
     currentAppName = appName;
-    appNameElement.textContent = `Toggles de ${appName}`;
+    appNameElement.textContent = `Toggles of ${appName}`;
     applicationsSection.classList.add('hidden');
     togglesSection.classList.remove('hidden');
     // Persistir no localStorage
@@ -96,7 +96,7 @@ async function apiCall(url, options = {}) {
         return await response.json();
     } catch (error) {
         console.error('API Error:', error);
-        showError(`Erro na requisição: ${error.message}`);
+        showError(`Error in request: ${error.message}`);
         throw error;
     }
 }
@@ -108,7 +108,7 @@ async function loadApplications() {
         const applications = await apiCall('/applications');
         renderApplications(applications);
     } catch (error) {
-        showEmptyState(applicationsList, 'Erro ao carregar aplicações');
+        showEmptyState(applicationsList, 'No applications found', 'Create your first application to get started!');
     }
 }
 
@@ -125,7 +125,7 @@ async function handleCreateApplication(event) {
                 method: 'PUT',
                 body: JSON.stringify({ name })
             });
-            showSuccess('Aplicação atualizada com sucesso!');
+            showSuccess('Application updated successfully!');
             currentEditingAppId = null;
         } else {
             // Criando nova aplicação
@@ -133,19 +133,19 @@ async function handleCreateApplication(event) {
                 method: 'POST',
                 body: JSON.stringify({ name })
             });
-            showSuccess('Aplicação criada com sucesso!');
+            showSuccess('Application created successfully!');
         }
         
         closeModal('app-modal');
         loadApplications();
     } catch (error) {
-        showError('Erro ao salvar aplicação');
+        showError('Error saving application');
     }
 }
 
 function renderApplications(applications) {
     if (!applications || applications.length === 0) {
-        showEmptyState(applicationsList, 'Nenhuma aplicação encontrada', 'Crie sua primeira aplicação para começar!');
+        showEmptyState(applicationsList, 'No applications found', 'Create your first application to get started!');
         return;
     }
     applicationsList.innerHTML = applications.map(app => `
@@ -180,9 +180,9 @@ function renderApplications(applications) {
                     <a href="#" class="app-title-link" onclick="event.preventDefault(); showToggles('${app.id}', '${app.name}')">${app.name}</a>
                 </div>
                 <div class="app-counters-row">
-                    <span title="Toggles habilitados" class="counter enabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M9 12l2 2l4-4"/></svg> ${app.toggles_enabled}</span>
-                    <span title="Toggles desabilitados" class="counter disabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg> ${app.toggles_disabled}</span>
-                    <span title="Total de toggles" class="counter total"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg> ${app.toggles_total}</span>
+                    <span title="Toggles enabled" class="counter enabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M9 12l2 2l4-4"/></svg> ${app.toggles_enabled}</span>
+                    <span title="Toggles disabled" class="counter disabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg> ${app.toggles_disabled}</span>
+                    <span title="Total of toggles" class="counter total"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg> ${app.toggles_total}</span>
                 </div>
                 <div class="app-toggles-list" id="app-toggles-list-${app.id}" style="display:none;"></div>
             </div>
@@ -200,7 +200,7 @@ async function toggleAppToggles(appId) {
         try {
             const response = await apiCall(`/applications/${appId}/toggles?hierarchy=true`);
             if (!response.toggles || response.toggles.length === 0) {
-                showEmptyState(togglesDiv, 'Nenhum toggle encontrado', 'Crie seu primeiro toggle para começar!');
+                showEmptyState(togglesDiv, 'No toggles found', 'Create your first toggle to get started!');
             } else {
                 // Extrair todos os caminhos folha
                 const leafNodes = [];
@@ -270,7 +270,7 @@ async function toggleAppToggles(appId) {
                 }).join('');
             }
         } catch (e) {
-            showEmptyState(togglesDiv, 'Erro ao carregar toggles');
+            showEmptyState(togglesDiv, 'Error loading toggles');
         }
     } else {
         togglesDiv.style.display = 'none';
@@ -285,7 +285,7 @@ async function loadToggles(appId) {
         const response = await apiCall(`/applications/${appId}/toggles?hierarchy=true`);
         renderToggles(response.toggles);
     } catch (error) {
-        showEmptyState(togglesList, 'Erro ao carregar toggles');
+        showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
     }
 }
 
@@ -304,10 +304,10 @@ async function handleCreateToggle(event) {
         });
         
         closeModal('toggle-modal');
-        showSuccess('Toggle criado com sucesso!');
+        showSuccess('Toggle created successfully!');
         loadToggles(currentAppId);
     } catch (error) {
-        showError('Erro ao criar toggle');
+        showError('Error creating toggle');
     }
 }
 
@@ -320,18 +320,18 @@ async function handleUpdateToggle(event) {
             method: 'PUT',
             body: JSON.stringify({ enabled })
         });
-        showSuccess('Toggle atualizado com sucesso!');
+        showSuccess('Toggle updated successfully!');
         closeModal('edit-toggle-modal');
         loadToggles(currentAppId);
         editingToggleId = null;
     } catch (error) {
-        showError('Erro ao salvar toggle');
+        showError('Error saving toggle');
     }
 }
 
 function renderToggles(toggles) {
     if (!toggles || toggles.length === 0) {
-        showEmptyState(togglesList, 'Nenhum toggle encontrado', 'Crie seu primeiro toggle para começar!');
+        showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
         return;
     }
     // Extrair todos os caminhos folha
@@ -383,7 +383,7 @@ function renderToggles(toggles) {
         }).join('<span class="path-separator">.</span>');
 
         return `
-            <div class="toggle-card toggle-line">
+            <div class="toggle-card">
                 <div class="toggle-card-header">
                     <div class="toggle-header-left"><span class="toggle-status-dot">${statusSVG}</span></div>
                     <div class="toggle-header-right">
@@ -422,7 +422,7 @@ function editToggle(path, enabled) {
     lastEditedTogglePath = path;
     document.getElementById('edit-toggle-path-input').value = path;
     document.getElementById('edit-toggle-enabled-input').checked = enabled;
-    document.getElementById('edit-toggle-title').textContent = 'Editar Toggle';
+    document.getElementById('edit-toggle-title').textContent = 'Edit Toggle';
     openModal('edit-toggle-modal');
 }
 
@@ -432,10 +432,10 @@ async function editTogglePath(toggleId) {
         editingToggleId = toggle.id;
         document.getElementById('edit-toggle-path-input').value = toggle.path;
         document.getElementById('edit-toggle-enabled-input').checked = toggle.enabled;
-        document.getElementById('edit-toggle-title').textContent = 'Editar Toggle';
+        document.getElementById('edit-toggle-title').textContent = 'Edit Toggle';
         openModal('edit-toggle-modal');
     } catch (e) {
-        showError('Erro ao buscar toggle para edição');
+        showError('Error finding toggle for editing');
     }
 }
 
@@ -455,7 +455,7 @@ function findToggleByPath(toggles, path) {
 }
 
 async function deleteToggle(path) {
-    if (!confirm(`Tem certeza que deseja excluir o toggle "${path}"?`)) {
+    if (!confirm(`Are you sure you want to delete the toggle "${path}"?`)) {
         return;
     }
     
@@ -465,7 +465,7 @@ async function deleteToggle(path) {
         const found = findToggleByPath(response.toggles, path);
         
         if (!found) {
-            showError('Toggle não encontrado');
+            showError('Toggle not found');
             return;
         }
         
@@ -473,15 +473,15 @@ async function deleteToggle(path) {
             method: 'DELETE'
         });
         
-        showSuccess('Toggle excluído com sucesso!');
+        showSuccess('Toggle deleted successfully!');
         loadToggles(currentAppId);
     } catch (error) {
-        showError('Erro ao excluir toggle');
+        showError('Error deleting toggle');
     }
 }
 
 async function deleteApplication(appId, appName) {
-    const message = `Tem certeza que deseja remover a aplicação "${appName}"?\n\n⚠️ ATENÇÃO: Esta ação irá remover TODOS os toggles associados a esta aplicação e não pode ser desfeita!`;
+    const message = `Are you sure you want to remove the application "${appName}"?\n\n⚠️ WARNING: This action will remove ALL toggles associated with this application and cannot be undone!`;
     
     if (!confirm(message)) {
         return;
@@ -492,7 +492,7 @@ async function deleteApplication(appId, appName) {
             method: 'DELETE'
         });
         
-        showSuccess(`Aplicação "${appName}" removida com sucesso!`);
+        showSuccess(`Application "${appName}" removed successfully!`);
         
         // Se estava visualizando os toggles desta aplicação, volta para a lista de aplicações
         if (currentAppId === appId) {
@@ -502,20 +502,20 @@ async function deleteApplication(appId, appName) {
             loadApplications();
         }
     } catch (error) {
-        showError('Erro ao remover aplicação');
+        showError('Error removing application');
     }
 }
 
 function editApplication(appId, appName) {
     currentEditingAppId = appId;
     document.getElementById('app-name-input').value = appName;
-    document.getElementById('app-modal-title').textContent = 'Editar Aplicação';
+    document.getElementById('app-modal-title').textContent = 'Edit Application';
     openModal('app-modal');
 }
 
 // Funções de UI
 function showLoading(container) {
-    container.innerHTML = '<div class="loading">Carregando...</div>';
+    container.innerHTML = '<div class="loading">Loading...</div>';
 }
 
 function showEmptyState(container, title, message = '') {
