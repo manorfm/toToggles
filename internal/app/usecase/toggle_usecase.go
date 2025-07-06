@@ -332,3 +332,41 @@ func (uc *ToggleUseCase) UpdateToggleByID(toggleID string, enabled bool, appID s
 	}
 	return nil
 }
+
+// DeleteToggleByID remove um toggle por ID e appID, subindo recursivamente se o pai ficar sem filhos
+func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
+	if toggleID == "" || appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
+	}
+
+	// Busca o toggle pelo id e appId
+	toggle, err := uc.toggleRepo.GetByID(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+	if toggle.AppID != appID {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
+	}
+
+	// Verifica se existe outro toggle com parent_id = id e appId = appId
+	children, err := uc.toggleRepo.GetChildren(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error checking children")
+	}
+	if len(children) > 0 {
+		// Tem filhos, não remove nem sobe
+		return nil
+	}
+
+	// Não tem filhos, pode remover
+	err = uc.toggleRepo.Delete(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
+	}
+
+	// Se tem parent, tenta remover o pai recursivamente
+	if toggle.ParentID != nil {
+		return uc.DeleteToggleByID(*toggle.ParentID, appID)
+	}
+	return nil
+}

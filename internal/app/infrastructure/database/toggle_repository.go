@@ -68,15 +68,22 @@ func (r *ToggleRepositoryImpl) Update(toggle *entity.Toggle) error {
 	return r.db.Save(toggle).Error
 }
 
-// Delete remove um toggle por ID
+// Delete remove um toggle por ID e seus filhos em cascata
 func (r *ToggleRepositoryImpl) Delete(id string) error {
-	// Primeiro remove todos os filhos
-	err := r.deleteChildren(id)
+	// Primeiro, deleta todos os filhos recursivamente
+	children, err := r.GetChildren(id)
 	if err != nil {
 		return err
 	}
 
-	// Depois remove o toggle
+	for _, child := range children {
+		err = r.Delete(child.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Depois deleta o toggle pai
 	return r.db.Where("id = ?", id).Delete(&entity.Toggle{}).Error
 }
 
@@ -110,28 +117,4 @@ func (r *ToggleRepositoryImpl) GetChildren(parentID string) ([]*entity.Toggle, e
 		return nil, err
 	}
 	return children, nil
-}
-
-// deleteChildren remove recursivamente todos os filhos de um toggle
-func (r *ToggleRepositoryImpl) deleteChildren(parentID string) error {
-	children, err := r.GetChildren(parentID)
-	if err != nil {
-		return err
-	}
-
-	for _, child := range children {
-		// Remove os filhos do filho primeiro
-		err = r.deleteChildren(child.ID)
-		if err != nil {
-			return err
-		}
-
-		// Remove o filho
-		err = r.db.Delete(child).Error
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

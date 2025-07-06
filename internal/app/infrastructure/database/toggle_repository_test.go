@@ -440,3 +440,71 @@ func TestToggleRepository_DeleteWithChildren(t *testing.T) {
 		t.Error("Expected child to be deleted")
 	}
 }
+
+func TestToggleRepository_Delete_Cascade(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewToggleRepository(db)
+
+	// Create application first
+	appRepo := NewApplicationRepository(db)
+	app := entity.NewApplication("Test App")
+	err := appRepo.Create(app)
+	if err != nil {
+		t.Fatalf("Failed to create test application: %v", err)
+	}
+
+	// Create parent toggle
+	parent := entity.NewToggle("parent", true, "parent", 0, nil, app.ID)
+	err = repo.Create(parent)
+	if err != nil {
+		t.Fatalf("Failed to create parent toggle: %v", err)
+	}
+
+	// Create child toggles
+	child1 := entity.NewToggle("child1", true, "parent.child1", 1, &parent.ID, app.ID)
+	err = repo.Create(child1)
+	if err != nil {
+		t.Fatalf("Failed to create child1 toggle: %v", err)
+	}
+
+	child2 := entity.NewToggle("child2", true, "parent.child2", 1, &parent.ID, app.ID)
+	err = repo.Create(child2)
+	if err != nil {
+		t.Fatalf("Failed to create child2 toggle: %v", err)
+	}
+
+	// Create grandchild toggle
+	grandchild := entity.NewToggle("grandchild", true, "parent.child1.grandchild", 2, &child1.ID, app.ID)
+	err = repo.Create(grandchild)
+	if err != nil {
+		t.Fatalf("Failed to create grandchild toggle: %v", err)
+	}
+
+	// Delete parent toggle (should cascade to all children)
+	err = repo.Delete(parent.ID)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	// Verify parent was deleted
+	_, err = repo.GetByID(parent.ID)
+	if err == nil {
+		t.Error("Expected parent toggle to be deleted")
+	}
+
+	// Verify all children were deleted
+	_, err = repo.GetByID(child1.ID)
+	if err == nil {
+		t.Error("Expected child1 toggle to be deleted")
+	}
+
+	_, err = repo.GetByID(child2.ID)
+	if err == nil {
+		t.Error("Expected child2 toggle to be deleted")
+	}
+
+	_, err = repo.GetByID(grandchild.ID)
+	if err == nil {
+		t.Error("Expected grandchild toggle to be deleted")
+	}
+}

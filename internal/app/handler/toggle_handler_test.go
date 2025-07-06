@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -332,18 +333,18 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 	tests := []struct {
 		name           string
 		appID          string
-		path           string
+		toggleID       string
 		setupMock      func(*usecase.MockToggleRepository, *usecase.MockApplicationRepository)
 		expectedStatus int
 		expectedError  string
 	}{
 		{
-			name:  "successful deletion",
-			appID: "app123",
-			path:  "test.feature",
+			name:     "successful deletion",
+			appID:    "app123",
+			toggleID: "toggle123",
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
-				toggleMock.Toggles["toggle1"] = &entity.Toggle{
-					ID:      "toggle1",
+				toggleMock.Toggles["toggle123"] = &entity.Toggle{
+					ID:      "toggle123",
 					Path:    "test.feature",
 					AppID:   "app123",
 					Enabled: true,
@@ -355,18 +356,45 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 		{
 			name:           "empty appID",
 			appID:          "",
-			path:           "test.feature",
+			toggleID:       "toggle123",
 			setupMock:      func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "application ID is required",
+			expectedError:  "application ID and toggle ID are required",
 		},
 		{
-			name:           "empty path",
-			appID:          "app123",
-			path:           "",
-			setupMock:      func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {},
+			name:     "empty toggleID",
+			appID:    "app123",
+			toggleID: "empty",
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggleMock.GetByIDError = errors.New("toggle not found")
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "toggle not found",
+		},
+		{
+			name:     "toggle not found",
+			appID:    "app123",
+			toggleID: "nonexistent",
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggleMock.GetByIDError = errors.New("toggle not found")
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "toggle not found",
+		},
+		{
+			name:     "toggle belongs to different app",
+			appID:    "app123",
+			toggleID: "toggle123",
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggleMock.Toggles["toggle123"] = &entity.Toggle{
+					ID:      "toggle123",
+					Path:    "test.feature",
+					AppID:   "different-app",
+					Enabled: true,
+				}
+			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "toggle path is required",
+			expectedError:  "toggle does not belong to this application",
 		},
 	}
 
@@ -381,9 +409,9 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
 			handler := NewToggleHandler(toggleUseCase)
 
-			router.DELETE("/applications/:id/toggles", handler.DeleteToggle)
+			router.DELETE("/applications/:id/toggles/:toggleId", handler.DeleteToggle)
 
-			url := "/applications/" + tt.appID + "/toggles?path=" + tt.path
+			url := "/applications/" + tt.appID + "/toggles/" + tt.toggleID
 			req, _ := http.NewRequest("DELETE", url, nil)
 
 			w := httptest.NewRecorder()
@@ -404,6 +432,9 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 				json.Unmarshal(w.Body.Bytes(), &response)
 				if response["message"] != "toggle deleted successfully" {
 					t.Error("Expected success message")
+				}
+				if response["id"] != tt.toggleID {
+					t.Errorf("Expected toggle ID '%s', got '%v'", tt.toggleID, response["id"])
 				}
 			}
 		})

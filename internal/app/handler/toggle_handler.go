@@ -172,27 +172,19 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "toggle updated successfully"})
 }
 
-// DeleteToggle remove um toggle
+// DeleteToggle remove um toggle por ID
 func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 	appID := c.Param("id")
-	if appID == "" {
+	toggleID := c.Param("toggleId")
+	if appID == "" || toggleID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
+			"message": "application ID and toggle ID are required",
 		})
 		return
 	}
 
-	path := c.Query("path")
-	if path == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "toggle path is required",
-		})
-		return
-	}
-
-	err := h.toggleUseCase.DeleteToggle(path, appID)
+	err := h.toggleUseCase.DeleteToggleByID(toggleID, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
@@ -215,7 +207,7 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "toggle deleted successfully",
-		"path":    path,
+		"id":      toggleID,
 	})
 }
 

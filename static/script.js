@@ -17,7 +17,12 @@ document.addEventListener('DOMContentLoaded', function() {
     loadApplications();
     
     // Botões principais
-    document.getElementById('new-app-btn').addEventListener('click', () => openModal('app-modal'));
+    document.getElementById('new-app-btn').addEventListener('click', () => {
+        currentEditingAppId = null;
+        document.getElementById('app-modal-title').textContent = 'New Application';
+        document.getElementById('app-form').reset();
+        openModal('app-modal');
+    });
     document.getElementById('new-toggle-btn').addEventListener('click', () => openModal('toggle-modal'));
     document.getElementById('back-to-apps').addEventListener('click', showApplications);
     
@@ -208,7 +213,6 @@ async function handleCreateToggle(event) {
     event.preventDefault();
     
     const path = document.getElementById('toggle-path-input').value.trim();
-    const enabled = document.getElementById('toggle-enabled-input').checked;
     
     if (!path) return;
     
@@ -249,12 +253,20 @@ function renderToggles(toggles) {
         showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
         return;
     }
+    
     // Extrair todos os caminhos folha
     const leafNodes = [];
     function traverse(node, path = [], enabledPath = [], idPath = []) {
+        // Verificar se o node tem a propriedade value
+        if (!node.value) {
+            // Se não tem value, usar o ID como fallback
+            node.value = node.id;
+        }
+        
         const newPath = [...path, node.value];
         const newEnabledPath = [...enabledPath, node.enabled];
         const newIdPath = [...idPath, node.id];
+        
         if (!node.toggles || node.toggles.length === 0) {
             leafNodes.push({
                 id: node.id,
@@ -266,7 +278,13 @@ function renderToggles(toggles) {
             node.toggles.forEach(child => traverse(child, newPath, newEnabledPath, newIdPath));
         }
     }
+    
     toggles.forEach(root => traverse(root));
+
+    if (leafNodes.length === 0) {
+        showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
+        return;
+    }
 
     togglesList.innerHTML = leafNodes.map(toggle => {
         // Status: verde (todos true), vermelho (todos false), amarelo (misto)
@@ -302,7 +320,7 @@ function renderToggles(toggles) {
                 <div class="toggle-card-header">
                     <div class="toggle-header-left"><span class="toggle-status-dot">${statusSVG}</span></div>
                     <div class="toggle-header-right">
-                        <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${pathStr}')">
+                        <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${toggle.id}', '${pathStr}')">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3,6 5,6 21,6"/>
                                 <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
@@ -360,22 +378,48 @@ function findToggleByPath(toggles, path) {
     return node;
 }
 
-async function deleteToggle(path) {
-    if (!confirm(`Are you sure you want to delete the toggle "${path}"?`)) {
+async function deleteToggle(toggleId, togglePath) {
+    // Criar modal de confirmação profissional
+    const confirmModal = createConfirmModal(
+        'Delete Toggle',
+        `Are you sure you want to delete the toggle "${togglePath}"?`,
+        'This action will permanently delete this toggle and all its child toggles. This action cannot be undone.',
+        'Delete',
+        'Cancel'
+    );
+    
+    document.body.appendChild(confirmModal);
+    
+    // Aguardar resposta do usuário
+    const confirmed = await new Promise((resolve) => {
+        const confirmBtn = confirmModal.querySelector('.confirm-btn');
+        const cancelBtn = confirmModal.querySelector('.cancel-btn');
+        
+        confirmBtn.onclick = () => {
+            document.body.removeChild(confirmModal);
+            resolve(true);
+        };
+        
+        cancelBtn.onclick = () => {
+            document.body.removeChild(confirmModal);
+            resolve(false);
+        };
+        
+        // Fechar ao clicar fora do modal
+        confirmModal.onclick = (e) => {
+            if (e.target === confirmModal) {
+                document.body.removeChild(confirmModal);
+                resolve(false);
+            }
+        };
+    });
+    
+    if (!confirmed) {
         return;
     }
     
     try {
-        // Buscar o toggle na estrutura hierárquica para obter o ID
-        const response = await apiCall(`/applications/${currentAppId}/toggles?hierarchy=true`);
-        const found = findToggleByPath(response.toggles, path);
-        
-        if (!found) {
-            showError('Toggle not found');
-            return;
-        }
-        
-        await apiCall(`/applications/${currentAppId}/toggles?path=${encodeURIComponent(path)}`, {
+        await apiCall(`/applications/${currentAppId}/toggles/${toggleId}`, {
             method: 'DELETE'
         });
         
@@ -386,10 +430,89 @@ async function deleteToggle(path) {
     }
 }
 
-async function deleteApplication(appId, appName) {
-    const message = `Are you sure you want to remove the application "${appName}"?\n\n⚠️ WARNING: This action will remove ALL toggles associated with this application and cannot be undone!`;
+// Função para criar modal de confirmação profissional
+function createConfirmModal(title, message, description, confirmText, cancelText, iconType = 'danger') {
+    const modal = document.createElement('div');
+    modal.className = 'confirm-modal';
     
-    if (!confirm(message)) {
+    let iconSVG = '';
+    let iconClass = '';
+    
+    if (iconType === 'danger') {
+        iconSVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>`;
+        iconClass = 'danger';
+    } else if (iconType === 'warning') {
+        iconSVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>`;
+        iconClass = 'warning';
+    }
+    
+    modal.innerHTML = `
+        <div class="confirm-modal-content">
+            <div class="confirm-modal-header">
+                <div class="confirm-modal-icon ${iconClass}">
+                    ${iconSVG}
+                </div>
+                <h3>${title}</h3>
+            </div>
+            <div class="confirm-modal-body">
+                <p class="confirm-message">${message}</p>
+                <p class="confirm-description">${description}</p>
+            </div>
+            <div class="confirm-modal-actions">
+                <button class="btn btn-secondary cancel-btn">${cancelText}</button>
+                <button class="btn btn-danger confirm-btn">${confirmText}</button>
+            </div>
+        </div>
+    `;
+    return modal;
+}
+
+async function deleteApplication(appId, appName) {
+    // Criar modal de confirmação profissional
+    const confirmModal = createConfirmModal(
+        'Delete Application',
+        `Are you sure you want to delete the application "${appName}"?`,
+        '⚠️ WARNING: This action will permanently delete this application and ALL its toggles. This action cannot be undone.',
+        'Delete',
+        'Cancel',
+        'warning'
+    );
+    
+    document.body.appendChild(confirmModal);
+    
+    // Aguardar resposta do usuário
+    const confirmed = await new Promise((resolve) => {
+        const confirmBtn = confirmModal.querySelector('.confirm-btn');
+        const cancelBtn = confirmModal.querySelector('.cancel-btn');
+        
+        confirmBtn.onclick = () => {
+            document.body.removeChild(confirmModal);
+            resolve(true);
+        };
+        
+        cancelBtn.onclick = () => {
+            document.body.removeChild(confirmModal);
+            resolve(false);
+        };
+        
+        // Fechar ao clicar fora do modal
+        confirmModal.onclick = (e) => {
+            if (e.target === confirmModal) {
+                document.body.removeChild(confirmModal);
+                resolve(false);
+            }
+        };
+    });
+    
+    if (!confirmed) {
         return;
     }
     
@@ -398,7 +521,7 @@ async function deleteApplication(appId, appName) {
             method: 'DELETE'
         });
         
-        showSuccess(`Application "${appName}" removed successfully!`);
+        showSuccess(`Application "${appName}" deleted successfully!`);
         
         // Se estava visualizando os toggles desta aplicação, volta para a lista de aplicações
         if (currentAppId === appId) {
@@ -408,7 +531,7 @@ async function deleteApplication(appId, appName) {
             loadApplications();
         }
     } catch (error) {
-        showError('Error removing application');
+        showError('Error deleting application');
     }
 }
 
@@ -458,4 +581,24 @@ window.addEventListener('click', function(event) {
             modal.classList.add('hidden');
         }
     });
+});
+
+// Fechar modais com tecla ESC
+window.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            if (!modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+            }
+        });
+        
+        // Fechar modais de confirmação também
+        const confirmModals = document.querySelectorAll('.confirm-modal');
+        confirmModals.forEach(modal => {
+            if (document.body.contains(modal)) {
+                document.body.removeChild(modal);
+            }
+        });
+    }
 }); 
