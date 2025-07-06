@@ -12,6 +12,7 @@ A simple and effective feature toggle management application built with Go and m
 - **Hierarchical Visualization**: View toggle hierarchies in a tree-like structure
 - **Bulk Operations**: Enable/disable toggles recursively affecting all child toggles
 
+
 ## 🏗️ Architecture
 
 The application follows Clean Architecture and Hexagonal Architecture principles:
@@ -112,62 +113,66 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    - Parent toggles control child toggles
    - Click on toggle paths to edit individual nodes
    - Use the recursive update feature to affect all children
+   - **Novo:** O caminho dos toggles aparece como uma palavra corrida, cada parte é interativa e ao passar o mouse há um efeito visual moderno e responsivo.
 
 ### API Usage
 
 #### Applications
 
 ```bash
-# Create application
+# Create application (handler.CreateApplication)
 curl -X POST http://localhost:8081/applications \
   -H "Content-Type: application/json" \
   -d '{"name": "My Application"}'
 
-# List applications
+# List applications (handler.GetAllApplications)
 curl http://localhost:8081/applications
 
-# Get application by ID
+# Get application by ID (handler.GetApplication)
 curl http://localhost:8081/applications/{app_id}
 
-# Update application
+# Update application (handler.UpdateApplication)
 curl -X PUT http://localhost:8081/applications/{app_id} \
   -H "Content-Type: application/json" \
   -d '{"name": "Updated Name"}'
 
-# Delete application
+# Delete application (handler.DeleteApplication)
 curl -X DELETE http://localhost:8081/applications/{app_id}
 ```
 
 #### Feature Toggles
 
 ```bash
-# Create toggle
+# Create toggle (handler.CreateToggle)
 curl -X POST http://localhost:8081/applications/{app_id}/toggles \
   -H "Content-Type: application/json" \
   -d '{"toggle": "feature.new.dashboard"}'
 
-# Get toggle status
-curl "http://localhost:8081/applications/{app_id}/toggles/status?path=feature.new.dashboard"
-
-# List all toggles (flat)
+# List all toggles (flat, default) (handler.GetAllToggles)
 curl http://localhost:8081/applications/{app_id}/toggles
 
-# List toggles with hierarchy
+# List all toggles as hierarchy (handler.GetAllToggles)
 curl "http://localhost:8081/applications/{app_id}/toggles?hierarchy=true"
 
-# Update toggle
+# Get toggle status by ID (handler.GetToggleStatus)
+curl http://localhost:8081/applications/{app_id}/toggles/{toggle_id}
+
+# Update toggle by ID (handler.UpdateToggle)
 curl -X PUT http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
-# Update toggle recursively (affects all children)
+# Update toggle recursively (handler.UpdateEnabled)
 curl -X PUT http://localhost:8081/applications/{app_id}/toggle/{toggle_id} \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
-# Delete toggle
-curl -X DELETE "http://localhost:8081/applications/{app_id}/toggles?path=feature.new.dashboard"
+# Delete toggle by ID (handler.DeleteToggle)
+curl -X DELETE http://localhost:8081/applications/{app_id}/toggles/{toggle_id}
 ```
+
+- Quando `hierarchy=true` é passado, a resposta será uma árvore de toggles (com filhos aninhados).
+- Sem o parâmetro, a resposta é uma lista plana.
 
 ## 🏗️ Project Structure
 
@@ -399,4 +404,28 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 **Made by Manoel Medeiros**
 
-For questions, issues, or contributions, please open an issue on GitHub. 
+For questions, issues, or contributions, please open an issue on GitHub.
+
+## API Routes
+
+### Applications
+- `POST   /applications`                → CreateApplication
+- `GET    /applications`                → GetAllApplications
+- `GET    /applications/:id`            → GetApplication
+- `PUT    /applications/:id`            → UpdateApplication
+- `DELETE /applications/:id`            → DeleteApplication
+
+### Toggles
+- `POST   /applications/:id/toggles`                → CreateToggle
+- `GET    /applications/:id/toggles`                → GetAllToggles
+- `GET    /applications/:id/toggles/:toggleId`      → GetToggleStatus
+- `PUT    /applications/:id/toggles/:toggleId`      → UpdateToggle
+- `DELETE /applications/:id/toggles/:toggleId`      → DeleteToggle
+- `PUT    /applications/:id/toggle/:toggleId`       → UpdateEnabled (recursively)
+
+### Static & Misc
+- `GET    /static/*`                   → Serve static assets (HTML, CSS, JS)
+- `GET    /LICENSE`                    → Serve LICENSE file
+- `GET    /`                           → Serve frontend (index.html)
+
+--- 
