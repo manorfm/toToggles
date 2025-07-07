@@ -11,6 +11,7 @@ const togglesSection = document.getElementById('toggles-section');
 const applicationsList = document.getElementById('applications-list');
 const togglesList = document.getElementById('toggles-list');
 const appNameElement = document.getElementById('app-name');
+const globalLoadingSpinner = document.getElementById('global-loading-spinner');
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -109,12 +110,15 @@ async function apiCall(url, options = {}) {
 
 // Funções de Aplicação
 async function loadApplications() {
+    showGlobalLoading();
     try {
-        showLoading(applicationsList);
+        // showLoading(applicationsList); // Remover esta linha, pois o spinner global será usado
         const applications = await apiCall('/applications');
         renderApplications(applications);
     } catch (error) {
         showEmptyState(applicationsList, 'No applications found', 'Create your first application to get started!');
+    } finally {
+        hideGlobalLoading();
     }
 }
 
@@ -200,12 +204,15 @@ function renderApplications(applications) {
 
 // Funções de Toggle
 async function loadToggles(appId) {
+    showGlobalLoading();
     try {
-        showLoading(togglesList);
+        // showLoading(togglesList); // Remover esta linha, pois o spinner global será usado
         const response = await apiCall(`/applications/${appId}/toggles?hierarchy=true`);
         renderToggles(response.toggles);
     } catch (error) {
         showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
+    } finally {
+        hideGlobalLoading();
     }
 }
 
@@ -543,6 +550,21 @@ function editApplication(appId, appName) {
 }
 
 // Funções de UI
+function showGlobalLoading() {
+    if (globalLoadingSpinner) {
+        globalLoadingSpinner.classList.remove('hidden');
+    }
+}
+
+function hideGlobalLoading() {
+    if (globalLoadingSpinner) {
+        globalLoadingSpinner.classList.add('hidden');
+    }
+}
+
+// A função showLoading original pode ser mantida se for usada em outros lugares,
+// ou removida/adaptada se o spinner global for o único indicador de carregamento.
+// Por enquanto, vamos mantê-la, mas ela não será mais chamada por loadApplications/loadToggles.
 function showLoading(container) {
     container.innerHTML = '<div class="loading">Loading...</div>';
 }
