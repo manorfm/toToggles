@@ -83,3 +83,25 @@ func (r *ApplicationRepositoryImpl) Exists(id string) (bool, error) {
 	}
 	return count > 0, nil
 }
+
+// GetAllWithToggleCounts busca todas as aplicações com contagem de toggles
+func (r *ApplicationRepositoryImpl) GetAllWithToggleCounts() ([]*entity.ApplicationWithCounts, error) {
+	var results []*entity.ApplicationWithCounts
+
+	err := r.db.Table("applications").
+		Select(`
+			applications.id,
+			applications.name,
+			applications.created_at,
+			applications.updated_at,
+			COUNT(toggles.id) as total_toggles,
+			SUM(CASE WHEN toggles.enabled = 1 THEN 1 ELSE 0 END) as enabled_toggles,
+			SUM(CASE WHEN toggles.enabled = 0 THEN 1 ELSE 0 END) as disabled_toggles
+		`).
+		Joins("LEFT JOIN toggles ON applications.id = toggles.app_id").
+		Group("applications.id, applications.name, applications.created_at, applications.updated_at").
+		Order("applications.created_at DESC").
+		Find(&results).Error
+
+	return results, err
+}

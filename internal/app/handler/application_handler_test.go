@@ -38,7 +38,7 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 				"name": "",
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid request body: Key: 'CreateApplicationRequest.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+			expectedError:  "validation failed",
 		},
 		{
 			name: "invalid JSON",
@@ -46,7 +46,7 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 				"invalid": "json",
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid request body: Key: 'CreateApplicationRequest.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+			expectedError:  "validation failed",
 		},
 	}
 
@@ -96,38 +96,38 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 func TestApplicationHandler_GetApplication(t *testing.T) {
 	tests := []struct {
 		name           string
-		appID          string
+		id             string
 		setupMock      func(*usecase.MockApplicationRepository)
 		expectedStatus int
-		expectedError  string
+		expectedErrMsg string
 	}{
 		{
-			name:  "successful retrieval",
-			appID: "test123",
+			name: "successful_retrieval",
+			id:   "01JZNM42NKSANGHZ3G4KKXGCNW",
 			setupMock: func(mock *usecase.MockApplicationRepository) {
-				mock.Applications["test123"] = &entity.Application{
-					ID:   "test123",
+				mock.Applications["01JZNM42NKSANGHZ3G4KKXGCNW"] = &entity.Application{
+					ID:   "01JZNM42NKSANGHZ3G4KKXGCNW",
 					Name: "Test App",
 				}
 			},
 			expectedStatus: http.StatusOK,
-			expectedError:  "",
+			expectedErrMsg: "",
 		},
 		{
-			name:           "empty ID",
-			appID:          "",
+			name:           "empty_ID",
+			id:             " ",
 			setupMock:      func(mock *usecase.MockApplicationRepository) {},
-			expectedStatus: http.StatusNotFound,
-			expectedError:  "",
+			expectedStatus: http.StatusBadRequest,
+			expectedErrMsg: "validation failed",
 		},
 		{
-			name:  "not found",
-			appID: "nonexistent",
+			name: "not_found",
+			id:   "01JZNM42NKSANGHZ3G4KKXGCNX",
 			setupMock: func(mock *usecase.MockApplicationRepository) {
 				// No app with this ID
 			},
 			expectedStatus: http.StatusNotFound,
-			expectedError:  "application not found",
+			expectedErrMsg: "application not found",
 		},
 	}
 
@@ -145,7 +145,7 @@ func TestApplicationHandler_GetApplication(t *testing.T) {
 			router.GET("/applications/:id", handler.GetApplication)
 
 			// Create request
-			req, _ := http.NewRequest("GET", "/applications/"+tt.appID, nil)
+			req, _ := http.NewRequest("GET", "/applications/"+tt.id, nil)
 
 			// Execute request
 			w := httptest.NewRecorder()
@@ -156,21 +156,17 @@ func TestApplicationHandler_GetApplication(t *testing.T) {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
 			}
 
-			if tt.expectedError != "" {
-				if w.Code == http.StatusNotFound && w.Body.Len() == 0 {
-					// Aceita corpo vazio para 404
-					return
-				}
+			if tt.expectedErrMsg != "" {
 				var response map[string]interface{}
 				json.Unmarshal(w.Body.Bytes(), &response)
-				if message, exists := response["message"]; !exists || message != tt.expectedError {
-					t.Errorf("Expected error message '%s', got '%v'", tt.expectedError, message)
+				if message, exists := response["message"]; !exists || message != tt.expectedErrMsg {
+					t.Errorf("Expected error message '%s', got '%v'", tt.expectedErrMsg, message)
 				}
 			} else {
 				var response entity.Application
 				json.Unmarshal(w.Body.Bytes(), &response)
-				if response.ID != tt.appID {
-					t.Errorf("Expected app ID '%s', got '%s'", tt.appID, response.ID)
+				if response.ID != tt.id {
+					t.Errorf("Expected app ID '%s', got '%s'", tt.id, response.ID)
 				}
 			}
 		})
@@ -247,13 +243,12 @@ func TestApplicationHandler_UpdateApplication(t *testing.T) {
 		},
 		{
 			name:  "empty name",
-			appID: "test123",
+			appID: "01JZNM42NKSANGHZ3G4KKXGCNW",
 			requestBody: map[string]interface{}{
 				"name": "",
 			},
-			setupMock:      func(mock *usecase.MockApplicationRepository) {},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid request body: Key: 'UpdateApplicationRequest.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+			expectedError:  "validation failed",
 		},
 	}
 

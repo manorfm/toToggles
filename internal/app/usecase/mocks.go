@@ -48,6 +48,22 @@ func (m *MockApplicationRepository) GetAll() ([]*entity.Application, error) {
 	return apps, nil
 }
 
+func (m *MockApplicationRepository) GetAllWithToggleCounts() ([]*entity.ApplicationWithCounts, error) {
+	var apps []*entity.ApplicationWithCounts
+	for _, app := range m.Applications {
+		apps = append(apps, &entity.ApplicationWithCounts{
+			ID:              app.ID,
+			Name:            app.Name,
+			CreatedAt:       app.CreatedAt,
+			UpdatedAt:       app.UpdatedAt,
+			TotalToggles:    0, // Mock não conta toggles
+			EnabledToggles:  0,
+			DisabledToggles: 0,
+		})
+	}
+	return apps, nil
+}
+
 func (m *MockApplicationRepository) Update(app *entity.Application) error {
 	if m.UpdateError != nil {
 		return m.UpdateError

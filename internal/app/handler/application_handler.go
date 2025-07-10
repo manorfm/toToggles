@@ -36,10 +36,16 @@ type UpdateApplicationRequest struct {
 func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 	var req CreateApplicationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "invalid request body: " + err.Error(),
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("request", "Invalid request body")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	// Validar input
+	validation := entity.ValidateApplicationName(req.Name)
+	if !validation.IsValid {
+		c.JSON(http.StatusBadRequest, validation.ToAppError())
 		return
 	}
 
@@ -47,16 +53,14 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			status := http.StatusBadRequest
+			if appErr.Code == entity.ErrCodeAlreadyExists {
+				status = http.StatusConflict
+			}
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -67,10 +71,16 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 func (h *ApplicationHandler) GetApplication(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("id", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	// Validar ID
+	validation := entity.ValidateApplicationID(id)
+	if !validation.IsValid {
+		c.JSON(http.StatusBadRequest, validation.ToAppError())
 		return
 	}
 
@@ -82,16 +92,10 @@ func (h *ApplicationHandler) GetApplication(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -100,69 +104,36 @@ func (h *ApplicationHandler) GetApplication(c *gin.Context) {
 
 // GetAllApplications busca todas as aplicações
 func (h *ApplicationHandler) GetAllApplications(c *gin.Context) {
-	apps, err := h.appUseCase.GetAllApplications()
+	// Usar a query otimizada que inclui contagem de toggles
+	apps, err := h.appUseCase.GetAllApplicationsWithCounts()
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(http.StatusBadRequest, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
-	// Buscar contagem de toggles para cada aplicação
-	toggleUseCase := h.toggleUseCase // Precisa garantir que o handler tem acesso ao ToggleUseCase
-	var result []gin.H
-	for _, app := range apps {
-		toggles, _ := toggleUseCase.GetAllTogglesByApp(app.ID)
-		total := len(toggles)
-		enabled := 0
-		disabled := 0
-		for _, t := range toggles {
-			if t.Enabled {
-				enabled++
-			} else {
-				disabled++
-			}
-		}
-		result = append(result, gin.H{
-			"id":               app.ID,
-			"name":             app.Name,
-			"created_at":       app.CreatedAt,
-			"updated_at":       app.UpdatedAt,
-			"toggles_total":    total,
-			"toggles_enabled":  enabled,
-			"toggles_disabled": disabled,
-		})
-	}
-
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, apps)
 }
 
 // UpdateApplication atualiza uma aplicação
 func (h *ApplicationHandler) UpdateApplication(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("id", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
 	var req UpdateApplicationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "invalid request body: " + err.Error(),
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("request", "Invalid request body")
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
@@ -174,16 +145,10 @@ func (h *ApplicationHandler) UpdateApplication(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -194,10 +159,9 @@ func (h *ApplicationHandler) UpdateApplication(c *gin.Context) {
 func (h *ApplicationHandler) DeleteApplication(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("id", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
@@ -209,16 +173,10 @@ func (h *ApplicationHandler) DeleteApplication(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 

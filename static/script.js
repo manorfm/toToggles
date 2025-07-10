@@ -97,7 +97,32 @@ async function apiCall(url, options = {}) {
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            // Tentar extrair a mensagem de erro da resposta JSON
+            let errorMessage = `HTTP error! status: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                
+                // Verificar se é a estrutura de erro padronizada
+                if (errorData.code && errorData.message) {
+                    // Se há detalhes de erro, usar apenas os detalhes
+                    if (errorData.details && errorData.details.length > 0) {
+                        const detailMessages = errorData.details.map(detail => 
+                            `${detail.field}: ${detail.message}`
+                        );
+                        errorMessage = detailMessages.join('\n');
+                    } else {
+                        // Se não há detalhes, usar apenas a mensagem principal
+                        errorMessage = errorData.message;
+                    }
+                } else if (errorData.message) {
+                    // Fallback para outras estruturas de erro
+                    errorMessage = errorData.message;
+                }
+            } catch (parseError) {
+                // Se não conseguir fazer parse do JSON, usar a mensagem padrão
+                console.warn('Could not parse error response:', parseError);
+            }
+            throw new Error(errorMessage);
         }
         
         return await response.json();
@@ -199,8 +224,6 @@ function renderApplications(applications) {
         </div>
     `).join('');
 }
-
-
 
 // Funções de Toggle
 async function loadToggles(appId) {
@@ -345,8 +368,6 @@ function renderToggles(toggles) {
         `;
     }).join('');
 }
-
-
 
 // Funções de Edição
 function editToggle(path, enabled) {
@@ -581,13 +602,26 @@ function showEmptyState(container, title, message = '') {
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
+    
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.innerHTML = message;
+    
+    // Se a mensagem contém quebras de linha, formatar como HTML
+    if (message.includes('\n')) {
+        const formattedMessage = message
+            .split('\n')
+            .filter(line => line.trim()) // Remove linhas vazias
+            .map(line => `<div>${line}</div>`)
+            .join('');
+        toast.innerHTML = formattedMessage;
+    } else {
+        toast.innerHTML = message;
+    }
+    
     container.appendChild(toast);
     setTimeout(() => {
         toast.remove();
-    }, 4000);
+    }, 6000); // Aumentar tempo para mensagens de erro mais longas
 }
 
 function showSuccess(msg) { showToast(msg, 'success'); }

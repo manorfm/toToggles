@@ -7,6 +7,7 @@ type ApplicationRepository interface {
 	Create(app *entity.Application) error
 	GetByID(id string) (*entity.Application, error)
 	GetAll() ([]*entity.Application, error)
+	GetAllWithToggleCounts() ([]*entity.ApplicationWithCounts, error)
 	Update(app *entity.Application) error
 	Delete(id string) error
 	Exists(id string) (bool, error)

@@ -15,6 +15,17 @@ type Application struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// ApplicationWithCounts representa uma aplicação com contagem de toggles
+type ApplicationWithCounts struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	TotalToggles    int       `json:"toggles_total"`
+	EnabledToggles  int       `json:"toggles_enabled"`
+	DisabledToggles int       `json:"toggles_disabled"`
+}
+
 // NewApplication cria uma nova instância de Application
 func NewApplication(name string) *Application {
 	return &Application{

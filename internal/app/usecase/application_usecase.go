@@ -67,6 +67,16 @@ func (uc *ApplicationUseCase) GetAllApplications() ([]*entity.Application, error
 	return apps, nil
 }
 
+// GetAllApplicationsWithCounts busca todas as aplicações com contagem de toggles
+func (uc *ApplicationUseCase) GetAllApplicationsWithCounts() ([]*entity.ApplicationWithCounts, error) {
+	apps, err := uc.appRepo.GetAllWithToggleCounts()
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching applications with counts")
+	}
+
+	return apps, nil
+}
+
 // UpdateApplication atualiza uma aplicação
 func (uc *ApplicationUseCase) UpdateApplication(id, name string) (*entity.Application, error) {
 	if id == "" {

@@ -45,19 +45,31 @@ type UpdateEnabledRequest struct {
 func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 	appID := c.Param("id")
 	if appID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("appID", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	// Validar Application ID
+	appValidation := entity.ValidateApplicationID(appID)
+	if !appValidation.IsValid {
+		c.JSON(http.StatusBadRequest, appValidation.ToAppError())
 		return
 	}
 
 	var req CreateToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "invalid request body: " + err.Error(),
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("request", "Invalid request body")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	// Validar toggle path
+	toggleValidation := entity.ValidateTogglePath(req.Toggle)
+	if !toggleValidation.IsValid {
+		c.JSON(http.StatusBadRequest, toggleValidation.ToAppError())
 		return
 	}
 
@@ -69,16 +81,10 @@ func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -94,10 +100,31 @@ func (h *ToggleHandler) GetToggleStatus(c *gin.Context) {
 	appID := c.Param("id")
 	toggleID := c.Param("toggleId")
 	if appID == "" || toggleID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID and toggle ID are required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		if appID == "" {
+			appErr.AddDetail("appID", "Application ID is required")
+		}
+		if toggleID == "" {
+			appErr.AddDetail("toggleID", "Toggle ID is required")
+		}
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	// Validar IDs
+	appValidation := entity.ValidateApplicationID(appID)
+	toggleValidation := entity.ValidateToggleID(toggleID)
+
+	if !appValidation.IsValid || !toggleValidation.IsValid {
+		// Combinar erros de validação
+		combinedErrors := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		for _, err := range appValidation.Errors {
+			combinedErrors.AddDetail(err.Field, err.Message)
+		}
+		for _, err := range toggleValidation.Errors {
+			combinedErrors.AddDetail(err.Field, err.Message)
+		}
+		c.JSON(http.StatusBadRequest, combinedErrors)
 		return
 	}
 
@@ -109,16 +136,10 @@ func (h *ToggleHandler) GetToggleStatus(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -130,10 +151,14 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 	appID := c.Param("id")
 	toggleID := c.Param("toggleId")
 	if appID == "" || toggleID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID and toggle ID are required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		if appID == "" {
+			appErr.AddDetail("appID", "Application ID is required")
+		}
+		if toggleID == "" {
+			appErr.AddDetail("toggleID", "Toggle ID is required")
+		}
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
@@ -141,10 +166,9 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		Enabled *bool `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "invalid request body: 'enabled' is required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("enabled", "Enabled field is required")
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
@@ -156,16 +180,10 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -177,10 +195,14 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 	appID := c.Param("id")
 	toggleID := c.Param("toggleId")
 	if appID == "" || toggleID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID and toggle ID are required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		if appID == "" {
+			appErr.AddDetail("appID", "Application ID is required")
+		}
+		if toggleID == "" {
+			appErr.AddDetail("toggleID", "Toggle ID is required")
+		}
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
@@ -192,16 +214,10 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -215,10 +231,9 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 func (h *ToggleHandler) GetAllToggles(c *gin.Context) {
 	appID := c.Param("id")
 	if appID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    entity.ErrCodeValidation,
-			"message": "application ID is required",
-		})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("appID", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
@@ -234,16 +249,10 @@ func (h *ToggleHandler) GetAllToggles(c *gin.Context) {
 				if appErr.Code == entity.ErrCodeNotFound {
 					status = http.StatusNotFound
 				}
-				c.JSON(status, gin.H{
-					"code":    appErr.Code,
-					"message": appErr.Message,
-				})
+				c.JSON(status, appErr)
 				return
 			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    entity.ErrCodeInternal,
-				"message": "internal server error",
-			})
+			c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 			return
 		}
 
@@ -262,16 +271,10 @@ func (h *ToggleHandler) GetAllToggles(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    entity.ErrCodeInternal,
-			"message": "internal server error",
-		})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
 
@@ -283,14 +286,25 @@ func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
 	appID := c.Param("id")
 	toggleID := c.Param("toggleId")
 	if appID == "" || toggleID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "application ID and toggle ID are required"})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		if appID == "" {
+			appErr.AddDetail("appID", "Application ID is required")
+		}
+		if toggleID == "" {
+			appErr.AddDetail("toggleID", "Toggle ID is required")
+		}
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
+
 	var req UpdateEnabledRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body: " + err.Error()})
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("request", "Invalid request body")
+		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
+
 	err := h.toggleUseCase.UpdateEnabledRecursively(toggleID, req.Enabled, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
@@ -299,11 +313,12 @@ func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
 			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
 			}
-			c.JSON(status, gin.H{"code": appErr.Code, "message": appErr.Message})
+			c.JSON(status, appErr)
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": entity.ErrCodeInternal, "message": "internal server error"})
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "toggle enabled updated successfully"})
 }

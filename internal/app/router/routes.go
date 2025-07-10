@@ -3,9 +3,15 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/handler"
+	"github.com/manorfm/totoogle/internal/app/middleware"
 )
 
 func Init(router *gin.Engine) {
+	// Middlewares de segurança globais
+	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.CORSHeaders())
+	router.Use(middleware.RequestID())
+
 	// Middleware para servir arquivos estáticos
 	router.Use(handler.ServeStatic)
 
