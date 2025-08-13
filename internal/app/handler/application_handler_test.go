@@ -247,6 +247,12 @@ func TestApplicationHandler_UpdateApplication(t *testing.T) {
 			requestBody: map[string]interface{}{
 				"name": "",
 			},
+			setupMock: func(mock *usecase.MockApplicationRepository) {
+				mock.Applications["01JZNM42NKSANGHZ3G4KKXGCNW"] = &entity.Application{
+					ID:   "01JZNM42NKSANGHZ3G4KKXGCNW",
+					Name: "Test App",
+				}
+			},
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "validation failed",
 		},

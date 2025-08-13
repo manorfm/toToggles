@@ -812,3 +812,268 @@ func TestToggleUseCase_DeleteToggleByID_StopsOnSibling(t *testing.T) {
 		t.Errorf("expected root to remain")
 	}
 }
+
+func TestToggleUseCase_UpdateToggleWithRule(t *testing.T) {
+	appMock := NewMockApplicationRepository()
+	toggleMock := NewMockToggleRepository()
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	appID := "app123"
+	toggleID := "toggle123"
+
+	tests := []struct {
+		name              string
+		setupToggle       *entity.Toggle
+		enabled           bool
+		hasActivationRule bool
+		activationRule    *entity.ActivationRule
+		expectError       bool
+		errorMsg          string
+	}{
+		{
+			name: "successful_update_with_percentage_rule",
+			setupToggle: &entity.Toggle{
+				ID:      toggleID,
+				Value:   "test",
+				Enabled: false,
+				Path:    "test.feature",
+				Level:   0,
+				AppID:   appID,
+			},
+			enabled:           true,
+			hasActivationRule: true,
+			activationRule: &entity.ActivationRule{
+				Type:  entity.ActivationRuleTypePercentage,
+				Value: "50",
+			},
+			expectError: false,
+		},
+		{
+			name: "successful_update_with_parameter_rule",
+			setupToggle: &entity.Toggle{
+				ID:      toggleID,
+				Value:   "test",
+				Enabled: false,
+				Path:    "test.feature",
+				Level:   0,
+				AppID:   appID,
+			},
+			enabled:           true,
+			hasActivationRule: true,
+			activationRule: &entity.ActivationRule{
+				Type:  entity.ActivationRuleTypeParameter,
+				Value: "premium",
+			},
+			expectError: false,
+		},
+		{
+			name: "successful_update_clear_activation_rule",
+			setupToggle: &entity.Toggle{
+				ID:                toggleID,
+				Value:             "test",
+				Enabled:           true,
+				Path:              "test.feature",
+				Level:             0,
+				AppID:             appID,
+				HasActivationRule: true,
+				ActivationRule: &entity.ActivationRule{
+					Type:  entity.ActivationRuleTypePercentage,
+					Value: "75",
+				},
+			},
+			enabled:           true,
+			hasActivationRule: false,
+			activationRule:    nil,
+			expectError:       false,
+		},
+		{
+			name: "invalid_rule_empty_value",
+			setupToggle: &entity.Toggle{
+				ID:      toggleID,
+				Value:   "test",
+				Enabled: false,
+				Path:    "test.feature",
+				Level:   0,
+				AppID:   appID,
+			},
+			enabled:           true,
+			hasActivationRule: true,
+			activationRule: &entity.ActivationRule{
+				Type:  entity.ActivationRuleTypePercentage,
+				Value: "",
+			},
+			expectError: true,
+			errorMsg:    "valor de porcentagem é obrigatório",
+		},
+		{
+			name: "invalid_rule_type",
+			setupToggle: &entity.Toggle{
+				ID:      toggleID,
+				Value:   "test",
+				Enabled: false,
+				Path:    "test.feature",
+				Level:   0,
+				AppID:   appID,
+			},
+			enabled:           true,
+			hasActivationRule: true,
+			activationRule: &entity.ActivationRule{
+				Type:  entity.ActivationRuleType("invalid"),
+				Value: "test",
+			},
+			expectError: true,
+			errorMsg:    "tipo de regra inválido: invalid",
+		},
+		{
+			name:              "toggle_not_found",
+			setupToggle:       nil, // No toggle in mock
+			enabled:           true,
+			hasActivationRule: false,
+			activationRule:    nil,
+			expectError:       true,
+			errorMsg:          "toggle not found",
+		},
+		{
+			name: "toggle_belongs_to_different_app",
+			setupToggle: &entity.Toggle{
+				ID:      toggleID,
+				Value:   "test",
+				Enabled: false,
+				Path:    "test.feature",
+				Level:   0,
+				AppID:   "different_app", // Different app ID
+			},
+			enabled:           true,
+			hasActivationRule: false,
+			activationRule:    nil,
+			expectError:       true,
+			errorMsg:          "toggle does not belong to this application",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset mocks
+			toggleMock.Toggles = make(map[string]*entity.Toggle)
+
+			// Setup toggle if provided
+			if tt.setupToggle != nil {
+				toggleMock.Toggles[toggleID] = tt.setupToggle
+			}
+
+			// Execute the method
+			err := useCase.UpdateToggleWithRule(toggleID, tt.enabled, tt.hasActivationRule, tt.activationRule, appID)
+
+			// Check error expectations
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if appErr, ok := err.(*entity.AppError); ok {
+					if appErr.Message != tt.errorMsg {
+						t.Errorf("Expected error message '%s', got '%s'", tt.errorMsg, appErr.Message)
+					}
+				} else {
+					t.Errorf("Expected AppError but got: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+					return
+				}
+
+				// Verify the toggle was updated correctly
+				updatedToggle := toggleMock.Toggles[toggleID]
+				if updatedToggle == nil {
+					t.Errorf("Toggle should exist after successful update")
+					return
+				}
+
+				if updatedToggle.Enabled != tt.enabled {
+					t.Errorf("Expected Enabled %v, got %v", tt.enabled, updatedToggle.Enabled)
+				}
+
+				if updatedToggle.HasActivationRule != tt.hasActivationRule {
+					t.Errorf("Expected HasActivationRule %v, got %v", tt.hasActivationRule, updatedToggle.HasActivationRule)
+				}
+
+				if tt.hasActivationRule && tt.activationRule != nil {
+					if updatedToggle.ActivationRule == nil {
+						t.Errorf("Expected ActivationRule to be set")
+					} else {
+						if updatedToggle.ActivationRule.Type != tt.activationRule.Type {
+							t.Errorf("Expected rule type %s, got %s", tt.activationRule.Type, updatedToggle.ActivationRule.Type)
+						}
+						if updatedToggle.ActivationRule.Value != tt.activationRule.Value {
+							t.Errorf("Expected rule value %s, got %s", tt.activationRule.Value, updatedToggle.ActivationRule.Value)
+						}
+					}
+				} else {
+					if updatedToggle.ActivationRule != nil {
+						t.Errorf("Expected ActivationRule to be nil when not setting activation rule")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestToggleUseCase_UpdateToggleWithRule_EdgeCases(t *testing.T) {
+	appMock := NewMockApplicationRepository()
+	toggleMock := NewMockToggleRepository()
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	t.Run("empty_toggle_id", func(t *testing.T) {
+		err := useCase.UpdateToggleWithRule("", true, false, nil, "app123")
+		if err == nil {
+			t.Errorf("Expected error for empty toggle ID")
+		}
+		if appErr, ok := err.(*entity.AppError); ok {
+			if appErr.Message != "toggle ID and application ID are required" {
+				t.Errorf("Expected specific error message, got: %s", appErr.Message)
+			}
+		}
+	})
+
+	t.Run("empty_app_id", func(t *testing.T) {
+		err := useCase.UpdateToggleWithRule("toggle123", true, false, nil, "")
+		if err == nil {
+			t.Errorf("Expected error for empty app ID")
+		}
+		if appErr, ok := err.(*entity.AppError); ok {
+			if appErr.Message != "toggle ID and application ID are required" {
+				t.Errorf("Expected specific error message, got: %s", appErr.Message)
+			}
+		}
+	})
+
+	t.Run("has_activation_rule_true_but_nil_rule", func(t *testing.T) {
+		toggleID := "toggle123"
+		appID := "app123"
+		
+		toggle := &entity.Toggle{
+			ID:      toggleID,
+			Value:   "test",
+			Enabled: false,
+			Path:    "test.feature",
+			Level:   0,
+			AppID:   appID,
+		}
+		toggleMock.Toggles[toggleID] = toggle
+
+		err := useCase.UpdateToggleWithRule(toggleID, true, true, nil, appID)
+		if err != nil {
+			t.Errorf("Expected no error when hasActivationRule is true but rule is nil, got: %v", err)
+		}
+
+		// Should clear the activation rule
+		updatedToggle := toggleMock.Toggles[toggleID]
+		if updatedToggle.HasActivationRule {
+			t.Errorf("Expected HasActivationRule to be false when rule is nil")
+		}
+		if updatedToggle.ActivationRule != nil {
+			t.Errorf("Expected ActivationRule to be nil")
+		}
+	})
+}

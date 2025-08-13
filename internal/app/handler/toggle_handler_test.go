@@ -653,3 +653,250 @@ func TestToggleHandler_GetToggleStatus_Validation(t *testing.T) {
 		})
 	}
 }
+
+func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
+	tests := []struct {
+		name           string
+		appID          string
+		toggleID       string
+		body           string
+		setupMock      func(*usecase.MockToggleRepository, *usecase.MockApplicationRepository)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name:     "successful_update_with_percentage_rule",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": true,
+				"activation_rule": {
+					"type": "percentage",
+					"value": "50"
+				}
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggle := &entity.Toggle{
+					ID:      "toggle123",
+					Value:   "test",
+					Enabled: false,
+					Path:    "test.feature",
+					Level:   0,
+					AppID:   "app123",
+				}
+				toggleMock.Toggles["toggle123"] = toggle
+			},
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
+		},
+		{
+			name:     "successful_update_with_parameter_rule",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": true,
+				"activation_rule": {
+					"type": "parameter",
+					"value": "premium"
+				}
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggle := &entity.Toggle{
+					ID:      "toggle123",
+					Value:   "test",
+					Enabled: false,
+					Path:    "test.feature",
+					Level:   0,
+					AppID:   "app123",
+				}
+				toggleMock.Toggles["toggle123"] = toggle
+			},
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
+		},
+		{
+			name:     "successful_update_clear_activation_rule",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": false,
+				"activation_rule": null
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggle := &entity.Toggle{
+					ID:                "toggle123",
+					Value:             "test",
+					Enabled:           false,
+					Path:              "test.feature",
+					Level:             0,
+					AppID:             "app123",
+					HasActivationRule: true,
+					ActivationRule: &entity.ActivationRule{
+						Type:  entity.ActivationRuleTypePercentage,
+						Value: "75",
+					},
+				}
+				toggleMock.Toggles["toggle123"] = toggle
+			},
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
+		},
+		{
+			name:     "invalid_rule_type",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": true,
+				"activation_rule": {
+					"type": "invalid_type",
+					"value": "test"
+				}
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggle := &entity.Toggle{
+					ID:      "toggle123",
+					Value:   "test",
+					Enabled: false,
+					Path:    "test.feature",
+					Level:   0,
+					AppID:   "app123",
+				}
+				toggleMock.Toggles["toggle123"] = toggle
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "tipo de regra inválido: invalid_type",
+		},
+		{
+			name:     "empty_rule_value",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": true,
+				"activation_rule": {
+					"type": "percentage",
+					"value": ""
+				}
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggle := &entity.Toggle{
+					ID:      "toggle123",
+					Value:   "test",
+					Enabled: false,
+					Path:    "test.feature",
+					Level:   0,
+					AppID:   "app123",
+				}
+				toggleMock.Toggles["toggle123"] = toggle
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "valor de porcentagem é obrigatório",
+		},
+		{
+			name:     "toggle_not_found",
+			appID:    "app123",
+			toggleID: "nonexistent",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": false
+			}`,
+			setupMock:      func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {},
+			expectedStatus: http.StatusNotFound,
+			expectedError:  "toggle not found",
+		},
+		{
+			name:     "toggle_belongs_to_different_app",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": false
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggle := &entity.Toggle{
+					ID:      "toggle123",
+					Value:   "test",
+					Enabled: false,
+					Path:    "test.feature",
+					Level:   0,
+					AppID:   "different_app", // Different app ID
+				}
+				toggleMock.Toggles["toggle123"] = toggle
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "toggle does not belong to this application",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			router := setupTestRouter()
+			toggleMock := usecase.NewMockToggleRepository()
+			appMock := usecase.NewMockApplicationRepository()
+
+			tt.setupMock(toggleMock, appMock)
+
+			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+			handler := NewToggleHandler(toggleUseCase)
+
+			router.PUT("/applications/:id/toggles/:toggleId", handler.UpdateToggle)
+
+			// Create request
+			req, _ := http.NewRequest("PUT", "/applications/"+tt.appID+"/toggles/"+tt.toggleID, bytes.NewBuffer([]byte(tt.body)))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+
+			if tt.expectedError != "" {
+				var response map[string]interface{}
+				json.Unmarshal(w.Body.Bytes(), &response)
+				if message, exists := response["message"]; !exists || message != tt.expectedError {
+					t.Errorf("Expected error message '%s', got '%v'", tt.expectedError, message)
+				}
+			}
+
+			// For successful updates, verify that the rule was properly set/cleared
+			if tt.expectedStatus == http.StatusOK {
+				toggle := toggleMock.Toggles[tt.toggleID]
+				if toggle == nil {
+					t.Errorf("Toggle should exist after successful update")
+					return
+				}
+
+				var requestBody UpdateToggleRequest
+				json.Unmarshal([]byte(tt.body), &requestBody)
+
+				if toggle.HasActivationRule != requestBody.HasActivationRule {
+					t.Errorf("Expected HasActivationRule %v, got %v", requestBody.HasActivationRule, toggle.HasActivationRule)
+				}
+
+				if requestBody.HasActivationRule && requestBody.ActivationRule != nil {
+					if toggle.ActivationRule == nil {
+						t.Errorf("Expected ActivationRule to be set")
+					} else {
+						if toggle.ActivationRule.Type != requestBody.ActivationRule.Type {
+							t.Errorf("Expected rule type %s, got %s", requestBody.ActivationRule.Type, toggle.ActivationRule.Type)
+						}
+						if toggle.ActivationRule.Value != requestBody.ActivationRule.Value {
+							t.Errorf("Expected rule value %s, got %s", requestBody.ActivationRule.Value, toggle.ActivationRule.Value)
+						}
+					}
+				} else if !requestBody.HasActivationRule {
+					if toggle.ActivationRule != nil {
+						t.Errorf("Expected ActivationRule to be nil when HasActivationRule is false")
+					}
+				}
+			}
+		})
+	}
+}

@@ -1124,3 +1124,63 @@ main {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Activation Rule Styles */
+.activation-rule-config {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.activation-rule-config .form-group {
+    margin-bottom: 16px;
+}
+
+.activation-rule-config label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 6px;
+}
+
+.activation-rule-config select,
+.activation-rule-config input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.activation-rule-config select:focus,
+.activation-rule-config input[type="text"]:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
+}
+
+.activation-rule-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #e3f2fd;
+    color: #1565c0;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.toggle-rule-indicator {
+    display: inline-flex;
+    align-items: center;
+    background: #fff3cd;
+    color: #856404;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 6px;
+}

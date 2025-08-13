@@ -104,6 +104,30 @@
                     <div class="form-group">
                         <label for="edit-toggle-enabled-input"><input type="checkbox" id="edit-toggle-enabled-input"> Enabled</label>
                     </div>
+                    <div class="form-group">
+                        <label for="edit-toggle-activation-rule-input">
+                            <input type="checkbox" id="edit-toggle-activation-rule-input"> Enable Activation Rules
+                        </label>
+                    </div>
+                    <div id="activation-rule-config" class="activation-rule-config hidden">
+                        <div class="form-group">
+                            <label for="activation-rule-type">Rule Type:</label>
+                            <select id="activation-rule-type">
+                                <option value="">Select rule type...</option>
+                                <option value="percentage">Percentage - Activate for X% of requests</option>
+                                <option value="parameter">Parameter - Activate based on specific parameter</option>
+                                <option value="user_id">User ID - Activate for specific users</option>
+                                <option value="ip">IP Address - Activate for specific IPs</option>
+                                <option value="country">Country - Activate for specific countries</option>
+                                <option value="time">Time - Activate at specific times</option>
+                                <option value="canary">Canary - Activate for canary releases</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="activation-rule-value">Rule Value:</label>
+                            <input type="text" id="activation-rule-value" placeholder="Enter rule value...">
+                        </div>
+                    </div>
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" onclick="closeModal('edit-toggle-modal')">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save</button>

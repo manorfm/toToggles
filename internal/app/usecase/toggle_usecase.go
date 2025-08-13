@@ -370,3 +370,40 @@ func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
 	}
 	return nil
 }
+
+// UpdateToggleWithRule atualiza um toggle incluindo regras de ativação
+func (uc *ToggleUseCase) UpdateToggleWithRule(toggleID string, enabled bool, hasActivationRule bool, activationRule *entity.ActivationRule, appID string) error {
+	if toggleID == "" || appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
+	}
+	
+	toggle, err := uc.toggleRepo.GetByID(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+	
+	if toggle.AppID != appID {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
+	}
+	
+	// Atualizar campos básicos
+	toggle.Enabled = enabled
+	toggle.HasActivationRule = hasActivationRule
+	
+	// Atualizar regra de ativação
+	if hasActivationRule && activationRule != nil {
+		err := toggle.SetActivationRule(activationRule)
+		if err != nil {
+			return entity.NewAppError(entity.ErrCodeValidation, err.Error())
+		}
+	} else {
+		toggle.ClearActivationRule()
+	}
+	
+	// Salvar no banco
+	if err := uc.toggleRepo.Update(toggle); err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
+	}
+	
+	return nil
+}

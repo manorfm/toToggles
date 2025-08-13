@@ -27,7 +27,9 @@ type CreateToggleRequest struct {
 
 // UpdateToggleRequest representa a requisição para atualizar um toggle
 type UpdateToggleRequest struct {
-	Enabled bool `json:"enabled"`
+	Enabled           bool                     `json:"enabled"`
+	HasActivationRule bool                     `json:"has_activation_rule"`
+	ActivationRule    *entity.ActivationRule   `json:"activation_rule,omitempty"`
 }
 
 // ToggleStatusResponse representa a resposta do status de um toggle
@@ -162,17 +164,15 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Enabled *bool `json:"enabled"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
+	var req UpdateToggleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
-		appErr.AddDetail("enabled", "Enabled field is required")
+		appErr.AddDetail("request", "Invalid request body")
 		c.JSON(http.StatusBadRequest, appErr)
 		return
 	}
 
-	err := h.toggleUseCase.UpdateToggleByID(toggleID, *req.Enabled, appID)
+	err := h.toggleUseCase.UpdateToggleWithRule(toggleID, req.Enabled, req.HasActivationRule, req.ActivationRule, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {

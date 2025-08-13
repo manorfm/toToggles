@@ -31,6 +31,19 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('app-form').addEventListener('submit', handleCreateApplication);
     document.getElementById('toggle-form').addEventListener('submit', handleCreateToggle);
     document.getElementById('edit-toggle-form').addEventListener('submit', handleUpdateToggle);
+    
+    // Event listener para o checkbox de regras de ativação
+    document.getElementById('edit-toggle-activation-rule-input').addEventListener('change', function() {
+        const activationRuleConfig = document.getElementById('activation-rule-config');
+        if (this.checked) {
+            activationRuleConfig.classList.remove('hidden');
+        } else {
+            activationRuleConfig.classList.add('hidden');
+            // Limpar os campos quando desabilitado
+            document.getElementById('activation-rule-type').value = '';
+            document.getElementById('activation-rule-value').value = '';
+        }
+    });
 
     // Após carregar aplicações, verificar se deve abrir tela de toggles
     const savedAppId = localStorage.getItem('currentAppId');
@@ -263,11 +276,36 @@ async function handleCreateToggle(event) {
 async function handleUpdateToggle(event) {
     event.preventDefault();
     const enabled = document.getElementById('edit-toggle-enabled-input').checked;
+    const hasActivationRule = document.getElementById('edit-toggle-activation-rule-input').checked;
+    
     if (!editingToggleId) return;
+    
+    let updateData = { enabled };
+    
+    // Se tem regra de ativação, incluir os dados da regra
+    if (hasActivationRule) {
+        const ruleType = document.getElementById('activation-rule-type').value;
+        const ruleValue = document.getElementById('activation-rule-value').value;
+        
+        if (!ruleType || !ruleValue) {
+            showError('Rule type and value are required when activation rules are enabled');
+            return;
+        }
+        
+        updateData.has_activation_rule = true;
+        updateData.activation_rule = {
+            type: ruleType,
+            value: ruleValue
+        };
+    } else {
+        updateData.has_activation_rule = false;
+        updateData.activation_rule = null;
+    }
+    
     try {
         await apiCall(`/applications/${currentAppId}/toggles/${editingToggleId}`, {
             method: 'PUT',
-            body: JSON.stringify({ enabled })
+            body: JSON.stringify(updateData)
         });
         showSuccess('Toggle updated successfully!');
         closeModal('edit-toggle-modal');
@@ -363,6 +401,7 @@ function renderToggles(toggles) {
                 <div class="toggle-divider"></div>
                 <div class="toggle-card-body">
                     <span class="toggle-path-line">${pathLinks}</span>
+                    ${toggle.has_activation_rule ? `<span class="toggle-rule-indicator">RULE</span>` : ''}
                 </div>
             </div>
         `;
@@ -384,6 +423,22 @@ async function editTogglePath(toggleId) {
         editingToggleId = toggle.id;
         document.getElementById('edit-toggle-path-input').value = toggle.path;
         document.getElementById('edit-toggle-enabled-input').checked = toggle.enabled;
+        
+        // Configurar regras de ativação
+        const hasActivationRule = toggle.has_activation_rule || false;
+        document.getElementById('edit-toggle-activation-rule-input').checked = hasActivationRule;
+        
+        const activationRuleConfig = document.getElementById('activation-rule-config');
+        if (hasActivationRule && toggle.activation_rule) {
+            activationRuleConfig.classList.remove('hidden');
+            document.getElementById('activation-rule-type').value = toggle.activation_rule.type || '';
+            document.getElementById('activation-rule-value').value = toggle.activation_rule.value || '';
+        } else {
+            activationRuleConfig.classList.add('hidden');
+            document.getElementById('activation-rule-type').value = '';
+            document.getElementById('activation-rule-value').value = '';
+        }
+        
         document.getElementById('edit-toggle-title').textContent = 'Edit Toggle';
         openModal('edit-toggle-modal');
     } catch (e) {
