@@ -5,134 +5,439 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ToToogle - Feature Toggle Manager</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎛️ ToToogle</h1>
-            <p>Feature Toggle Manager</p>
-        </header>
-
-        <main>
-            <!-- Section: Applications -->
-            <section id="applications-section">
-                <div class="section-header">
-                    <h2>📱 Applications</h2>
-                    <button id="new-app-btn" class="btn btn-primary">+ New Application</button>
+    <!-- Main Layout Container -->
+    <div class="app-layout">
+        <!-- Header/Navigation -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="brand-section">
+                    <div class="brand-icon">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="currentColor">
+                            <path d="M4 8h6v2H4V8zm0 4h6v2H4v-2zm0 4h6v2H4v-2zm8-8h16v2H12V8zm0 4h16v2H12v-2zm0 4h16v2H12v-2z"/>
+                            <rect x="6" y="18" width="20" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="23" cy="23" r="2" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="brand-text">
+                        <h1 class="brand-title">ToToogle</h1>
+                        <p class="brand-subtitle">Feature Toggle Manager</p>
+                    </div>
                 </div>
                 
-                <div id="applications-list" class="grid-container">
+                <div class="header-actions">
+                    <div class="header-status">
+                        <span class="status-indicator online">
+                            <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+                                <circle cx="4" cy="4" r="4"/>
+                            </svg>
+                            System Online
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="app-main">
+            <!-- Section: Applications -->
+            <section id="applications-section" class="content-section">
+                <div class="section-header">
+                    <div class="section-title-group">
+                        <h2 class="section-title">
+                            <span class="section-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                                </svg>
+                            </span>
+                            Applications
+                        </h2>
+                        <p class="section-description">Manage your feature toggle applications and their configurations</p>
+                    </div>
+                    
+                    <div class="section-actions">
+                        <button id="new-app-btn" class="btn btn-primary">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">New Application</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="applications-list" class="cards-grid">
                     <!-- Applications will be loaded here -->
                 </div>
             </section>
 
             <!-- Section: Toggles (initially hidden) -->
-            <section id="toggles-section" class="hidden">
+            <section id="toggles-section" class="content-section hidden">
                 <div class="section-header">
-                    <button id="back-to-apps" class="btn btn-secondary">← Back to Applications</button>
-                    <h2 id="app-name">Application Toggles</h2>
-                    <button id="new-toggle-btn" class="btn btn-primary">+ New Toggle</button>
+                    <div class="section-title-group">
+                        <div class="section-navigation">
+                            <button id="back-to-apps" class="btn btn-ghost">
+                                <span class="btn-icon">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M11.354 1.646a.5.5 0 010 .708L5.707 8l5.647 5.646a.5.5 0 01-.708.708l-6-6a.5.5 0 010-.708l6-6a.5.5 0 01.708 0z"/>
+                                    </svg>
+                                </span>
+                                <span class="btn-text">Back to Applications</span>
+                            </button>
+                        </div>
+                        <h2 class="section-title">
+                            <span class="section-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2L2 12l10 10 10-10-10-10z"/>
+                                    <path d="M12 6L6 12l6 6 6-6-6-6z"/>
+                                </svg>
+                            </span>
+                            <span id="app-name">Application Toggles</span>
+                        </h2>
+                        <p class="section-description">Configure feature toggles and activation rules for this application</p>
+                    </div>
+                    
+                    <div class="section-actions">
+                        <button id="new-toggle-btn" class="btn btn-primary">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">New Toggle</span>
+                        </button>
+                    </div>
                 </div>
                 
-                <div id="toggles-list" class="grid-container">
+                <div id="toggles-list" class="cards-grid">
                     <!-- Toggles will be loaded here -->
                 </div>
             </section>
         </main>
-        <footer class="footer-info">
-            Licensed under the Apache License 2.0. See <a href="https://github.com/manorfm/totoogle/blob/master/LICENSE" target="_blank">LICENSE</a>.
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <p class="footer-text">
+                    Licensed under the Apache License 2.0. 
+                    <a href="https://github.com/manorfm/totoogle/blob/master/LICENSE" target="_blank" class="footer-link">
+                        View License
+                    </a>
+                </p>
+            </div>
         </footer>
     </div>
 
     <!-- Modal for creating/editing application -->
-    <div id="app-modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="app-modal-title">New Application</h3>
-                <button class="close-btn" onclick="closeModal('app-modal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="app-form">
-                    <div class="form-group">
-                        <label for="app-name-input">Application Name:</label>
-                        <input type="text" id="app-name-input" required>
+    <div id="app-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 id="app-modal-title" class="modal-title">New Application</h3>
+                            <p class="modal-subtitle">Create a new application to manage feature toggles</p>
+                        </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                    <button class="modal-close-btn" onclick="closeModal('app-modal')" aria-label="Close">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <form id="app-form" class="toggle-form">
+                        <!-- Application Information Section -->
+                        <div class="form-section">
+                            <div class="section-header">
+                                <h4 class="section-title">Application Information</h4>
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label" for="app-name-input">
+                                    Application Name
+                                    <span class="field-description">A unique name to identify your application</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-icon">
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M1.75 2A1.75 1.75 0 000 3.75v8.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0016 12.25v-8.5A1.75 1.75 0 0014.25 2H1.75zM1.5 3.75a.25.25 0 01.25-.25h12.5a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25v-8.5z"/>
+                                        </svg>
+                                    </span>
+                                    <input type="text" id="app-name-input" class="form-input" placeholder="e.g. My Web Application" required>
+                                </div>
+                                <div class="field-hint">
+                                    <span class="hint-icon">💡</span>
+                                    <span class="hint-text">Use a descriptive name that makes it easy to identify this application</span>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="modal-footer">
+                    <div class="footer-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">
+                            <span class="btn-text">Cancel</span>
+                        </button>
+                        <button type="submit" form="app-form" class="btn btn-primary">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Create Application</span>
+                        </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Modal for creating/editing toggle -->
-    <div id="toggle-modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="toggle-modal-title">New Toggle</h3>
-                <button class="close-btn" onclick="closeModal('toggle-modal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="toggle-form">
-                    <div class="form-group">
-                        <label for="toggle-path-input">Toggle Path:</label>
-                        <input type="text" id="toggle-path-input" required>
+    <div id="toggle-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 12l10 10 10-10-10-10z"/>
+                                <path d="M12 6L6 12l6 6 6-6-6-6z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 id="toggle-modal-title" class="modal-title">New Toggle</h3>
+                            <p class="modal-subtitle">Create a new feature toggle for this application</p>
+                        </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('toggle-modal')">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                    <button class="modal-close-btn" onclick="closeModal('toggle-modal')" aria-label="Close">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <form id="toggle-form" class="toggle-form">
+                        <!-- Toggle Information Section -->
+                        <div class="form-section">
+                            <div class="section-header">
+                                <h4 class="section-title">Toggle Information</h4>
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label" for="toggle-path-input">
+                                    Toggle Path
+                                    <span class="field-description">A unique path identifier for this feature toggle</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-icon">
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M1.75 2A1.75 1.75 0 000 3.75v8.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0016 12.25v-8.5A1.75 1.75 0 0014.25 2H1.75zM1.5 3.75a.25.25 0 01.25-.25h12.5a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25v-8.5z"/>
+                                        </svg>
+                                    </span>
+                                    <input type="text" id="toggle-path-input" class="form-input" placeholder="e.g. feature/new-ui" required>
+                                </div>
+                                <div class="field-hint">
+                                    <span class="hint-icon">💡</span>
+                                    <span class="hint-text">Use a descriptive path like "feature/new-ui" or "experiment/checkout-flow"</span>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="modal-footer">
+                    <div class="footer-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('toggle-modal')">
+                            <span class="btn-text">Cancel</span>
+                        </button>
+                        <button type="submit" form="toggle-form" class="btn btn-primary">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Create Toggle</span>
+                        </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Modal for editing toggle -->
-    <div id="edit-toggle-modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="edit-toggle-title">Edit Toggle</h3>
-                <button class="close-btn" onclick="closeModal('edit-toggle-modal')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="edit-toggle-form">
-                    <div class="form-group">
-                        <label for="edit-toggle-path-input">Toggle Path:</label>
-                        <input type="text" id="edit-toggle-path-input" required disabled>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-toggle-enabled-input"><input type="checkbox" id="edit-toggle-enabled-input"> Enabled</label>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-toggle-activation-rule-input">
-                            <input type="checkbox" id="edit-toggle-activation-rule-input"> Enable Activation Rules
-                        </label>
-                    </div>
-                    <div id="activation-rule-config" class="activation-rule-config hidden">
-                        <div class="form-group">
-                            <label for="activation-rule-type">Rule Type:</label>
-                            <select id="activation-rule-type">
-                                <option value="">Select rule type...</option>
-                                <option value="percentage">Percentage - Activate for X% of requests</option>
-                                <option value="parameter">Parameter - Activate based on specific parameter</option>
-                                <option value="user_id">User ID - Activate for specific users</option>
-                                <option value="ip">IP Address - Activate for specific IPs</option>
-                                <option value="country">Country - Activate for specific countries</option>
-                                <option value="time">Time - Activate at specific times</option>
-                                <option value="canary">Canary - Activate for canary releases</option>
-                            </select>
+    <div id="edit-toggle-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 12l10 10 10-10-10-10z"/>
+                                <path d="M12 6L6 12l6 6 6-6-6-6z"/>
+                            </svg>
                         </div>
-                        <div class="form-group">
-                            <label for="activation-rule-value">Rule Value:</label>
-                            <input type="text" id="activation-rule-value" placeholder="Enter rule value...">
+                        <div>
+                            <h3 id="edit-toggle-title" class="modal-title">Edit Toggle Configuration</h3>
+                            <p class="modal-subtitle">Configure toggle settings and activation rules</p>
                         </div>
                     </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-toggle-modal')">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save</button>
+                    <button class="modal-close-btn" onclick="closeModal('edit-toggle-modal')" aria-label="Close">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <form id="edit-toggle-form" class="toggle-form">
+                        <!-- Toggle Path Section -->
+                        <div class="form-section">
+                            <div class="section-header">
+                                <h4 class="section-title">Basic Information</h4>
+                            </div>
+                            <div class="form-field">
+                                <label class="field-label" for="edit-toggle-path-input">
+                                    Toggle Path
+                                    <span class="field-description">The unique identifier path for this toggle</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-icon">
+                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                            <path d="M1.75 2A1.75 1.75 0 000 3.75v8.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0016 12.25v-8.5A1.75 1.75 0 0014.25 2H1.75zM1.5 3.75a.25.25 0 01.25-.25h12.5a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25v-8.5z"/>
+                                        </svg>
+                                    </span>
+                                    <input type="text" id="edit-toggle-path-input" class="form-input" disabled readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Toggle Status Section -->
+                        <div class="form-section">
+                            <div class="section-header">
+                                <h4 class="section-title">Status Configuration</h4>
+                            </div>
+                            <div class="form-field">
+                                <div class="toggle-switch-container">
+                                    <label class="toggle-switch" for="edit-toggle-enabled-input">
+                                        <input type="checkbox" id="edit-toggle-enabled-input" class="toggle-input">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <div class="toggle-label-content">
+                                        <span class="toggle-label-title">Enable Toggle</span>
+                                        <span class="toggle-label-description">When enabled, this toggle will be active and available for use</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Activation Rules Section -->
+                        <div class="form-section">
+                            <div class="section-header">
+                                <h4 class="section-title">Activation Rules</h4>
+                                <span class="section-badge">Advanced</span>
+                            </div>
+                            <div class="form-field">
+                                <div class="toggle-switch-container">
+                                    <label class="toggle-switch" for="edit-toggle-activation-rule-input">
+                                        <input type="checkbox" id="edit-toggle-activation-rule-input" class="toggle-input">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <div class="toggle-label-content">
+                                        <span class="toggle-label-title">Enable Conditional Activation</span>
+                                        <span class="toggle-label-description">Apply conditional logic to control when this toggle is active</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="activation-rule-config" class="rule-config-panel hidden">
+                                <div class="rule-config-content">
+                                    <div class="form-field">
+                                        <label class="field-label" for="activation-rule-type">
+                                            Rule Type
+                                            <span class="field-description">Select the type of activation condition</span>
+                                        </label>
+                                        <div class="select-wrapper">
+                                            <select id="activation-rule-type" class="form-select">
+                                                <option value="">Choose activation rule type...</option>
+                                                <optgroup label="Traffic Control">
+                                                    <option value="percentage">🎯 Percentage - Activate for X% of requests</option>
+                                                    <option value="canary">🚀 Canary - Activate for canary releases</option>
+                                                </optgroup>
+                                                <optgroup label="User Targeting">
+                                                    <option value="parameter">⚙️ Parameter - Activate based on specific parameter</option>
+                                                    <option value="user_id">👤 User ID - Activate for specific users</option>
+                                                </optgroup>
+                                                <optgroup label="Environmental">
+                                                    <option value="ip">🌐 IP Address - Activate for specific IPs</option>
+                                                    <option value="country">🌍 Country - Activate for specific countries</option>
+                                                    <option value="time">⏰ Time - Activate at specific times</option>
+                                                </optgroup>
+                                            </select>
+                                            <span class="select-icon">
+                                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                                    <path d="M4.22 6.22a.75.75 0 011.06 0L8 8.94l2.72-2.72a.75.75 0 111.06 1.06l-3.25 3.25a.75.75 0 01-1.06 0L4.22 7.28a.75.75 0 010-1.06z"/>
+                                                </svg>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-field">
+                                        <label class="field-label" for="activation-rule-value">
+                                            Rule Value
+                                            <span class="field-description" id="rule-value-description">Enter the value for your selected rule type</span>
+                                        </label>
+                                        <div class="input-group">
+                                            <span class="input-icon" id="rule-value-icon">
+                                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                                    <path d="M8 2a.75.75 0 01.75.75v5.69l3.72-3.72a.75.75 0 111.06 1.06L8.75 10.56v2.69a.75.75 0 01-1.5 0v-2.69L2.47 5.78a.75.75 0 011.06-1.06L7.25 8.44V2.75A.75.75 0 018 2z"/>
+                                                </svg>
+                                            </span>
+                                            <input type="text" id="activation-rule-value" class="form-input" placeholder="Enter rule value...">
+                                        </div>
+                                        <div class="field-hint" id="rule-value-hint">
+                                            <span class="hint-icon">💡</span>
+                                            <span class="hint-text">Select a rule type above to see value examples</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="modal-footer">
+                    <div class="footer-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('edit-toggle-modal')">
+                            <span class="btn-text">Cancel</span>
+                        </button>
+                        <button type="submit" form="edit-toggle-form" class="btn btn-primary">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Save Changes</span>
+                        </button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>

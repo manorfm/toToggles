@@ -42,7 +42,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // Limpar os campos quando desabilitado
             document.getElementById('activation-rule-type').value = '';
             document.getElementById('activation-rule-value').value = '';
+            updateRuleValueHints('');
         }
+    });
+
+    // Event listener para o select de tipo de regra
+    document.getElementById('activation-rule-type').addEventListener('change', function() {
+        updateRuleValueHints(this.value);
+        updateRuleValueIcon(this.value);
+        updateRuleValuePlaceholder(this.value);
     });
 
     // Após carregar aplicações, verificar se deve abrir tela de toggles
@@ -55,7 +63,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Funções de Modal
 function openModal(modalId) {
-    document.getElementById(modalId).classList.remove('hidden');
+    const modal = document.getElementById(modalId);
+    modal.classList.remove('hidden');
+    
+    // Foco automático no input principal após abrir o modal
+    setTimeout(() => {
+        let focusElement = null;
+        
+        if (modalId === 'app-modal') {
+            focusElement = document.getElementById('app-name-input');
+        } else if (modalId === 'toggle-modal') {
+            focusElement = document.getElementById('toggle-path-input');
+        } else if (modalId === 'edit-toggle-modal') {
+            focusElement = document.getElementById('edit-toggle-path-input');
+        }
+        
+        if (focusElement && modal.offsetHeight > 0) { // Verificar se o modal está visível
+            focusElement.focus();
+            // Selecionar o texto se for um campo de edição
+            if (modalId === 'edit-toggle-modal' || (modalId === 'app-modal' && currentEditingAppId)) {
+                focusElement.select();
+            }
+        }
+    }, 150); // Pequeno delay para garantir que o modal esteja completamente visível
 }
 
 function closeModal(modalId) {
@@ -154,7 +184,7 @@ async function loadApplications() {
         const applications = await apiCall('/applications');
         renderApplications(applications);
     } catch (error) {
-        showEmptyState(applicationsList, 'No applications found', 'Create your first application to get started!');
+        showEmptyState(applicationsList, 'No applications found', 'Create your first application to manage feature toggles and get started!', 'applications');
     } finally {
         hideGlobalLoading();
     }
@@ -193,7 +223,7 @@ async function handleCreateApplication(event) {
 
 function renderApplications(applications) {
     if (!applications || applications.length === 0) {
-        showEmptyState(applicationsList, 'No applications found', 'Create your first application to get started!');
+        showEmptyState(applicationsList, 'No applications found', 'Create your first application to manage feature toggles and get started!', 'applications');
         return;
     }
     applicationsList.innerHTML = applications.map(app => `
@@ -246,7 +276,7 @@ async function loadToggles(appId) {
         const response = await apiCall(`/applications/${appId}/toggles?hierarchy=true`);
         renderToggles(response.toggles);
     } catch (error) {
-        showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
+        showEmptyState(togglesList, 'No toggles found for this application', 'Start by creating your first feature toggle to control application behavior.', 'toggles');
     } finally {
         hideGlobalLoading();
     }
@@ -318,7 +348,7 @@ async function handleUpdateToggle(event) {
 
 function renderToggles(toggles) {
     if (!toggles || toggles.length === 0) {
-        showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
+        showEmptyState(togglesList, 'No toggles found for this application', 'Start by creating your first feature toggle to control application behavior.', 'toggles');
         return;
     }
     
@@ -350,7 +380,7 @@ function renderToggles(toggles) {
     toggles.forEach(root => traverse(root));
 
     if (leafNodes.length === 0) {
-        showEmptyState(togglesList, 'No toggles found', 'Create your first toggle to get started!');
+        showEmptyState(togglesList, 'No toggles found for this application', 'Start by creating your first feature toggle to control application behavior.', 'toggles');
         return;
     }
 
@@ -645,11 +675,39 @@ function showLoading(container) {
     container.innerHTML = '<div class="loading">Loading...</div>';
 }
 
-function showEmptyState(container, title, message = '') {
+function showEmptyState(container, title, message = '', iconType = 'default') {
+    const icons = {
+        applications: `
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+        `,
+        toggles: `
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 12l10 10 10-10-10-10z"/>
+                <path d="M12 6L6 12l6 6 6-6-6-6z"/>
+            </svg>
+        `,
+        default: `
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+            </svg>
+        `
+    };
+
     container.innerHTML = `
         <div class="empty-state">
-            <h3>${title}</h3>
-            ${message ? `<p>${message}</p>` : ''}
+            <div class="empty-state-icon">
+                ${icons[iconType] || icons.default}
+            </div>
+            <div class="empty-state-content">
+                <h3 class="empty-state-title">${title}</h3>
+                ${message ? `<p class="empty-state-message">${message}</p>` : ''}
+            </div>
         </div>
     `;
 }
@@ -712,4 +770,106 @@ window.addEventListener('keydown', function(event) {
             }
         });
     }
-}); 
+});
+
+// Funções para melhorar a UX do modal de regras de ativação
+function updateRuleValueHints(ruleType) {
+    const hintElement = document.getElementById('rule-value-hint');
+    const descriptionElement = document.getElementById('rule-value-description');
+    
+    const hints = {
+        'percentage': {
+            text: 'Enter a number between 0-100 (e.g., 25 for 25% of requests)',
+            description: 'Percentage of requests that should activate this toggle'
+        },
+        'parameter': {
+            text: 'Enter parameter name or value (e.g., "premium", "beta_user")',
+            description: 'Parameter value to match for activation'
+        },
+        'user_id': {
+            text: 'Enter specific user IDs separated by commas (e.g., "user123, user456")',
+            description: 'Specific user identifiers for targeted activation'
+        },
+        'ip': {
+            text: 'Enter IP addresses or ranges (e.g., "192.168.1.1" or "10.0.0.0/24")',
+            description: 'IP addresses or CIDR ranges for geo-targeted activation'
+        },
+        'country': {
+            text: 'Enter country codes separated by commas (e.g., "US, BR, CA")',
+            description: 'ISO country codes for location-based activation'
+        },
+        'time': {
+            text: 'Enter time range in 24h format (e.g., "09:00-17:00" or "Mon-Fri 08:00-18:00")',
+            description: 'Time windows when the toggle should be active'
+        },
+        'canary': {
+            text: 'Enter deployment version or environment (e.g., "v2.1.0", "staging")',
+            description: 'Version or environment identifier for canary deployments'
+        }
+    };
+    
+    if (ruleType && hints[ruleType]) {
+        hintElement.querySelector('.hint-text').textContent = hints[ruleType].text;
+        descriptionElement.textContent = hints[ruleType].description;
+        hintElement.style.display = 'flex';
+    } else {
+        hintElement.style.display = 'none';
+        descriptionElement.textContent = 'Enter the value for your selected rule type';
+    }
+}
+
+function updateRuleValueIcon(ruleType) {
+    const iconElement = document.getElementById('rule-value-icon');
+    
+    const icons = {
+        'percentage': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2.875 3.5A1.375 1.375 0 004.25 2.125h7.5A1.375 1.375 0 0013.125 3.5v9A1.375 1.375 0 0011.75 13.875h-7.5A1.375 1.375 0 002.875 12.5v-9zM4.25 3.625a.375.375 0 00-.375.375v8.5c0 .207.168.375.375.375h7.5a.375.375 0 00.375-.375v-8.5a.375.375 0 00-.375-.375h-7.5z"/>
+            <path d="M6.5 5a.5.5 0 01.5.5v5a.5.5 0 01-1 0V6.207l-.146.147a.5.5 0 01-.708-.708l1-1A.5.5 0 016.5 5z"/>
+            <path d="M9.5 8.5a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM11 7.5a1 1 0 100 2 1 1 0 000-2z"/>
+        </svg>`,
+        'parameter': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M9.5 13a1.5 1.5 0 01-3 0v-8a1.5 1.5 0 013 0v8zM10.5 4.5a.5.5 0 00-.5-.5h-4a.5.5 0 000 1h4a.5.5 0 00.5-.5z"/>
+        </svg>`,
+        'user_id': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 8a3 3 0 100-6 3 3 0 000 6zM12.735 14c.618 0 1.093-.561.872-1.139a6.002 6.002 0 00-11.215 0c-.22.578.254 1.139.872 1.139h9.47z"/>
+        </svg>`,
+        'ip': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0a8 8 0 100 16A8 8 0 008 0zM2.04 4.326c.325 1.329 2.532 2.54 3.717 3.19.48.263.793.434.743.484-.08.08-.162-.019-.394-.09-.306-.09-.626-.2-.918-.33-.132-.065-.248-.032-.333.025-.114.075-.204.223-.204.275 0 .097.116.25.256.363.296.24.554.469.785.68.775.704 1.622 1.353 2.477 1.905a.5.5 0 00.577-.094l1.99-1.99.002-.002.002-.002A.5.5 0 0010.5 8.5V4.326c-.54.418-1.972.56-2.064.56-.593.033-1.204.033-1.867.033-1.479 0-2.896-.198-3.509-.593z"/>
+        </svg>`,
+        'country': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M0 2a2 2 0 012-2h8a2 2 0 012 2v2h2a2 2 0 012 2v6a2 2 0 01-2 2H2a2 2 0 01-2-2V2zm12 2.5v-2a.5.5 0 00-.5-.5h-2v3h2.5z"/>
+        </svg>`,
+        'time': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 3.5a.5.5 0 00-1 0V9a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 8.71V3.5z"/>
+            <path d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"/>
+        </svg>`,
+        'canary': `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 15A7 7 0 118 1a7 7 0 010 14zm0 1A8 8 0 108 0a8 8 0 000 16z"/>
+            <path d="M8.93 6.588l-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 11-2 0 1 1 0 012 0z"/>
+        </svg>`
+    };
+    
+    if (ruleType && icons[ruleType]) {
+        iconElement.innerHTML = icons[ruleType];
+    } else {
+        iconElement.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 2a.75.75 0 01.75.75v5.69l3.72-3.72a.75.75 0 111.06 1.06L8.75 10.56v2.69a.75.75 0 01-1.5 0v-2.69L2.47 5.78a.75.75 0 011.06-1.06L7.25 8.44V2.75A.75.75 0 018 2z"/>
+        </svg>`;
+    }
+}
+
+function updateRuleValuePlaceholder(ruleType) {
+    const inputElement = document.getElementById('activation-rule-value');
+    
+    const placeholders = {
+        'percentage': 'e.g., 25',
+        'parameter': 'e.g., premium_user',
+        'user_id': 'e.g., user123, user456',
+        'ip': 'e.g., 192.168.1.1',
+        'country': 'e.g., US, BR, CA',
+        'time': 'e.g., 09:00-17:00',
+        'canary': 'e.g., v2.1.0'
+    };
+    
+    inputElement.placeholder = placeholders[ruleType] || 'Enter rule value...';
+} 
