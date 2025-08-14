@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupSecretKeyTestRouter() *gin.Engine {
+func setupSecretKeyTestRouter() (*gin.Engine, *gorm.DB) {
 	gin.SetMode(gin.TestMode)
 	
 	// Cria base de dados em memória para testes
@@ -30,9 +30,9 @@ func setupSecretKeyTestRouter() *gin.Engine {
 	
 	// Mock user middleware
 	router.Use(func(c *gin.Context) {
-		c.Set("user", map[string]interface{}{
-			"id":       "test-user-id",
-			"username": "testuser",
+		c.Set("user", &entity.User{
+			ID:       "test-user-id",
+			Username: "testuser",
 		})
 		c.Next()
 	})
@@ -47,15 +47,11 @@ func setupSecretKeyTestRouter() *gin.Engine {
 	router.GET("/api/toggles/by-secret/:secret", GetTogglesBySecret)
 	router.DELETE("/secret-keys/:id", DeleteSecretKey)
 	
-	return router
+	return router, db
 }
 
 func TestGenerateSecretKey(t *testing.T) {
-	router := setupSecretKeyTestRouter()
-	
-	// Criar uma aplicação de teste
-	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{})
+	router, db := setupSecretKeyTestRouter()
 	
 	app := &entity.Application{
 		ID:   "test-app-id",
@@ -90,7 +86,7 @@ func TestGenerateSecretKey(t *testing.T) {
 }
 
 func TestGetSecretKeys(t *testing.T) {
-	router := setupSecretKeyTestRouter()
+	router, _ := setupSecretKeyTestRouter()
 	
 	// Test getting secret keys for an application
 	w := httptest.NewRecorder()
@@ -114,7 +110,7 @@ func TestGetSecretKeys(t *testing.T) {
 }
 
 func TestGetTogglesBySecret_InvalidSecret(t *testing.T) {
-	router := setupSecretKeyTestRouter()
+	router, _ := setupSecretKeyTestRouter()
 	
 	// Test with invalid secret key
 	w := httptest.NewRecorder()
@@ -134,11 +130,7 @@ func TestGetTogglesBySecret_InvalidSecret(t *testing.T) {
 }
 
 func TestGetTogglesBySecret_ValidSecret(t *testing.T) {
-	router := setupSecretKeyTestRouter()
-	
-	// Setup: Create application, secret key, and toggles
-	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{})
+	router, db := setupSecretKeyTestRouter()
 	
 	app := &entity.Application{
 		ID:   "test-app-id",
@@ -219,9 +211,9 @@ func TestSecretKeyRegeneration(t *testing.T) {
 	
 	// Mock user middleware
 	router.Use(func(c *gin.Context) {
-		c.Set("user", map[string]interface{}{
-			"id":       "test-user-id",
-			"username": "testuser",
+		c.Set("user", &entity.User{
+			ID:       "test-user-id",
+			Username: "testuser",
 		})
 		c.Next()
 	})
