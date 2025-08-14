@@ -517,6 +517,130 @@
         </div>
     </div>
 
+    <!-- Modal for managing secret keys -->
+    <div id="secret-key-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-content secret-key-modal">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <circle cx="12" cy="16" r="1"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 id="secret-key-modal-title" class="modal-title">Secret Key</h3>
+                            <p class="modal-subtitle">Manage API access for this application</p>
+                        </div>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeModal('secret-key-modal')" aria-label="Close">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <!-- Generate Secret Key Section -->
+                    <div id="secret-key-generate-section" class="form-section" style="display: none;">
+                        <div class="section-header">
+                            <h4 class="section-title">Generate Secret Key</h4>
+                        </div>
+                        <div class="alert alert-info">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+                            </svg>
+                            <div>
+                                <p><strong>No secret key found.</strong></p>
+                                <p>Generate a secret key to allow API access to this application's toggles. The key will be shown only once.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Display Secret Key Section -->
+                    <div id="secret-key-display-section" class="form-section" style="display: none;">
+                        <div class="section-header">
+                            <h4 class="section-title">Your Secret Key</h4>
+                        </div>
+                        <div class="alert alert-warning">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+                            </svg>
+                            <div>
+                                <p><strong>Important:</strong> This key will only be shown once. Save it securely.</p>
+                            </div>
+                        </div>
+                        <div class="secret-key-display">
+                            <label class="field-label">Secret Key</label>
+                            <div class="secret-key-value-container">
+                                <code id="secret-key-value" class="secret-key-value"></code>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="copySecretKey()">
+                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/>
+                                        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/>
+                                    </svg>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        <div class="secret-key-usage">
+                            <h5>Usage:</h5>
+                            <p>Use this key to access your application's toggles via API:</p>
+                            <code>GET /api/toggles/by-secret/{your-secret-key}</code>
+                        </div>
+                    </div>
+
+                    <!-- Existing Secret Key Section -->
+                    <div id="secret-key-existing-section" class="form-section" style="display: none;">
+                        <div class="section-header">
+                            <h4 class="section-title">Current Secret Key</h4>
+                        </div>
+                        <div id="secret-key-info"></div>
+                        <div class="alert alert-warning">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+                            </svg>
+                            <div>
+                                <p><strong>Warning:</strong> Regenerating will invalidate the current key and break existing integrations.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <div class="footer-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('secret-key-modal')">
+                            <span class="btn-text">Close</span>
+                        </button>
+                        
+                        <!-- Generate button (shown when no key exists) -->
+                        <button type="button" class="btn btn-primary" onclick="generateSecretKey()" id="generate-secret-btn" style="display: none;">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Generate Secret Key</span>
+                        </button>
+                        
+                        <!-- Regenerate button (shown when key exists) -->
+                        <button type="button" class="btn btn-danger" onclick="regenerateSecretKey()" id="regenerate-secret-btn" style="display: none;">
+                            <span class="btn-icon">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
+                                    <path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
+                                </svg>
+                            </span>
+                            <span class="btn-text">Regenerate Key</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <!-- Global Loading Spinner -->

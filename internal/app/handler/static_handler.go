@@ -34,13 +34,28 @@ func ServeStatic(c *gin.Context) {
 
 // isAPIRoute verifica se a rota é uma rota de API
 func isAPIRoute(path string) bool {
-	// Apenas rotas específicas de API, não SPA routes que começam com /applications
+	// Rotas básicas de API
+	if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/health") {
+		return true
+	}
+	
+	// Rotas específicas de secret keys
+	if strings.HasPrefix(path, "/secret-keys") {
+		return true
+	}
+	
+	// Rota base de applications
 	if path == "/applications" {
 		return true
 	}
 	
-	// Verifica se é uma rota de API específica como /applications/{id} ou /applications/{id}/toggles
+	// Verifica rotas de /applications/
 	if strings.HasPrefix(path, "/applications/") {
+		// Secret key routes - sempre API
+		if strings.Contains(path, "/generate-secret") || strings.Contains(path, "/secret-keys") {
+			return true
+		}
+		
 		// Remove o prefixo /applications/
 		remaining := strings.TrimPrefix(path, "/applications/")
 		parts := strings.Split(remaining, "/")
@@ -69,8 +84,7 @@ func isAPIRoute(path string) bool {
 		return false
 	}
 	
-	return strings.HasPrefix(path, "/api") ||
-		strings.HasPrefix(path, "/health")
+	return false
 }
 
 // ServeStaticFiles serve arquivos estáticos específicos

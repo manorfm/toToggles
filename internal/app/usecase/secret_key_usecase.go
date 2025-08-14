@@ -83,3 +83,23 @@ func (uc *SecretKeyUseCase) ValidateSecretKey(secretKey string) (*entity.SecretK
 	// Buscar pela hash no banco
 	return uc.secretKeyRepo.GetByHash(keyHash)
 }
+
+// RegenerateSecretKey regenera uma secret key existente, invalidando a anterior
+func (uc *SecretKeyUseCase) RegenerateSecretKey(applicationID, createdBy string) (*CreateSecretKeyResponse, error) {
+	// Primeiro, delete todas as secret keys existentes da aplicação
+	existingKeys, err := uc.secretKeyRepo.GetByApplicationID(applicationID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove todas as chaves existentes
+	for _, key := range existingKeys {
+		err = uc.secretKeyRepo.Delete(key.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Cria uma nova secret key
+	return uc.CreateSecretKey("API Access Key", applicationID, createdBy)
+}

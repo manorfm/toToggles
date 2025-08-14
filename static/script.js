@@ -13,6 +13,115 @@ const togglesList = document.getElementById('toggles-list');
 const appNameElement = document.getElementById('app-name');
 const globalLoadingSpinner = document.getElementById('global-loading-spinner');
 
+// Funções de Secret Key
+let currentSecretKeyAppId = null;
+let currentSecretKeyAppName = null;
+
+async function manageSecretKey(appId, appName) {
+    currentSecretKeyAppId = appId;
+    currentSecretKeyAppName = appName;
+    
+    // Atualizar título do modal
+    document.getElementById('secret-key-modal-title').textContent = `Secret Key - ${appName}`;
+    
+    // Reset modal state
+    resetSecretKeyModal();
+    
+    // Verificar se já existe uma secret key
+    try {
+        const response = await apiCall(`/applications/${appId}/secret-keys`);
+        if (response.secret_keys && response.secret_keys.length > 0) {
+            showExistingSecretKey(response.secret_keys[0]);
+        } else {
+            showGenerateSecretKey();
+        }
+    } catch (error) {
+        showGenerateSecretKey();
+    }
+    
+    openModal('secret-key-modal');
+}
+
+function resetSecretKeyModal() {
+    document.getElementById('secret-key-generate-section').style.display = 'none';
+    document.getElementById('secret-key-display-section').style.display = 'none';
+    document.getElementById('secret-key-existing-section').style.display = 'none';
+}
+
+function showGenerateSecretKey() {
+    resetSecretKeyModal();
+    document.getElementById('secret-key-generate-section').style.display = 'block';
+    document.getElementById('generate-secret-btn').style.display = 'inline-flex';
+    document.getElementById('regenerate-secret-btn').style.display = 'none';
+}
+
+function showExistingSecretKey(secretKey) {
+    resetSecretKeyModal();
+    document.getElementById('secret-key-existing-section').style.display = 'block';
+    document.getElementById('generate-secret-btn').style.display = 'none';
+    document.getElementById('regenerate-secret-btn').style.display = 'inline-flex';
+    document.getElementById('secret-key-info').innerHTML = `
+        <div class="secret-key-info">
+            <p><strong>Name:</strong> ${secretKey.name}</p>
+            <p><strong>Created:</strong> ${new Date(secretKey.created_at).toLocaleDateString()}</p>
+            <p><strong>Key:</strong> <code>sk_****...****</code></p>
+        </div>
+    `;
+}
+
+function showSecretKeyDisplay(plainKey) {
+    resetSecretKeyModal();
+    document.getElementById('secret-key-display-section').style.display = 'block';
+    document.getElementById('secret-key-value').textContent = plainKey;
+    document.getElementById('generate-secret-btn').style.display = 'none';
+    document.getElementById('regenerate-secret-btn').style.display = 'none';
+}
+
+async function generateSecretKey() {
+    try {
+        showGlobalLoading();
+        const response = await apiCall(`/applications/${currentSecretKeyAppId}/generate-secret`, {
+            method: 'POST'
+        });
+        
+        showSecretKeyDisplay(response.plain_key);
+        showSuccess('Secret key generated successfully! Save it securely - it will not be shown again.');
+    } catch (error) {
+        showError('Failed to generate secret key: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+async function regenerateSecretKey() {
+    if (!confirm('Are you sure you want to regenerate the secret key? This will invalidate the previous key and break any integrations using it.')) {
+        return;
+    }
+    
+    try {
+        showGlobalLoading();
+        const response = await apiCall(`/applications/${currentSecretKeyAppId}/generate-secret`, {
+            method: 'POST'
+        });
+        
+        showSecretKeyDisplay(response.plain_key);
+        showSuccess('Secret key regenerated successfully! The previous key has been invalidated. Save the new key securely.');
+    } catch (error) {
+        showError('Failed to regenerate secret key: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+function copySecretKey() {
+    const secretKeyValue = document.getElementById('secret-key-value').textContent;
+    navigator.clipboard.writeText(secretKeyValue).then(() => {
+        showSuccess('Secret key copied to clipboard!');
+    }).catch(() => {
+        showError('Failed to copy secret key to clipboard');
+    });
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
     console.log('[DEBUG] DOMContentLoaded: Document ready, starting initialization');
@@ -310,6 +419,13 @@ function renderApplications(applications) {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                             <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" title="Gerenciar Secret Key" onclick="event.stopPropagation(); manageSecretKey('${app.id}', '${app.name}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <circle cx="12" cy="16" r="1"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                     </button>
                     <button class="icon-btn" title="Editar Aplicação" onclick="event.stopPropagation(); editApplication('${app.id}', '${app.name}')">

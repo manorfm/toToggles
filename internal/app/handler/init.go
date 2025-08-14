@@ -9,10 +9,11 @@ import (
 )
 
 var (
-	appHandler    *ApplicationHandler
-	toggleHandler *ToggleHandler
-	authHandler   *AuthHandler
-	userHandler   *UserHandler
+	appHandler       *ApplicationHandler
+	toggleHandler    *ToggleHandler
+	authHandler      *AuthHandler
+	userHandler      *UserHandler
+	secretKeyHandler *SecretKeyHandler
 )
 
 // InitHandlers inicializa os handlers
@@ -21,6 +22,7 @@ func InitHandlers(db *gorm.DB) {
 	appRepo := database.NewApplicationRepository(db)
 	toggleRepo := database.NewToggleRepository(db)
 	userRepo := database.NewUserRepository(db)
+	secretKeyRepo := database.NewSecretKeyRepository(db)
 
 	// Inicializa sistema de autenticação
 	authManager := auth.NewAuthManager()
@@ -32,6 +34,7 @@ func InitHandlers(db *gorm.DB) {
 	toggleUseCase := usecase.NewToggleUseCase(toggleRepo, appRepo)
 	authUseCase := usecase.NewAuthUseCase(userRepo, authManager)
 	userUseCase := usecase.NewUserUseCase(userRepo)
+	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)
 
 	// Inicializar usuário admin padrão
 	authUseCase.InitializeDefaultAdmin()
@@ -41,6 +44,7 @@ func InitHandlers(db *gorm.DB) {
 	toggleHandler = NewToggleHandler(toggleUseCase)
 	authHandler = NewAuthHandler(authUseCase)
 	userHandler = NewUserHandler(userUseCase)
+	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase)
 }
 
 // Funções globais para as rotas
@@ -103,4 +107,21 @@ func ValidateToken() gin.HandlerFunc {
 
 func RequireAdmin() gin.HandlerFunc {
 	return authHandler.RequireAdmin()
+}
+
+// Funções de secret keys
+func GenerateSecretKey(c *gin.Context) {
+	secretKeyHandler.GenerateSecretKey(c)
+}
+
+func GetTogglesBySecret(c *gin.Context) {
+	secretKeyHandler.GetTogglesBySecret(c)
+}
+
+func GetSecretKeys(c *gin.Context) {
+	secretKeyHandler.GetSecretKeys(c)
+}
+
+func DeleteSecretKey(c *gin.Context) {
+	secretKeyHandler.DeleteSecretKey(c)
 }

@@ -25,6 +25,12 @@ func Init(router *gin.Engine) {
 		auth.POST("/logout", handler.Logout)
 	}
 
+	// Rotas públicas da API (acesso por secret key)
+	api := router.Group("/api")
+	{
+		api.GET("/toggles/by-secret/:secret", handler.GetTogglesBySecret)
+	}
+
 	// Rotas protegidas que requerem autenticação
 	protected := router.Group("")
 	protected.Use(handler.ValidateToken())
@@ -37,6 +43,10 @@ func Init(router *gin.Engine) {
 			applications.GET("/:id", handler.GetApplication)
 			applications.PUT("/:id", handler.UpdateApplication)
 			applications.DELETE("/:id", handler.DeleteApplication)
+			
+			// Rotas de secret keys para aplicações
+			applications.POST("/:id/generate-secret", handler.GenerateSecretKey)
+			applications.GET("/:id/secret-keys", handler.GetSecretKeys)
 		}
 
 		// Rotas de toggles
@@ -54,6 +64,12 @@ func Init(router *gin.Engine) {
 
 		// Rota para atualizar enabled recursivamente
 		protected.PUT("/applications/:id/toggle/:toggleId", handler.UpdateEnabled)
+
+		// Rotas de gerenciamento de secret keys
+		secretKeys := protected.Group("/secret-keys")
+		{
+			secretKeys.DELETE("/:id", handler.DeleteSecretKey)
+		}
 	}
 
 	// Rota para servir o arquivo LICENSE da raiz

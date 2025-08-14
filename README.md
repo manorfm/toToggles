@@ -11,6 +11,9 @@ A simple and effective feature toggle management application built with Go and m
 - **Application Management**: Create and manage multiple applications with their respective toggles
 - **Hierarchical Visualization**: View toggle hierarchies in a tree-like structure
 - **Bulk Operations**: Enable/disable toggles recursively affecting all child toggles
+- **🔐 Authentication System**: Secure login system with token-based authentication and HTTP-only cookies
+- **🔑 Application Secret Keys**: Generate and manage API keys for secure external access to feature toggles
+- **🛡️ Memory Authentication**: Persistent authentication with secure token management
 
 
 ## 🏗️ Architecture
@@ -72,8 +75,10 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    ```
 
 4. **Access the application**
-   - Web UI: http://localhost:8081
-   - API: http://localhost:8081/applications
+   - Web UI: http://localhost:8081 (requires login)
+   - Login Page: http://localhost:8081/login
+   - API: http://localhost:8081/applications (requires authentication)
+   - Default credentials: `admin / admin`
 
 ### Manual Setup
 
@@ -94,6 +99,19 @@ The application follows Clean Architecture and Hexagonal Architecture principles
 
 ## 🎯 Usage
 
+### Authentication
+
+1. **Login**
+   - Access http://localhost:8081/login
+   - Use default credentials: `admin / admin`
+   - Authentication uses secure HTTP-only cookies
+   - Sessions persist across browser restarts
+
+2. **API Authentication**
+   - Use session cookies for web interface
+   - Use Bearer tokens for API access
+   - Generate application secret keys for external API access
+
 ### Web Interface
 
 1. **Create an Application**
@@ -101,14 +119,20 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    - Enter application name
    - Click "Create"
 
-2. **Add Feature Toggles**
+2. **Generate Secret Keys**
+   - Navigate to application details
+   - Click "Generate Secret Key" 
+   - Copy the generated key (shown only once)
+   - Use for external API access without authentication
+
+3. **Add Feature Toggles**
    - Click the "eye" icon on an application card
    - Click "New Toggle" button
    - Enter toggle path (e.g., `feature.new.dashboard`)
    - Set initial enabled state
    - Click "Create"
 
-3. **Manage Toggle Hierarchy**
+4. **Manage Toggle Hierarchy**
    - Toggles are automatically organized in a hierarchical structure
    - Parent toggles control child toggles
    - Click on toggle paths to edit individual nodes
@@ -117,62 +141,131 @@ The application follows Clean Architecture and Hexagonal Architecture principles
 
 ### API Usage
 
+#### Authentication
+
+```bash
+# Login to get session cookie
+curl -X POST http://localhost:8081/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin"}' \
+  -c cookies.txt
+
+# Logout
+curl -X POST http://localhost:8081/auth/logout \
+  -b cookies.txt
+```
+
 #### Applications
 
 ```bash
-# Create application (handler.CreateApplication)
+# Create application (requires authentication)
 curl -X POST http://localhost:8081/applications \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
   -d '{"name": "My Application"}'
 
-# List applications (handler.GetAllApplications)
-curl http://localhost:8081/applications
+# List applications (requires authentication)
+curl http://localhost:8081/applications \
+  -H "Authorization: Bearer {token}"
 
-# Get application by ID (handler.GetApplication)
-curl http://localhost:8081/applications/{app_id}
+# Get application by ID (requires authentication)
+curl http://localhost:8081/applications/{app_id} \
+  -H "Authorization: Bearer {token}"
 
-# Update application (handler.UpdateApplication)
+# Update application (requires authentication)
 curl -X PUT http://localhost:8081/applications/{app_id} \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
   -d '{"name": "Updated Name"}'
 
-# Delete application (handler.DeleteApplication)
-curl -X DELETE http://localhost:8081/applications/{app_id}
+# Delete application (requires authentication)
+curl -X DELETE http://localhost:8081/applications/{app_id} \
+  -H "Authorization: Bearer {token}"
+```
+
+#### Secret Key Management
+
+```bash
+# Generate secret key for application (requires authentication)
+curl -X POST http://localhost:8081/applications/{app_id}/generate-secret \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
+  -d '{"name": "Production Key"}'
+
+# List secret keys for application (requires authentication)
+curl http://localhost:8081/applications/{app_id}/secret-keys \
+  -H "Authorization: Bearer {token}"
+
+# Delete secret key (requires authentication)
+curl -X DELETE http://localhost:8081/secret-keys/{secret_key_id} \
+  -H "Authorization: Bearer {token}"
+
+# Get toggles using secret key (public API)
+curl http://localhost:8081/api/toggles/by-secret/{secret_key}
 ```
 
 #### Feature Toggles
 
 ```bash
-# Create toggle (handler.CreateToggle)
+# Create toggle (requires authentication)
 curl -X POST http://localhost:8081/applications/{app_id}/toggles \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
   -d '{"toggle": "feature.new.dashboard"}'
 
-# List all toggles (flat, default) (handler.GetAllToggles)
-curl http://localhost:8081/applications/{app_id}/toggles
+# List all toggles (flat, default) (requires authentication)
+curl http://localhost:8081/applications/{app_id}/toggles \
+  -H "Authorization: Bearer {token}"
 
-# List all toggles as hierarchy (handler.GetAllToggles)
-curl "http://localhost:8081/applications/{app_id}/toggles?hierarchy=true"
+# List all toggles as hierarchy (requires authentication)
+curl "http://localhost:8081/applications/{app_id}/toggles?hierarchy=true" \
+  -H "Authorization: Bearer {token}"
 
-# Get toggle status by ID (handler.GetToggleStatus)
-curl http://localhost:8081/applications/{app_id}/toggles/{toggle_id}
+# Get toggle status by ID (requires authentication)
+curl http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
+  -H "Authorization: Bearer {token}"
 
-# Update toggle by ID (handler.UpdateToggle)
+# Update toggle by ID (requires authentication)
 curl -X PUT http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
   -d '{"enabled": false}'
 
-# Update toggle recursively (handler.UpdateEnabled)
+# Update toggle recursively (requires authentication)
 curl -X PUT http://localhost:8081/applications/{app_id}/toggle/{toggle_id} \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {token}" \
   -d '{"enabled": false}'
 
-# Delete toggle by ID (handler.DeleteToggle)
-curl -X DELETE http://localhost:8081/applications/{app_id}/toggles/{toggle_id}
+# Delete toggle by ID (requires authentication)
+curl -X DELETE http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
+  -H "Authorization: Bearer {token}"
 ```
 
 - Quando `hierarchy=true` é passado, a resposta será uma árvore de toggles (com filhos aninhados).
 - Sem o parâmetro, a resposta é uma lista plana.
+
+#### Using Secret Keys for External Access
+
+```bash
+# Get toggles using secret key (no authentication required)
+curl http://localhost:8081/api/toggles/by-secret/sk_1234567890abcdef...
+
+# Response includes application ID and all toggles
+{
+  "success": true,
+  "application_id": "01JZDH3YFPR88WB6DTRPMRSHRE",
+  "toggles": [
+    {
+      "id": "toggle123",
+      "application_id": "01JZDH3YFPR88WB6DTRPMRSHRE",
+      "toggle": "feature.new.dashboard",
+      "enabled": true,
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
+```
 
 ## 🏗️ Project Structure
 
@@ -408,14 +501,23 @@ For questions, issues, or contributions, please open an issue on GitHub.
 
 ## API Routes
 
-### Applications
+### Authentication
+- `POST   /auth/login`                  → Login (public)
+- `POST   /auth/logout`                 → Logout (public)
+
+### Applications (Protected)
 - `POST   /applications`                → CreateApplication
 - `GET    /applications`                → GetAllApplications
 - `GET    /applications/:id`            → GetApplication
 - `PUT    /applications/:id`            → UpdateApplication
 - `DELETE /applications/:id`            → DeleteApplication
 
-### Toggles
+### Secret Key Management (Protected)
+- `POST   /applications/:id/generate-secret`        → GenerateSecretKey
+- `GET    /applications/:id/secret-keys`            → GetSecretKeys
+- `DELETE /secret-keys/:id`                         → DeleteSecretKey
+
+### Toggles (Protected)
 - `POST   /applications/:id/toggles`                → CreateToggle
 - `GET    /applications/:id/toggles`                → GetAllToggles
 - `GET    /applications/:id/toggles/:toggleId`      → GetToggleStatus
@@ -423,9 +525,13 @@ For questions, issues, or contributions, please open an issue on GitHub.
 - `DELETE /applications/:id/toggles/:toggleId`      → DeleteToggle
 - `PUT    /applications/:id/toggle/:toggleId`       → UpdateEnabled (recursively)
 
+### Public API (Secret Key Access)
+- `GET    /api/toggles/by-secret/:secret`           → GetTogglesBySecret
+
 ### Static & Misc
 - `GET    /static/*`                   → Serve static assets (HTML, CSS, JS)
 - `GET    /LICENSE`                    → Serve LICENSE file
-- `GET    /`                           → Serve frontend (index.html)
+- `GET    /login`                      → Login page (public)
+- `GET    /`                           → Serve frontend (protected)
 
 --- 
