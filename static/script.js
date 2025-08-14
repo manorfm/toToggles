@@ -15,6 +15,30 @@ const globalLoadingSpinner = document.getElementById('global-loading-spinner');
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('[DEBUG] DOMContentLoaded: Document ready, starting initialization');
+    console.log('[DEBUG] DOMContentLoaded: Current location:', window.location.href);
+    console.log('[DEBUG] DOMContentLoaded: Current pathname:', window.location.pathname);
+    console.log('[DEBUG] DOMContentLoaded: Available cookies:', document.cookie);
+    
+    // Verificar se estamos na página de login
+    if (window.location.pathname.includes('/login')) {
+        console.log('[DEBUG] DOMContentLoaded: On login page - skipping main app initialization');
+        return;
+    }
+    
+    console.log('[DEBUG] DOMContentLoaded: On main page - proceeding with initialization');
+    
+    // Verificar se os elementos necessários existem (caso estejamos numa página diferente)
+    if (!document.getElementById('applications-section')) {
+        console.log('[DEBUG] DOMContentLoaded: Main app elements not found - skipping initialization');
+        return;
+    }
+    
+    // Inicializar dados do usuário na interface (cookies são gerenciados pelo servidor)
+    console.log('[DEBUG] DOMContentLoaded: Initializing user interface');
+    initializeUserInterface();
+    
+    console.log('[DEBUG] DOMContentLoaded: Loading applications');
     loadApplications();
     
     // Botões principais
@@ -54,8 +78,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Após carregar aplicações, verificar se deve abrir tela de toggles
-    const savedAppId = localStorage.getItem('currentAppId');
-    const savedAppName = localStorage.getItem('currentAppName');
+    const savedAppId = sessionStorage.getItem('currentAppId');
+    const savedAppName = sessionStorage.getItem('currentAppName');
     if (savedAppId && savedAppName) {
         showToggles(savedAppId, savedAppName);
     }
@@ -110,9 +134,9 @@ function showApplications() {
     togglesSection.classList.add('hidden');
     currentAppId = null;
     currentAppName = null;
-    // Clear localStorage
-    localStorage.removeItem('currentAppId');
-    localStorage.removeItem('currentAppName');
+    // Clear sessionStorage
+    sessionStorage.removeItem('currentAppId');
+    sessionStorage.removeItem('currentAppName');
     loadApplications();
 }
 
@@ -122,24 +146,60 @@ function showToggles(appId, appName) {
     appNameElement.textContent = `Toggles of ${appName}`;
     applicationsSection.classList.add('hidden');
     togglesSection.classList.remove('hidden');
-    // Persistir no localStorage
-    localStorage.setItem('currentAppId', appId);
-    localStorage.setItem('currentAppName', appName);
+    // Persistir no sessionStorage
+    sessionStorage.setItem('currentAppId', appId);
+    sessionStorage.setItem('currentAppName', appName);
     loadToggles(appId);
 }
 
 // Funções de API
 async function apiCall(url, options = {}) {
+    console.log(`[DEBUG] apiCall: Making request to ${url}`, {
+        method: options.method || 'GET',
+        headers: options.headers,
+        hasBody: !!options.body
+    });
+    
     try {
+        // Headers básicos (cookies são enviados automaticamente)
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+        
         const response = await fetch(url, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
+            headers,
+            credentials: 'include', // Include cookies in requests
             ...options
         });
         
+        console.log(`[DEBUG] apiCall: Response received`, {
+            url,
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok,
+            headers: Object.fromEntries(response.headers.entries())
+        });
+        
         if (!response.ok) {
+            // Verificar se é erro de autenticação
+            if (response.status === 401) {
+                console.log(`[DEBUG] apiCall: 401 Unauthorized - redirecting to login`);
+                console.log(`[DEBUG] apiCall: Current location:`, window.location.href);
+                console.log(`[DEBUG] apiCall: Cookies:`, document.cookie);
+                
+                // Verificar se já estamos na página de login para evitar loop
+                if (window.location.pathname.includes('/login')) {
+                    console.log(`[DEBUG] apiCall: Already on login page, not redirecting to avoid loop`);
+                    return;
+                }
+                
+                console.log(`[DEBUG] apiCall: Redirecting to /login`);
+                // Redirecionar para login (cookies serão limpos pelo servidor)
+                window.location.href = '/login';
+                return;
+            }
+            
             // Tentar extrair a mensagem de erro da resposta JSON
             let errorMessage = `HTTP error! status: ${response.status}`;
             try {
@@ -168,9 +228,17 @@ async function apiCall(url, options = {}) {
             throw new Error(errorMessage);
         }
         
-        return await response.json();
+        const data = await response.json();
+        console.log(`[DEBUG] apiCall: Success response data:`, data);
+        return data;
     } catch (error) {
-        console.error('API Error:', error);
+        console.error('[DEBUG] API Error:', error);
+        console.log(`[DEBUG] apiCall: Error details:`, {
+            url,
+            method: options.method || 'GET',
+            error: error.message,
+            stack: error.stack
+        });
         showError(`Error in request: ${error.message}`);
         throw error;
     }
@@ -178,14 +246,22 @@ async function apiCall(url, options = {}) {
 
 // Funções de Aplicação
 async function loadApplications() {
+    console.log('[DEBUG] loadApplications: Starting to load applications');
+    console.log('[DEBUG] loadApplications: Current location:', window.location.href);
+    console.log('[DEBUG] loadApplications: Current cookies:', document.cookie);
+    
     showGlobalLoading();
     try {
         // showLoading(applicationsList); // Remover esta linha, pois o spinner global será usado
+        console.log('[DEBUG] loadApplications: Making API call to /applications');
         const applications = await apiCall('/applications');
+        console.log('[DEBUG] loadApplications: Successfully received applications:', applications);
         renderApplications(applications);
     } catch (error) {
+        console.log('[DEBUG] loadApplications: Error occurred:', error);
         showEmptyState(applicationsList, 'No applications found', 'Create your first application to manage feature toggles and get started!', 'applications');
     } finally {
+        console.log('[DEBUG] loadApplications: Hiding global loading');
         hideGlobalLoading();
     }
 }
@@ -872,4 +948,178 @@ function updateRuleValuePlaceholder(ruleType) {
     };
     
     inputElement.placeholder = placeholders[ruleType] || 'Enter rule value...';
+}
+
+// Funções de autenticação
+function getCurrentUser() {
+    console.log('[DEBUG] getCurrentUser: Checking for current user in sessionStorage');
+    // Try to get user data from sessionStorage (set during login)
+    const userJson = sessionStorage.getItem('current_user');
+    console.log('[DEBUG] getCurrentUser: Found user data in sessionStorage:', userJson);
+    if (userJson) {
+        try {
+            const user = JSON.parse(userJson);
+            console.log('[DEBUG] getCurrentUser: Parsed user data:', user);
+            return user;
+        } catch (e) {
+            console.warn('[DEBUG] getCurrentUser: Error parsing user data:', e);
+            return null;
+        }
+    }
+    console.log('[DEBUG] getCurrentUser: No user data found in sessionStorage');
+    return null;
+}
+
+async function logout() {
+    try {
+        // Call logout endpoint to clear server-side cookie
+        await fetch('/auth/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch (error) {
+        console.warn('Logout request failed:', error);
+    }
+    
+    // Clear session data
+    sessionStorage.clear();
+    
+    // Redirecionar para login
+    window.location.href = '/login';
+}
+
+// Funções de interface do usuário
+function initializeUserInterface() {
+    console.log('[DEBUG] initializeUserInterface: Starting user interface initialization');
+    
+    // Verificar se estamos na página correta
+    if (window.location.pathname.includes('/login')) {
+        console.log('[DEBUG] initializeUserInterface: On login page - skipping user interface init');
+        return;
+    }
+    
+    const user = getCurrentUser();
+    console.log('[DEBUG] initializeUserInterface: Current user:', user);
+    
+    if (user) {
+        console.log('[DEBUG] initializeUserInterface: User found, updating interface elements');
+        // Atualizar nome do usuário nos elementos da interface
+        const userNameElements = document.querySelectorAll('#user-name, #dropdown-user-name');
+        userNameElements.forEach(element => {
+            element.textContent = user.username || 'User';
+        });
+        
+        // Atualizar role do usuário
+        const userRoleElement = document.getElementById('dropdown-user-role');
+        if (userRoleElement) {
+            userRoleElement.textContent = user.role === 'admin' ? 'Administrator' : 'User';
+        }
+        
+        // Atualizar avatar inicial se necessário
+        updateUserAvatar(user.username);
+    } else {
+        console.log('[DEBUG] initializeUserInterface: No user found - should redirect to login');
+        console.log('[DEBUG] initializeUserInterface: Current URL:', window.location.href);
+        console.log('[DEBUG] initializeUserInterface: Is on login page?', window.location.pathname.includes('/login'));
+        
+        // Se não está na página de login e não tem usuário, redirecionar para login
+        if (!window.location.pathname.includes('/login')) {
+            console.log('[DEBUG] initializeUserInterface: Redirecting to login - no authenticated user');
+            window.location.href = '/login';
+            return;
+        }
+    }
+    
+    // Configurar event listeners do menu do usuário
+    setupUserMenuListeners();
+}
+
+function updateUserAvatar(username) {
+    // Gerar inicial do username para o avatar
+    const initial = username ? username.charAt(0).toUpperCase() : 'U';
+    const avatarElements = document.querySelectorAll('#user-avatar, .user-menu-avatar');
+    
+    avatarElements.forEach(element => {
+        // Se não há SVG, criar texto com a inicial
+        if (username) {
+            element.innerHTML = `<div style="font-weight: 600; font-size: 14px;">${initial}</div>`;
+        }
+    });
+}
+
+function setupUserMenuListeners() {
+    const userMenuTrigger = document.getElementById('user-menu-trigger');
+    const userMenu = document.getElementById('user-menu');
+    const userMenuDropdown = document.getElementById('user-menu-dropdown');
+    
+    if (userMenuTrigger && userMenu && userMenuDropdown) {
+        // Toggle do menu
+        userMenuTrigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleUserMenu();
+        });
+        
+        // Fechar menu ao clicar fora
+        document.addEventListener('click', function(e) {
+            if (!userMenu.contains(e.target)) {
+                closeUserMenu();
+            }
+        });
+        
+        // Fechar menu com ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeUserMenu();
+            }
+        });
+    }
+}
+
+function toggleUserMenu() {
+    const userMenu = document.getElementById('user-menu');
+    const userMenuDropdown = document.getElementById('user-menu-dropdown');
+    
+    if (userMenuDropdown.classList.contains('show')) {
+        closeUserMenu();
+    } else {
+        openUserMenu();
+    }
+}
+
+function openUserMenu() {
+    const userMenu = document.getElementById('user-menu');
+    const userMenuDropdown = document.getElementById('user-menu-dropdown');
+    
+    userMenu.classList.add('open');
+    userMenuDropdown.classList.remove('hidden');
+    setTimeout(() => {
+        userMenuDropdown.classList.add('show');
+    }, 10);
+}
+
+function closeUserMenu() {
+    const userMenu = document.getElementById('user-menu');
+    const userMenuDropdown = document.getElementById('user-menu-dropdown');
+    
+    userMenu.classList.remove('open');
+    userMenuDropdown.classList.remove('show');
+    setTimeout(() => {
+        userMenuDropdown.classList.add('hidden');
+    }, 200);
+}
+
+// Funções dos modais do menu do usuário
+function openProfileModal() {
+    closeUserMenu();
+    showInfo('Profile settings modal will be implemented soon');
+}
+
+function openUsersModal() {
+    closeUserMenu();
+    showInfo('User management modal will be implemented soon');
+}
+
+function openSecretKeysModal() {
+    closeUserMenu();
+    showInfo('Secret keys management modal will be implemented soon');
 } 

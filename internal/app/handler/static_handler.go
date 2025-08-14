@@ -18,6 +18,11 @@ func ServeStatic(c *gin.Context) {
 		c.Next()
 		return
 	}
+	// NÃO intercepta rotas de autenticação
+	if strings.HasPrefix(c.Request.URL.Path, "/auth/") || c.Request.URL.Path == "/login" {
+		c.Next()
+		return
+	}
 	// Se a rota não for para uma API, serve o index.html
 	if !isAPIRoute(c.Request.URL.Path) {
 		c.File("static/index.html")
@@ -29,8 +34,42 @@ func ServeStatic(c *gin.Context) {
 
 // isAPIRoute verifica se a rota é uma rota de API
 func isAPIRoute(path string) bool {
-	return strings.HasPrefix(path, "/applications") ||
-		strings.HasPrefix(path, "/api") ||
+	// Apenas rotas específicas de API, não SPA routes que começam com /applications
+	if path == "/applications" {
+		return true
+	}
+	
+	// Verifica se é uma rota de API específica como /applications/{id} ou /applications/{id}/toggles
+	if strings.HasPrefix(path, "/applications/") {
+		// Remove o prefixo /applications/
+		remaining := strings.TrimPrefix(path, "/applications/")
+		parts := strings.Split(remaining, "/")
+		
+		if len(parts) >= 1 && parts[0] != "" {
+			// Lista de palavras reservadas que indicam SPA routes, não API
+			spaKeywords := []string{"view", "edit", "dashboard", "settings", "create", "list"}
+			
+			// Se a primeira parte é uma palavra reservada, é SPA route
+			for _, keyword := range spaKeywords {
+				if parts[0] == keyword {
+					return false
+				}
+			}
+			
+			// Se tem apenas o ID: /applications/{id} (assumindo que IDs não são palavras reservadas)
+			if len(parts) == 1 {
+				return true
+			}
+			// Se tem ID e "toggles": /applications/{id}/toggles
+			if len(parts) >= 2 && parts[1] == "toggles" {
+				return true
+			}
+		}
+		// Caso contrário, assumir que é SPA route
+		return false
+	}
+	
+	return strings.HasPrefix(path, "/api") ||
 		strings.HasPrefix(path, "/health")
 }
 

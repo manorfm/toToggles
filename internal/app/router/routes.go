@@ -18,39 +18,56 @@ func Init(router *gin.Engine) {
 	// Rotas de arquivos estáticos
 	router.Static("/static", "./static")
 
-	// Rotas de aplicações
-	applications := router.Group("/applications")
+	// Rotas públicas de autenticação
+	auth := router.Group("/auth")
 	{
-		applications.POST("", handler.CreateApplication)
-		applications.GET("", handler.GetAllApplications)
-		applications.GET("/:id", handler.GetApplication)
-		applications.PUT("/:id", handler.UpdateApplication)
-		applications.DELETE("/:id", handler.DeleteApplication)
+		auth.POST("/login", handler.Login)
+		auth.POST("/logout", handler.Logout)
 	}
 
-	// Rotas de toggles
-	toggles := router.Group("/applications/:id/toggles")
+	// Rotas protegidas que requerem autenticação
+	protected := router.Group("")
+	protected.Use(handler.ValidateToken())
 	{
-		toggles.POST("", handler.CreateToggle)
-		toggles.GET("", handler.GetAllToggles)
-	}
-	toggleById := router.Group("/applications/:id/toggles/:toggleId")
-	{
-		toggleById.GET("", handler.GetToggleStatus)
-		toggleById.PUT("", handler.UpdateToggle)
-		toggleById.DELETE("", handler.DeleteToggle)
-	}
+		// Rotas de aplicações
+		applications := protected.Group("/applications")
+		{
+			applications.POST("", handler.CreateApplication)
+			applications.GET("", handler.GetAllApplications)
+			applications.GET("/:id", handler.GetApplication)
+			applications.PUT("/:id", handler.UpdateApplication)
+			applications.DELETE("/:id", handler.DeleteApplication)
+		}
 
-	// Rota para atualizar enabled recursivamente
-	router.PUT("/applications/:id/toggle/:toggleId", handler.UpdateEnabled)
+		// Rotas de toggles
+		toggles := protected.Group("/applications/:id/toggles")
+		{
+			toggles.POST("", handler.CreateToggle)
+			toggles.GET("", handler.GetAllToggles)
+		}
+		toggleById := protected.Group("/applications/:id/toggles/:toggleId")
+		{
+			toggleById.GET("", handler.GetToggleStatus)
+			toggleById.PUT("", handler.UpdateToggle)
+			toggleById.DELETE("", handler.DeleteToggle)
+		}
+
+		// Rota para atualizar enabled recursivamente
+		protected.PUT("/applications/:id/toggle/:toggleId", handler.UpdateEnabled)
+	}
 
 	// Rota para servir o arquivo LICENSE da raiz
 	router.GET("/LICENSE", func(c *gin.Context) {
 		c.File("LICENSE")
 	})
 
-	// Rota raiz serve o frontend
-	router.GET("/", func(c *gin.Context) {
+	// Rota para página de login
+	router.GET("/login", func(c *gin.Context) {
+		c.File("static/login.html")
+	})
+
+	// Rota raiz serve o frontend (protegida)
+	router.GET("/", handler.ValidateToken(), func(c *gin.Context) {
 		c.File("static/index.html")
 	})
 }

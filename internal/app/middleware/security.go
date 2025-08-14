@@ -9,7 +9,7 @@ import (
 func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Content Security Policy - previne XSS
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';")
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self';")
 
 		// X-Frame-Options - previne clickjacking
 		c.Header("X-Frame-Options", "DENY")
@@ -42,8 +42,12 @@ func SecurityHeaders() gin.HandlerFunc {
 // CORSHeaders adiciona headers CORS básicos
 func CORSHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Permitir apenas origens específicas em produção
-		c.Header("Access-Control-Allow-Origin", "*")
+		// For same-origin requests (our case), we can be more permissive
+		// In production, restrict this to specific domains
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 		c.Header("Access-Control-Expose-Headers", "Content-Length")

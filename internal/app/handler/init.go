@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/infrastructure/database"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 	"gorm.io/gorm"
@@ -10,6 +11,8 @@ import (
 var (
 	appHandler    *ApplicationHandler
 	toggleHandler *ToggleHandler
+	authHandler   *AuthHandler
+	userHandler   *UserHandler
 )
 
 // InitHandlers inicializa os handlers
@@ -17,14 +20,27 @@ func InitHandlers(db *gorm.DB) {
 	// Inicializa repositórios
 	appRepo := database.NewApplicationRepository(db)
 	toggleRepo := database.NewToggleRepository(db)
+	userRepo := database.NewUserRepository(db)
+
+	// Inicializa sistema de autenticação
+	authManager := auth.NewAuthManager()
+	localStrategy := auth.NewLocalAuthStrategy(userRepo, []byte("jwt-secret-key"))
+	authManager.RegisterStrategy("local", localStrategy)
 
 	// Inicializa use cases
 	appUseCase := usecase.NewApplicationUseCase(appRepo)
 	toggleUseCase := usecase.NewToggleUseCase(toggleRepo, appRepo)
+	authUseCase := usecase.NewAuthUseCase(userRepo, authManager)
+	userUseCase := usecase.NewUserUseCase(userRepo)
+
+	// Inicializar usuário admin padrão
+	authUseCase.InitializeDefaultAdmin()
 
 	// Inicializa handlers
 	appHandler = NewApplicationHandler(appUseCase, toggleUseCase)
 	toggleHandler = NewToggleHandler(toggleUseCase)
+	authHandler = NewAuthHandler(authUseCase)
+	userHandler = NewUserHandler(userUseCase)
 }
 
 // Funções globais para as rotas
@@ -70,4 +86,21 @@ func DeleteToggle(c *gin.Context) {
 
 func UpdateEnabled(c *gin.Context) {
 	toggleHandler.UpdateEnabled(c)
+}
+
+// Funções de autenticação
+func Login(c *gin.Context) {
+	authHandler.Login(c)
+}
+
+func Logout(c *gin.Context) {
+	authHandler.Logout(c)
+}
+
+func ValidateToken() gin.HandlerFunc {
+	return authHandler.ValidateToken()
+}
+
+func RequireAdmin() gin.HandlerFunc {
+	return authHandler.RequireAdmin()
 }
