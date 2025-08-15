@@ -61,7 +61,21 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userUseCase.CreateUser(req.Username, req.Password, role)
+	// Criar usuário
+	user := &entity.User{
+		Username: req.Username,
+		Role:     role,
+	}
+
+	err := user.SetPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	err = h.userUseCase.CreateUser(user)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -156,7 +170,21 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userUseCase.UpdateUser(id, req.Username, role)
+	// Buscar o usuário atual
+	user, err := h.userUseCase.GetUserByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "User not found",
+		})
+		return
+	}
+
+	// Atualizar dados
+	user.Username = req.Username
+	user.Role = role
+
+	// Salvar alterações
+	err = h.userUseCase.UpdateUser(user)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),

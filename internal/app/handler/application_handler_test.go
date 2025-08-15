@@ -28,6 +28,7 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 			name: "successful creation",
 			requestBody: map[string]interface{}{
 				"name": "Test Application",
+				"team_id": "team123",
 			},
 			expectedStatus: http.StatusCreated,
 			expectedError:  "",
@@ -36,6 +37,15 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 			name: "missing name",
 			requestBody: map[string]interface{}{
 				"name": "",
+				"team_id": "team123",
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "validation failed",
+		},
+		{
+			name: "missing team_id",
+			requestBody: map[string]interface{}{
+				"name": "Test Application",
 			},
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "validation failed",
@@ -58,7 +68,15 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 			useCase := usecase.NewApplicationUseCase(mockRepo)
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase)
+			teamMock := usecase.NewMockTeamRepository()
+			userMock := usecase.NewMockUserRepository()
+			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
+			
+			// Add a test team to the mock
+			testTeam := &entity.Team{ID: "team123", Name: "Test Team"}
+			teamMock.Teams["team123"] = testTeam
+			
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
 
 			router.POST("/applications", handler.CreateApplication)
 
@@ -140,7 +158,10 @@ func TestApplicationHandler_GetApplication(t *testing.T) {
 			useCase := usecase.NewApplicationUseCase(mockRepo)
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase)
+			teamMock := usecase.NewMockTeamRepository()
+			userMock := usecase.NewMockUserRepository()
+			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
 
 			router.GET("/applications/:id", handler.GetApplication)
 
@@ -184,7 +205,17 @@ func TestApplicationHandler_GetAllApplications(t *testing.T) {
 	useCase := usecase.NewApplicationUseCase(mockRepo)
 	toggleMock := usecase.NewMockToggleRepository()
 	toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
-	handler := NewApplicationHandler(useCase, toggleUseCase)
+	teamMock := usecase.NewMockTeamRepository()
+	userMock := usecase.NewMockUserRepository()
+	teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
+	handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
+
+	// Add middleware to set authenticated user
+	router.Use(func(c *gin.Context) {
+		testUser := &entity.User{ID: "test-user", Username: "test", Role: entity.UserRoleRoot}
+		c.Set("user", testUser)
+		c.Next()
+	})
 
 	router.GET("/applications", handler.GetAllApplications)
 
@@ -267,7 +298,10 @@ func TestApplicationHandler_UpdateApplication(t *testing.T) {
 			useCase := usecase.NewApplicationUseCase(mockRepo)
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase)
+			teamMock := usecase.NewMockTeamRepository()
+			userMock := usecase.NewMockUserRepository()
+			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
 
 			router.PUT("/applications/:id", handler.UpdateApplication)
 
@@ -341,7 +375,10 @@ func TestApplicationHandler_DeleteApplication(t *testing.T) {
 			useCase := usecase.NewApplicationUseCase(mockRepo)
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase)
+			teamMock := usecase.NewMockTeamRepository()
+			userMock := usecase.NewMockUserRepository()
+			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
 
 			router.DELETE("/applications/:id", handler.DeleteApplication)
 

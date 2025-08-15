@@ -13,149 +13,18 @@ const togglesList = document.getElementById('toggles-list');
 const appNameElement = document.getElementById('app-name');
 const globalLoadingSpinner = document.getElementById('global-loading-spinner');
 
-// Funções de Secret Key
-let currentSecretKeyAppId = null;
-let currentSecretKeyAppName = null;
 
-async function manageSecretKey(appId, appName) {
-    currentSecretKeyAppId = appId;
-    currentSecretKeyAppName = appName;
-    
-    // Atualizar título do modal
-    document.getElementById('secret-key-modal-title').textContent = `Secret Key - ${appName}`;
-    
-    // Reset modal state
-    resetSecretKeyModal();
-    
-    // Verificar se já existe uma secret key
-    try {
-        const response = await apiCall(`/applications/${appId}/secret-keys`);
-        if (response.secret_keys && response.secret_keys.length > 0) {
-            showExistingSecretKey(response.secret_keys[0]);
-        } else {
-            showGenerateSecretKey();
-        }
-    } catch (error) {
-        showGenerateSecretKey();
-    }
-    
-    openModal('secret-key-modal');
-}
-
-function resetSecretKeyModal() {
-    document.getElementById('secret-key-generate-section').style.display = 'none';
-    document.getElementById('secret-key-display-section').style.display = 'none';
-    document.getElementById('secret-key-existing-section').style.display = 'none';
-}
-
-function showGenerateSecretKey() {
-    resetSecretKeyModal();
-    document.getElementById('secret-key-generate-section').style.display = 'block';
-    document.getElementById('generate-secret-btn').style.display = 'inline-flex';
-    document.getElementById('regenerate-secret-btn').style.display = 'none';
-}
-
-function showExistingSecretKey(secretKey) {
-    resetSecretKeyModal();
-    document.getElementById('secret-key-existing-section').style.display = 'block';
-    document.getElementById('generate-secret-btn').style.display = 'none';
-    document.getElementById('regenerate-secret-btn').style.display = 'inline-flex';
-    document.getElementById('secret-key-info').innerHTML = `
-        <div class="secret-key-info">
-            <p><strong>Name:</strong> ${secretKey.name}</p>
-            <p><strong>Created:</strong> ${new Date(secretKey.created_at).toLocaleDateString()}</p>
-            <p><strong>Key:</strong> <code>sk_****...****</code></p>
-        </div>
-    `;
-}
-
-function showSecretKeyDisplay(plainKey) {
-    resetSecretKeyModal();
-    document.getElementById('secret-key-display-section').style.display = 'block';
-    document.getElementById('secret-key-value').textContent = plainKey;
-    document.getElementById('generate-secret-btn').style.display = 'none';
-    document.getElementById('regenerate-secret-btn').style.display = 'none';
-}
-
-async function generateSecretKey() {
-    try {
-        showGlobalLoading();
-        const response = await apiCall(`/applications/${currentSecretKeyAppId}/generate-secret`, {
-            method: 'POST'
-        });
-        
-        showSecretKeyDisplay(response.plain_key);
-        showSuccess('Secret key generated successfully! Save it securely - it will not be shown again.');
-    } catch (error) {
-        showError('Failed to generate secret key: ' + error.message);
-    } finally {
-        hideGlobalLoading();
-    }
-}
-
-async function regenerateSecretKey() {
-    if (!confirm('Are you sure you want to regenerate the secret key? This will invalidate the previous key and break any integrations using it.')) {
-        return;
-    }
-    
-    try {
-        showGlobalLoading();
-        const response = await apiCall(`/applications/${currentSecretKeyAppId}/generate-secret`, {
-            method: 'POST'
-        });
-        
-        showSecretKeyDisplay(response.plain_key);
-        showSuccess('Secret key regenerated successfully! The previous key has been invalidated. Save the new key securely.');
-    } catch (error) {
-        showError('Failed to regenerate secret key: ' + error.message);
-    } finally {
-        hideGlobalLoading();
-    }
-}
-
-function copySecretKey() {
-    const secretKeyValue = document.getElementById('secret-key-value').textContent;
-    navigator.clipboard.writeText(secretKeyValue).then(() => {
-        showSuccess('Secret key copied to clipboard!');
-    }).catch(() => {
-        showError('Failed to copy secret key to clipboard');
-    });
-}
-
-// Event Listeners
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('[DEBUG] DOMContentLoaded: Document ready, starting initialization');
-    console.log('[DEBUG] DOMContentLoaded: Current location:', window.location.href);
-    console.log('[DEBUG] DOMContentLoaded: Current pathname:', window.location.pathname);
-    console.log('[DEBUG] DOMContentLoaded: Available cookies:', document.cookie);
-    
-    // Verificar se estamos na página de login
-    if (window.location.pathname.includes('/login')) {
-        console.log('[DEBUG] DOMContentLoaded: On login page - skipping main app initialization');
-        return;
-    }
-    
-    console.log('[DEBUG] DOMContentLoaded: On main page - proceeding with initialization');
-    
-    // Verificar se os elementos necessários existem (caso estejamos numa página diferente)
+// Event Listeners initialization function
+function initializeEventListeners() {
+    // Verificar se os elementos necessários existem
     if (!document.getElementById('applications-section')) {
-        console.log('[DEBUG] DOMContentLoaded: Main app elements not found - skipping initialization');
+        console.log('[DEBUG] initializeEventListeners: Main app elements not found - skipping');
         return;
     }
-    
-    // Inicializar dados do usuário na interface (cookies são gerenciados pelo servidor)
-    console.log('[DEBUG] DOMContentLoaded: Initializing user interface');
-    initializeUserInterface();
-    
-    console.log('[DEBUG] DOMContentLoaded: Loading applications');
-    loadApplications();
     
     // Botões principais
     document.getElementById('new-app-btn').addEventListener('click', () => {
-        currentEditingAppId = null;
-        document.getElementById('app-modal-title').textContent = 'New Application';
-        document.getElementById('app-form').reset();
-        openModal('app-modal');
+        openNewApplicationModal();
     });
     document.getElementById('new-toggle-btn').addEventListener('click', () => openModal('toggle-modal'));
     document.getElementById('back-to-apps').addEventListener('click', showApplications);
@@ -192,11 +61,64 @@ document.addEventListener('DOMContentLoaded', function() {
     if (savedAppId && savedAppName) {
         showToggles(savedAppId, savedAppName);
     }
-});
+}
 
 // Funções de Modal
+async function openNewApplicationModal() {
+    try {
+        // Reset form and set title
+        currentEditingAppId = null;
+        document.getElementById('app-modal-title').textContent = 'New Application';
+        document.getElementById('app-form').reset();
+        
+        // Load teams for selection
+        const teamsResponse = await apiCall('/teams');
+        const teamSelect = document.getElementById('app-team-select');
+        
+        // Clear previous options except the first one
+        teamSelect.innerHTML = '<option value="">Select a team...</option>';
+        
+        if (teamsResponse.success && teamsResponse.teams) {
+            teamsResponse.teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.id;
+                option.textContent = team.name;
+                teamSelect.appendChild(option);
+            });
+        }
+        
+        // Open the modal
+        openModal('app-modal');
+        
+    } catch (error) {
+        console.error('Failed to load teams:', error);
+        // Still open the modal even if teams failed to load
+        openModal('app-modal');
+    }
+}
+
 function openModal(modalId) {
     const modal = document.getElementById(modalId);
+    if (!modal) {
+        console.error(`Modal with id "${modalId}" not found`);
+        return;
+    }
+    
+    // Manage modal stack for proper z-index handling
+    if (!window.modalStack) {
+        window.modalStack = [];
+    }
+    
+    // Add to modal stack if not already present
+    if (!window.modalStack.includes(modalId)) {
+        window.modalStack.push(modalId);
+    }
+    
+    // Update z-index based on stack position
+    const baseZIndex = 1000;
+    const zIndex = baseZIndex + (window.modalStack.length * 10);
+    modal.style.zIndex = zIndex;
+    
     modal.classList.remove('hidden');
     
     // Foco automático no input principal após abrir o modal
@@ -222,7 +144,25 @@ function openModal(modalId) {
 }
 
 function closeModal(modalId) {
-    document.getElementById(modalId).classList.add('hidden');
+    const modal = document.getElementById(modalId);
+    if (!modal) {
+        console.error(`Modal with id "${modalId}" not found`);
+        return;
+    }
+    
+    modal.classList.add('hidden');
+    
+    // Remove from modal stack
+    if (window.modalStack) {
+        const index = window.modalStack.indexOf(modalId);
+        if (index > -1) {
+            window.modalStack.splice(index, 1);
+        }
+    }
+    
+    // Reset modal z-index
+    modal.style.zIndex = '';
+    
     // Limpar formulários
     if (modalId === 'app-modal') {
         document.getElementById('app-form').reset();
@@ -234,8 +174,45 @@ function closeModal(modalId) {
     } else if (modalId === 'edit-toggle-modal') {
         document.getElementById('edit-toggle-form').reset();
         editingToggleId = null;
+    } else if (modalId === 'secret-key-modal') {
+        document.getElementById('secret-key-display').value = '';
+    } else if (modalId === 'edit-user-modal') {
+        // Limpar formulário de edição de usuário
+        document.getElementById('edit-user-role').innerHTML = '<option value="">Select role...</option>';
+        document.getElementById('edit-user-teams').innerHTML = '';
+        document.getElementById('team-search-input').value = '';
+        document.getElementById('teams-empty-state').classList.add('hidden');
+        // Limpar dados globais
+        allTeamsData = [];
+        filteredTeamsData = [];
+        window.currentEditingUserTeams = [];
     }
 }
+
+// Global modal management system
+function closeTopModal() {
+    if (window.modalStack && window.modalStack.length > 0) {
+        const topModalId = window.modalStack[window.modalStack.length - 1];
+        
+        // Handle special modal types
+        if (topModalId === 'users-modal') {
+            closeUsersModal();
+        } else {
+            closeModal(topModalId);
+        }
+        
+        return true;
+    }
+    return false;
+}
+
+// Add global ESC key handler
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTopModal();
+    }
+});
 
 // Funções de Navegação
 function showApplications() {
@@ -309,6 +286,33 @@ async function apiCall(url, options = {}) {
                 return;
             }
             
+            // Verificar se é precondição requerida (troca de senha)
+            if (response.status === 428) {
+                console.log(`[DEBUG] apiCall: 428 Precondition Required - password change required`);
+                
+                try {
+                    const errorData = await response.json();
+                    if (errorData.redirect === '/change-password') {
+                        console.log(`[DEBUG] apiCall: Redirecting to change password page`);
+                        
+                        // Verificar se já estamos na página de troca de senha para evitar loop
+                        if (window.location.pathname.includes('/change-password')) {
+                            console.log(`[DEBUG] apiCall: Already on change-password page, not redirecting to avoid loop`);
+                            return { success: false, error: 'Password change required' };
+                        }
+                        
+                        window.location.href = '/change-password';
+                        return { success: false, error: 'Redirecting to password change' };
+                    }
+                } catch (parseError) {
+                    console.warn('Could not parse 428 response:', parseError);
+                }
+                
+                // Fallback - mostrar mensagem de erro
+                showError('Password change required. Please change your password first.');
+                return { success: false, error: 'Password change required' };
+            }
+            
             // Tentar extrair a mensagem de erro da resposta JSON
             let errorMessage = `HTTP error! status: ${response.status}`;
             try {
@@ -379,22 +383,40 @@ async function handleCreateApplication(event) {
     event.preventDefault();
     
     const name = document.getElementById('app-name-input').value.trim();
-    if (!name) return;
+    const teamId = document.getElementById('app-team-select').value;
+    
+    if (!name) {
+        showError('Application name is required');
+        return;
+    }
     
     try {
         if (currentEditingAppId) {
             // Editando aplicação existente
+            const updateData = { name };
+            if (teamId) {
+                updateData.team_id = teamId;
+            }
+            
             await apiCall(`/applications/${currentEditingAppId}`, {
                 method: 'PUT',
-                body: JSON.stringify({ name })
+                body: JSON.stringify(updateData)
             });
             showSuccess('Application updated successfully!');
             currentEditingAppId = null;
         } else {
             // Criando nova aplicação
+            if (!teamId) {
+                showError('Please select a team for this application');
+                return;
+            }
+            
             await apiCall('/applications', {
                 method: 'POST',
-                body: JSON.stringify({ name })
+                body: JSON.stringify({ 
+                    name: name,
+                    team_id: teamId
+                })
             });
             showSuccess('Application created successfully!');
         }
@@ -421,11 +443,9 @@ function renderApplications(applications) {
                             <circle cx="12" cy="12" r="3"/>
                         </svg>
                     </button>
-                    <button class="icon-btn" title="Gerenciar Secret Key" onclick="event.stopPropagation(); manageSecretKey('${app.id}', '${app.name}')">
+                    <button class="icon-btn" title="Gerar Secret Key" onclick="event.stopPropagation(); generateSecretKey('${app.id}', '${app.name}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                            <circle cx="12" cy="16" r="1"/>
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
                         </svg>
                     </button>
                     <button class="icon-btn" title="Editar Aplicação" onclick="event.stopPropagation(); editApplication('${app.id}', '${app.name}')">
@@ -840,11 +860,84 @@ async function deleteApplication(appId, appName) {
     }
 }
 
-function editApplication(appId, appName) {
-    currentEditingAppId = appId;
-    document.getElementById('app-name-input').value = appName;
-    document.getElementById('app-modal-title').textContent = 'Edit Application';
-    openModal('app-modal');
+async function editApplication(appId, appName) {
+    try {
+        currentEditingAppId = appId;
+        document.getElementById('app-name-input').value = appName;
+        document.getElementById('app-modal-title').textContent = 'Edit Application';
+        
+        // Load teams for selection
+        const teamsResponse = await apiCall('/teams');
+        const teamSelect = document.getElementById('app-team-select');
+        
+        // Clear previous options
+        teamSelect.innerHTML = '<option value="">Select a team...</option>';
+        
+        if (teamsResponse.success && teamsResponse.teams) {
+            teamsResponse.teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.id;
+                option.textContent = team.name;
+                teamSelect.appendChild(option);
+            });
+        }
+        
+        // Get current application details to find its team
+        const appResponse = await apiCall(`/applications/${appId}`);
+        if (appResponse.success && appResponse.teams && appResponse.teams.length > 0) {
+            // Select the current team
+            teamSelect.value = appResponse.teams[0].id;
+        }
+        
+        openModal('app-modal');
+        
+    } catch (error) {
+        console.error('Failed to load application details:', error);
+        // Still open the modal even if data failed to load
+        openModal('app-modal');
+    }
+}
+
+async function generateSecretKey(appId, appName) {
+    if (!confirm(`Generate a new secret key for "${appName}"?\n\nThis will create a new API key for accessing toggles.`)) {
+        return;
+    }
+    
+    try {
+        const response = await apiCall(`/applications/${appId}/generate-secret`, {
+            method: 'POST'
+        });
+        
+        if (response.success) {
+            // Show the generated secret key in the proper modal
+            const secretKey = response.secret_key || response.key || 'Generated successfully';
+            
+            // Set the secret key in the modal
+            document.getElementById('secret-key-display').value = secretKey;
+            
+            // Set up copy button
+            const copyBtn = document.getElementById('copy-secret-btn');
+            copyBtn.onclick = function() {
+                navigator.clipboard.writeText(secretKey).then(() => {
+                    showSuccess('Secret key copied to clipboard!');
+                }).catch(() => {
+                    // Fallback for older browsers
+                    document.getElementById('secret-key-display').select();
+                    document.execCommand('copy');
+                    showSuccess('Secret key copied to clipboard!');
+                });
+            };
+            
+            // Open the modal
+            openModal('secret-key-modal');
+            
+            showSuccess('Secret key generated successfully!');
+        } else {
+            showError(response.error || 'Failed to generate secret key');
+        }
+    } catch (error) {
+        showError('Error generating secret key');
+    }
 }
 
 // Funções de UI
@@ -902,6 +995,190 @@ function showEmptyState(container, title, message = '', iconType = 'default') {
             </div>
         </div>
     `;
+}
+
+// Password Modal Functions
+function showPasswordModal(username, password) {
+    const modalHTML = `
+        <div id="password-modal" class="modal-overlay">
+            <div class="password-modal-container">
+                <div class="password-modal-content">
+                    <div class="password-modal-header">
+                        <div class="password-modal-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <circle cx="12" cy="16" r="1"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </div>
+                        <div class="password-modal-title-section">
+                            <h2 class="password-modal-title">User Created Successfully!</h2>
+                            <p class="password-modal-subtitle">Please save the generated password</p>
+                        </div>
+                    </div>
+                    
+                    <div class="password-modal-body">
+                        <div class="user-info-section">
+                            <div class="info-item">
+                                <label class="info-label">Username:</label>
+                                <span class="info-value">${username}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="password-section">
+                            <div class="password-field-container">
+                                <label class="password-label">Generated Password:</label>
+                                <div class="password-display-container">
+                                    <input type="text" id="generated-password" value="${password}" readonly class="password-display">
+                                    <button type="button" onclick="copyPassword()" class="copy-password-btn">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                        </svg>
+                                        Copy
+                                    </button>
+                                </div>
+                                <div class="password-warning">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                        <line x1="12" y1="9" x2="12" y2="13"/>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                    </svg>
+                                    Make sure to save this password. It will not be shown again.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="password-modal-footer">
+                        <button type="button" onclick="copyPassword()" class="secondary-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                            </svg>
+                            Copy Password
+                        </button>
+                        <button type="button" onclick="closePasswordModal()" class="primary-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20,6 9,17 4,12"/>
+                            </svg>
+                            Got It
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add modal to DOM
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Show modal with animation
+    setTimeout(() => {
+        const modal = document.getElementById('password-modal');
+        if (modal) {
+            modal.classList.add('show');
+        }
+    }, 10);
+}
+
+function copyPassword() {
+    const passwordField = document.getElementById('generated-password');
+    if (passwordField) {
+        passwordField.select();
+        passwordField.setSelectionRange(0, 99999); // For mobile devices
+        
+        try {
+            document.execCommand('copy');
+            showSuccess('Password copied to clipboard!');
+        } catch (err) {
+            // Fallback for modern browsers
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(passwordField.value).then(() => {
+                    showSuccess('Password copied to clipboard!');
+                }).catch(() => {
+                    showError('Failed to copy password');
+                });
+            } else {
+                showError('Copy not supported in this browser');
+            }
+        }
+    }
+}
+
+function closePasswordModal() {
+    const modal = document.getElementById('password-modal');
+    if (modal) {
+        modal.classList.add('closing');
+        setTimeout(() => {
+            modal.remove();
+            // Refresh the users modal to show the new user
+            refreshUsersModal();
+        }, 300);
+    }
+}
+
+function refreshUsersModal() {
+    // Close any existing form
+    const existingForm = document.getElementById('create-user-form');
+    if (existingForm) {
+        existingForm.remove();
+    }
+    
+    // Reload users and teams data
+    refreshUserAndTeamLists();
+}
+
+// User management and permissions
+let currentUser = null;
+
+async function loadCurrentUser() {
+    try {
+        const response = await apiCall('/profile');
+        if (response.success && response.user) {
+            currentUser = response.user;
+            updateUIBasedOnUserRole();
+            return currentUser;
+        }
+    } catch (error) {
+        console.error('Failed to load current user:', error);
+    }
+    return null;
+}
+
+function updateUIBasedOnUserRole() {
+    if (!currentUser) return;
+    
+    // Hide create buttons for regular users (only root and admin can create)
+    const newAppBtn = document.getElementById('new-app-btn');
+    const newToggleBtn = document.getElementById('new-toggle-btn');
+    
+    if (currentUser.role === 'user') {
+        // Hide create buttons for regular users
+        if (newAppBtn) newAppBtn.style.display = 'none';
+        if (newToggleBtn) newToggleBtn.style.display = 'none';
+    } else {
+        // Show create buttons for root and admin users
+        if (newAppBtn) newAppBtn.style.display = 'flex';
+        if (newToggleBtn) newToggleBtn.style.display = 'flex';
+    }
+    
+    // Update user info in header
+    const userNameElements = document.querySelectorAll('#user-name, #dropdown-user-name');
+    const userRoleElement = document.getElementById('dropdown-user-role');
+    
+    userNameElements.forEach(element => {
+        if (element) element.textContent = currentUser.username;
+    });
+    
+    if (userRoleElement) {
+        const roleMap = {
+            'root': 'Root User',
+            'admin': 'Administrator', 
+            'user': 'User'
+        };
+        userRoleElement.textContent = roleMap[currentUser.role] || currentUser.role;
+    }
 }
 
 function showToast(message, type = 'info') {
@@ -1230,12 +1507,938 @@ function openProfileModal() {
     showInfo('Profile settings modal will be implemented soon');
 }
 
-function openUsersModal() {
+async function openUsersModal() {
     closeUserMenu();
-    showInfo('User management modal will be implemented soon');
+    
+    // Verificar se o usuário é root
+    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+    if (currentUser.role !== 'root') {
+        showError('Only root users can manage users');
+        return;
+    }
+    
+    try {
+        showGlobalLoading();
+        const response = await apiCall('/users?' + Date.now());
+        displayUsersModal(response.users);
+    } catch (error) {
+        showError('Failed to load users: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
 }
 
-function openSecretKeysModal() {
-    closeUserMenu();
-    showInfo('Secret keys management modal will be implemented soon');
-} 
+async function displayUsersModal(users) {
+    // Verificar se já existe um modal e removê-lo
+    const existingModal = document.getElementById('users-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Carregar teams para associações
+    let teams = [];
+    try {
+        const teamsResponse = await apiCall('/teams');
+        teams = teamsResponse.teams || [];
+    } catch (error) {
+        console.warn('Could not load teams:', error);
+    }
+    
+    // Criar modal dinamicamente com interface profissional redesenhada
+    const modalHTML = `
+        <div id="users-modal" class="modal-overlay">
+            <div class="management-modal-container">
+                <div class="management-modal-content">
+                    <!-- Header -->
+                    <div class="management-modal-header">
+                        <div class="management-title-section">
+                            <div class="management-modal-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 class="management-title">User & Team Management</h2>
+                                <p class="management-subtitle">Manage system access and organization</p>
+                            </div>
+                        </div>
+                        <button class="modal-close-btn" onclick="closeUsersModal()" aria-label="Close">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                                <path d="M14.53 4.53l-1.06-1.06L9 7.94 4.53 3.47 3.47 4.53 7.94 9l-4.47 4.53 1.06 1.06L9 10.06l4.53 4.47 1.06-1.06L10.06 9z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Navigation Tabs -->
+                    <div class="management-nav">
+                        <div class="management-tabs">
+                            <button class="management-tab-btn active" onclick="switchManagementTab('users')" id="users-tab">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                </svg>
+                                <span>Users</span>
+                                <span class="management-tab-count">${users.length}</span>
+                            </button>
+                            <button class="management-tab-btn" onclick="switchManagementTab('teams')" id="teams-tab">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                </svg>
+                                <span>Teams</span>
+                                <span class="management-tab-count">${teams.length}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Content Area -->
+                    <div class="management-modal-body">
+                        <!-- Users Panel -->
+                        <div id="users-panel" class="management-panel active">
+                            <div class="management-panel-header">
+                                <div>
+                                    <h3 class="panel-title">System Users</h3>
+                                    <p class="panel-description">Manage user accounts and permissions</p>
+                                </div>
+                                <button class="btn btn-primary" onclick="openCreateUserForm()">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z"/>
+                                    </svg>
+                                    <span>Add User</span>
+                                </button>
+                            </div>
+                            <div id="users-list" class="management-grid">
+                                ${generateUsersHTML(users)}
+                            </div>
+                        </div>
+
+                        <!-- Teams Panel -->
+                        <div id="teams-panel" class="management-panel">
+                            <div class="management-panel-header">
+                                <div>
+                                    <h3 class="panel-title">Teams</h3>
+                                    <p class="panel-description">Organize users into teams for better collaboration</p>
+                                </div>
+                                <button class="btn btn-primary" onclick="openCreateTeamForm()">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                        <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z"/>
+                                    </svg>
+                                    <span>Create Team</span>
+                                </button>
+                            </div>
+                            <div id="teams-list" class="management-grid">
+                                ${generateTeamsHTML(teams)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Adicionar modal ao DOM
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Mostrar modal using proper modal management
+    setTimeout(() => {
+        const modal = document.getElementById('users-modal');
+        if (modal) {
+            // Manage modal stack for proper z-index handling
+            if (!window.modalStack) {
+                window.modalStack = [];
+            }
+            
+            // Add to modal stack
+            if (!window.modalStack.includes('users-modal')) {
+                window.modalStack.push('users-modal');
+            }
+            
+            // Update z-index based on stack position
+            const baseZIndex = 1000;
+            const zIndex = baseZIndex + (window.modalStack.length * 10);
+            modal.style.zIndex = zIndex;
+            
+            modal.classList.remove('hidden');
+        }
+    }, 10);
+}
+
+function generateUsersHTML(users) {
+    if (!users || users.length === 0) {
+        return `
+            <div class="management-empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <h3>No Users Found</h3>
+                <p>Start by creating your first user account to manage system access.</p>
+            </div>
+        `;
+    }
+    
+    return users.map(user => `
+        <div class="management-item">
+            <div class="management-item-info">
+                <div class="management-item-avatar">
+                    ${user.username.charAt(0).toUpperCase()}
+                </div>
+                <div class="management-item-details">
+                    <h4 class="management-item-name">${user.username}</h4>
+                    <p class="management-item-meta">${getRoleDisplayName(user.role)} • Created ${formatDate(user.created_at)}</p>
+                </div>
+            </div>
+            <div class="management-item-actions">
+                ${user.must_change_password ? '<span class="management-item-badge warning">Password change required</span>' : ''}
+                ${user.role === 'root' ? '<span class="management-item-badge info">Root User</span>' : `
+                    <button class="btn btn-secondary btn-sm" onclick="editUser('${user.id}', '${user.username}', '${user.role}')">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/>
+                        </svg>
+                        Edit
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteUser('${user.id}', '${user.username}')">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1ZM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118ZM2.5 3h11V2h-11v1Z"/>
+                        </svg>
+                        Delete
+                    </button>
+                `}
+            </div>
+        </div>
+    `).join('');
+}
+
+function switchManagementTab(tabName) {
+    // Verificar se a aba já está ativa para evitar processamento desnecessário
+    const targetTab = document.getElementById(tabName + '-tab');
+    if (targetTab && targetTab.classList.contains('active')) {
+        return; // Aba já está ativa, não fazer nada
+    }
+    
+    // Update tab buttons
+    document.querySelectorAll('.management-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+    
+    // Update panels
+    document.querySelectorAll('.management-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+    const targetPanel = document.getElementById(tabName + '-panel');
+    if (targetPanel) {
+        targetPanel.classList.add('active');
+    }
+}
+
+function formatDate(dateString) {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
+    if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
+    return date.getFullYear().toString();
+}
+
+function generateTeamsHTML(teams) {
+    if (!teams || teams.length === 0) {
+        return `
+            <div class="management-empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <h3>No Teams Found</h3>
+                <p>Create your first team to organize users and applications for better collaboration.</p>
+            </div>
+        `;
+    }
+    
+    return teams.map(team => `
+        <div class="management-item">
+            <div class="management-item-info">
+                <div class="management-item-avatar">
+                    ${team.name.charAt(0).toUpperCase()}
+                </div>
+                <div class="management-item-details">
+                    <h4 class="management-item-name">${team.name}</h4>
+                    <p class="management-item-meta">${team.description || 'No description'} • ${team.user_count || 0} users</p>
+                </div>
+            </div>
+            <div class="management-item-actions">
+                <span class="management-item-badge success">${team.user_count || 0} Members</span>
+                <button class="btn btn-secondary btn-sm" onclick="editTeam('${team.id}', '${team.name}', '${team.description || ''}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/>
+                    </svg>
+                    Edit
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="deleteTeam('${team.id}', '${team.name}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                        <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1ZM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118ZM2.5 3h11V2h-11v1Z"/>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function refreshUserAndTeamLists() {
+    try {
+        console.log('🔄 refreshUserAndTeamLists: Starting refresh...');
+        
+        // Verificar se o modal principal ainda existe
+        const usersModal = document.getElementById('users-modal');
+        if (!usersModal) {
+            console.log('🔄 refreshUserAndTeamLists: No users-modal found, aborting');
+            return;
+        }
+        
+        // Refresh users
+        const usersResponse = await apiCall('/users');
+        if (usersResponse.success && usersResponse.users) {
+            const usersListElement = document.getElementById('users-list');
+            if (usersListElement) {
+                console.log('🔄 refreshUserAndTeamLists: Updating users list');
+                usersListElement.innerHTML = generateUsersHTML(usersResponse.users);
+            }
+            
+            // Update users tab counter
+            const usersTabCount = document.querySelector('#users-tab .management-tab-count');
+            if (usersTabCount) {
+                console.log('🔄 refreshUserAndTeamLists: Updating users tab count');
+                usersTabCount.textContent = usersResponse.users.length;
+            }
+        }
+        
+        // Refresh teams
+        const teamsResponse = await apiCall('/teams');
+        if (teamsResponse.success && teamsResponse.teams) {
+            const teamsListElement = document.getElementById('teams-list');
+            if (teamsListElement) {
+                console.log('🔄 refreshUserAndTeamLists: Updating teams list');
+                teamsListElement.innerHTML = generateTeamsHTML(teamsResponse.teams);
+            }
+            
+            // Update teams tab counter
+            const teamsTabCount = document.querySelector('#teams-tab .management-tab-count');
+            if (teamsTabCount) {
+                console.log('🔄 refreshUserAndTeamLists: Updating teams tab count');
+                teamsTabCount.textContent = teamsResponse.teams.length;
+            }
+        }
+        
+        console.log('🔄 refreshUserAndTeamLists: Refresh completed successfully');
+    } catch (error) {
+        console.warn('Failed to refresh user and team lists:', error);
+    }
+}
+
+
+function getRoleDisplayName(role) {
+    const roleMap = {
+        'root': 'Root User',
+        'admin': 'Administrator', 
+        'user': 'User'
+    };
+    return roleMap[role] || role;
+}
+
+function closeUsersModal() {
+    const modal = document.getElementById('users-modal');
+    if (modal) {
+        // Remove from modal stack
+        if (window.modalStack) {
+            const index = window.modalStack.indexOf('users-modal');
+            if (index > -1) {
+                window.modalStack.splice(index, 1);
+            }
+        }
+        
+        modal.classList.add('hidden');
+        setTimeout(() => {
+            modal.remove();
+            // Reset modal z-index
+            modal.style.zIndex = '';
+        }, 300);
+    }
+}
+
+let allTeamsData = []; // Global variable to store all teams for filtering
+let filteredTeamsData = []; // Global variable to store filtered teams
+
+async function editUser(userId, username, currentRole) {
+    try {
+        // Carregar apenas dados do usuário
+        const userResponse = await apiCall(`/users/${userId}`);
+        
+        if (!userResponse.success) {
+            showError('Failed to load user data');
+            return;
+        }
+        
+        // Carregar teams apenas se ainda não estiverem carregados
+        let teamsResponse;
+        if (!allTeamsData || allTeamsData.length === 0) {
+            teamsResponse = await apiCall('/teams');
+            if (!teamsResponse.success) {
+                showError('Failed to load teams data');
+                return;
+            }
+        }
+        
+        const user = userResponse.user;
+        
+        // Armazenar teams do usuário no estado global
+        window.currentEditingUserTeams = user.teams || [];
+        
+        // Só atualizar allTeamsData se carregamos teams agora
+        if (teamsResponse) {
+            allTeamsData = teamsResponse.teams || [];
+        }
+        filteredTeamsData = [...allTeamsData];
+        
+        // Configurar o título do modal
+        document.getElementById('edit-user-modal-title').textContent = username;
+        document.getElementById('edit-user-modal-subtitle').textContent = `Configure permissions and team access for ${username}`;
+        
+        // Configurar o select de role com lógica de segurança
+        const roleSelect = document.getElementById('edit-user-role');
+        roleSelect.innerHTML = '<option value="">Select role...</option>';
+        
+        // Adicionar opções baseadas na regra de negócio
+        const userOption = document.createElement('option');
+        userOption.value = 'user';
+        userOption.textContent = 'User - View only access';
+        userOption.selected = user.role === 'user';
+        roleSelect.appendChild(userOption);
+        
+        const adminOption = document.createElement('option');
+        adminOption.value = 'admin';
+        adminOption.textContent = 'Admin - Create & modify content';
+        adminOption.selected = user.role === 'admin';
+        roleSelect.appendChild(adminOption);
+        
+        // Regra: Apenas o próprio root pode editar seu role para root
+        if (currentUser && currentUser.role === 'root' && currentUser.id === userId) {
+            const rootOption = document.createElement('option');
+            rootOption.value = 'root';
+            rootOption.textContent = 'Root - Full system access';
+            rootOption.selected = user.role === 'root';
+            roleSelect.appendChild(rootOption);
+        }
+        
+        // Configurar pesquisa de teams
+        const searchInput = document.getElementById('team-search-input');
+        searchInput.value = '';
+        searchInput.addEventListener('input', (e) => {
+            filterTeams(e.target.value, user.teams);
+        });
+        
+        // Renderizar teams inicialmente
+        renderTeamsList(user.teams);
+        
+        // Configurar o botão de salvar
+        const saveBtn = document.getElementById('save-user-changes-btn');
+        saveBtn.onclick = () => saveUserChanges(userId, username);
+        
+        // Abrir o modal
+        openModal('edit-user-modal');
+        
+    } catch (error) {
+        showError('Failed to load user data: ' + error.message);
+    }
+}
+
+function filterTeams(searchTerm, userTeams) {
+    const term = searchTerm.toLowerCase().trim();
+    
+    if (term === '') {
+        filteredTeamsData = [...allTeamsData];
+    } else {
+        filteredTeamsData = allTeamsData.filter(team => 
+            team.name.toLowerCase().includes(term) || 
+            (team.description && team.description.toLowerCase().includes(term))
+        );
+    }
+    
+    renderTeamsList(userTeams);
+}
+
+function renderTeamsList(userTeams) {
+    const teamsContainer = document.getElementById('edit-user-teams');
+    const emptyState = document.getElementById('teams-empty-state');
+    
+    
+    if (filteredTeamsData.length === 0) {
+        teamsContainer.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+    }
+    
+    emptyState.classList.add('hidden');
+    
+    teamsContainer.innerHTML = filteredTeamsData.map(team => {
+        const isAssociated = userTeams && userTeams.some(userTeam => userTeam.id === team.id);
+        const teamInitial = team.name.charAt(0).toUpperCase();
+        
+        return `
+            <div class="team-item" data-team-id="${team.id}">
+                <div class="team-info">
+                    <div class="team-avatar">${teamInitial}</div>
+                    <div class="team-details">
+                        <h5>${team.name}</h5>
+                        <p>${team.description || 'No description available'}</p>
+                    </div>
+                </div>
+                <div class="team-toggle">
+                    <label class="toggle-switch" for="team-switch-${team.id}">
+                        <input type="checkbox" 
+                               id="team-switch-${team.id}" 
+                               value="${team.id}" 
+                               class="toggle-input team-switch-input"
+                               ${isAssociated ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+async function saveUserChanges(userId, username) {
+    try {
+        showGlobalLoading();
+        
+        const newRole = document.getElementById('edit-user-role').value;
+        const selectedTeams = [];
+        document.querySelectorAll('.team-switch-input:checked').forEach(checkbox => {
+            selectedTeams.push(checkbox.value);
+        });
+        
+        if (!newRole) {
+            showError('Please select a role for the user');
+            return;
+        }
+        
+        // Obter teams atuais do estado do modal (já carregados)
+        const currentUserTeams = window.currentEditingUserTeams || [];
+        const currentTeams = currentUserTeams.map(team => team.id);
+        
+        // Calcular teams a adicionar e remover
+        const teamsToAdd = selectedTeams.filter(teamId => !currentTeams.includes(teamId));
+        const teamsToRemove = currentTeams.filter(teamId => !selectedTeams.includes(teamId));
+        
+        // Atualizar usuário com role e associações de teams em uma única requisição
+        const updateData = {
+            role: newRole
+        };
+        
+        if (teamsToAdd.length > 0) {
+            updateData.teams_to_add = teamsToAdd;
+        }
+        
+        if (teamsToRemove.length > 0) {
+            updateData.teams_to_remove = teamsToRemove;
+        }
+        
+        const updateResponse = await apiCall(`/users/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updateData)
+        });
+        
+        if (!updateResponse.success) {
+            showError(updateResponse.error || 'Failed to update user');
+            return;
+        }
+        
+        showSuccess(`User "${username}" updated successfully`);
+        console.log('💾 saveUserChanges: Closing edit modal...');
+        closeModal('edit-user-modal');
+        
+        // Add small delay to ensure modal is properly closed before refreshing
+        setTimeout(async () => {
+            // Verificar se ainda há modal de usuários aberto antes de atualizar
+            const usersModal = document.getElementById('users-modal');
+            console.log('💾 saveUserChanges: Users modal exists?', !!usersModal, 'Hidden?', usersModal?.classList.contains('hidden'));
+            
+            if (usersModal && !usersModal.classList.contains('hidden')) {
+                console.log('💾 saveUserChanges: Refreshing user and team lists...');
+                // Apenas atualizar a lista de usuários sem recriar o modal
+                await refreshUserAndTeamLists();
+            } else {
+                console.log('💾 saveUserChanges: Not refreshing - modal not found or hidden');
+            }
+        }, 100);
+        
+    } catch (error) {
+        showError('Failed to update user: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+async function deleteUser(userId, username) {
+    if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+        return;
+    }
+    
+    try {
+        showGlobalLoading();
+        await apiCall(`/users/${userId}`, { method: 'DELETE' });
+        showSuccess(`User "${username}" deleted successfully`);
+        
+        // Verificar se ainda há modal de usuários aberto antes de atualizar
+        const usersModal = document.getElementById('users-modal');
+        if (usersModal && !usersModal.classList.contains('hidden')) {
+            // Apenas atualizar a lista de usuários sem recriar o modal
+            await refreshUserAndTeamLists();
+        }
+    } catch (error) {
+        showError('Failed to delete user: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+// Funções de Tab Management
+function switchTab(tabName) {
+    // Remove active class from all tabs and content
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    // Add active class to selected tab and content
+    document.getElementById(`${tabName}-tab`).classList.add('active');
+    document.getElementById(`${tabName}-tab-content`).classList.add('active');
+}
+
+// Funções de Team Management
+async function openCreateTeamForm() {
+    const formHTML = `
+        <div id="create-team-form" class="form-section" style="margin-top: 20px; border-top: 1px solid #e9ecef; padding-top: 20px;">
+            <div class="section-header">
+                <h4 class="section-title">Create New Team</h4>
+            </div>
+            <form id="new-team-form">
+                <div class="form-field">
+                    <label class="field-label" for="new-team-name">
+                        Team Name
+                        <span class="field-description">Choose a unique team name</span>
+                    </label>
+                    <input type="text" id="new-team-name" class="form-input" placeholder="Enter team name" required>
+                </div>
+                
+                <div class="form-field">
+                    <label class="field-label" for="new-team-description">
+                        Description
+                        <span class="field-description">Brief description of the team's purpose</span>
+                    </label>
+                    <textarea id="new-team-description" class="form-input" placeholder="Enter team description" rows="3"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="cancelCreateTeam()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Team</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    // Adicionar formulário
+    document.getElementById('teams-list').insertAdjacentHTML('beforebegin', formHTML);
+    
+    // Adicionar event listener para submit
+    document.getElementById('new-team-form').addEventListener('submit', createNewTeam);
+}
+
+function cancelCreateTeam() {
+    const form = document.getElementById('create-team-form');
+    if (form) {
+        form.remove();
+    }
+}
+
+async function createNewTeam(event) {
+    event.preventDefault();
+    
+    const name = document.getElementById('new-team-name').value.trim();
+    const description = document.getElementById('new-team-description').value.trim();
+    
+    if (!name) {
+        showError('Please enter a team name');
+        return;
+    }
+    
+    try {
+        showGlobalLoading();
+        const response = await apiCall('/teams', {
+            method: 'POST',
+            body: JSON.stringify({
+                name: name,
+                description: description
+            })
+        });
+        
+        showSuccess(`Team "${name}" created successfully`);
+        
+        // Limpar formulário
+        cancelCreateTeam();
+        
+        // Recarregar lista de teams
+        const teamsResponse = await apiCall('/teams');
+        document.getElementById('teams-list').innerHTML = generateTeamsHTML(teamsResponse.teams);
+        
+        // Atualizar contador na aba
+        const teamsTabCount = document.querySelector('#teams-tab .management-tab-count');
+        if (teamsTabCount) {
+            teamsTabCount.textContent = teamsResponse.teams.length;
+        }
+        
+    } catch (error) {
+        showError('Failed to create team: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+async function deleteTeam(teamId, teamName) {
+    if (!confirm(`Are you sure you want to delete team "${teamName}"?`)) {
+        return;
+    }
+    
+    try {
+        showGlobalLoading();
+        await apiCall(`/teams/${teamId}`, { method: 'DELETE' });
+        showSuccess(`Team "${teamName}" deleted successfully`);
+        
+        // Recarregar lista de teams
+        const response = await apiCall('/teams');
+        document.getElementById('teams-list').innerHTML = generateTeamsHTML(response.teams);
+        
+        // Atualizar contador na aba
+        const teamsTabCount = document.querySelector('#teams-tab .management-tab-count');
+        if (teamsTabCount) {
+            teamsTabCount.textContent = response.teams.length;
+        }
+        
+    } catch (error) {
+        showError('Failed to delete team: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+// Funções placeholder para funcionalidades avançadas
+function manageUserTeams(userId, username) {
+    showInfo(`Team management for user "${username}" will be implemented soon`);
+}
+
+function manageTeamMembers(teamId, teamName) {
+    showInfo(`Member management for team "${teamName}" will be implemented soon`);
+}
+
+function editTeam(teamId, teamName, description) {
+    showInfo(`Edit functionality for team "${teamName}" will be implemented soon`);
+}
+
+async function openCreateUserForm() {
+    // Load teams for selection
+    let teams = [];
+    try {
+        const teamsResponse = await apiCall('/teams');
+        teams = teamsResponse.teams || [];
+    } catch (error) {
+        console.warn('Could not load teams for user creation:', error);
+    }
+
+    const formHTML = `
+        <div id="create-user-form" class="management-form-section">
+            <div class="management-form-header">
+                <h4 class="management-form-title">Create New User</h4>
+                <p class="management-form-description">Add a new user to the system with role and team assignments</p>
+            </div>
+            <form id="new-user-form">
+                <div class="form-field">
+                    <label class="field-label" for="new-username">
+                        Username
+                        <span class="field-description">Choose a unique username</span>
+                    </label>
+                    <input type="text" id="new-username" class="form-input" placeholder="Enter username" required>
+                </div>
+                
+                <div class="form-field">
+                    <label class="field-label" for="new-role">
+                        Role
+                        <span class="field-description">Select user role and permissions</span>
+                    </label>
+                    <select id="new-role" class="form-select" required>
+                        <option value="">Select role...</option>
+                        <option value="user">User - View only access</option>
+                        <option value="admin">Admin - Full access</option>
+                    </select>
+                </div>
+                
+                <div class="form-field">
+                    <label class="field-label">
+                        Team Associations
+                        <span class="field-description">Select teams this user should belong to</span>
+                    </label>
+                    <div id="teams-selection" class="teams-checkbox-list">
+                        ${teams.length > 0 ? teams.map(team => `
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="user-teams" value="${team.id}" class="team-checkbox">
+                                <span class="checkbox-label">${team.name}</span>
+                            </label>
+                        `).join('') : '<p class="empty-message">No teams available. Create teams first to associate users.</p>'}
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="cancelCreateUser()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z"/>
+                        </svg>
+                        Create User
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    // Insert form into users tab content
+    const existingForm = document.getElementById('create-user-form');
+    if (existingForm) {
+        existingForm.remove();
+    }
+    
+    const usersPanel = document.getElementById('users-panel');
+    const usersList = document.getElementById('users-list');
+    usersList.insertAdjacentHTML('beforebegin', formHTML);
+    
+    // Add form submission handler
+    document.getElementById('new-user-form').addEventListener('submit', createNewUser);
+}
+
+function cancelCreateUser() {
+    const form = document.getElementById('create-user-form');
+    if (form) {
+        form.remove();
+    }
+}
+
+async function createNewUser(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('new-username').value.trim();
+    const role = document.getElementById('new-role').value;
+    
+    if (!username || !role) {
+        showError('Please fill in all required fields');
+        return;
+    }
+    
+    // Get selected teams
+    const selectedTeams = [];
+    document.querySelectorAll('input[name="user-teams"]:checked').forEach(checkbox => {
+        selectedTeams.push(checkbox.value);
+    });
+    
+    try {
+        showGlobalLoading();
+        const response = await apiCall('/users', {
+            method: 'POST',
+            body: JSON.stringify({
+                username: username,
+                role: role
+            })
+        });
+        
+        if (response.success) {
+            // Show password in professional modal
+            showPasswordModal(username, response.password);
+            
+            // Associate user with selected teams
+            if (selectedTeams.length > 0 && response.user) {
+                for (const teamId of selectedTeams) {
+                    try {
+                        await apiCall(`/teams/${teamId}/users`, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                user_id: response.user.id
+                            })
+                        });
+                    } catch (teamError) {
+                        console.warn(`Failed to add user to team ${teamId}:`, teamError);
+                    }
+                }
+            }
+            
+            // Limpar formulário
+            cancelCreateUser();
+            
+            // Verificar se ainda há modal de usuários aberto antes de atualizar
+            const usersModal = document.getElementById('users-modal');
+            if (usersModal && !usersModal.classList.contains('hidden')) {
+                // Apenas atualizar a lista de usuários sem recriar o modal
+                await refreshUserAndTeamLists();
+            }
+        } else {
+            showError('Failed to create user: ' + response.error);
+        }
+        
+    } catch (error) {
+        showError('Failed to create user: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+// Initialize page when loaded  
+document.addEventListener('DOMContentLoaded', async function() {
+    // Não inicializar se estamos na página de mudança de senha ou login
+    if (window.location.pathname.includes('/change-password') || 
+        window.location.pathname.includes('/login')) {
+        return;
+    }
+    
+    // Carregar usuário atual primeiro
+    const user = await loadCurrentUser();
+    
+    // Se o usuário não foi carregado ou precisa mudar senha, não continuar
+    if (!user) {
+        return;
+    }
+    
+    // Só então inicializar o resto da interface
+    console.log('[DEBUG] DOMContentLoaded: Initializing user interface');
+    initializeUserInterface();
+    
+    console.log('[DEBUG] DOMContentLoaded: Initializing event listeners');
+    initializeEventListeners();
+    
+    console.log('[DEBUG] DOMContentLoaded: Loading applications');
+    loadApplications();
+});
+

@@ -124,3 +124,33 @@ func (uc *ApplicationUseCase) DeleteApplication(id string) error {
 
 	return nil
 }
+
+// GetApplicationsWithCountsByIDs busca aplicações específicas com contagem de toggles
+func (uc *ApplicationUseCase) GetApplicationsWithCountsByIDs(ids []string) ([]*entity.ApplicationWithCounts, error) {
+	if len(ids) == 0 {
+		return []*entity.ApplicationWithCounts{}, nil
+	}
+
+	// Implementar uma versão filtrada do GetAllApplicationsWithCounts
+	// Por simplicidade, vamos obter todas e filtrar (pode ser otimizado no futuro)
+	allApps, err := uc.appRepo.GetAllWithToggleCounts()
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching applications with counts")
+	}
+
+	// Criar mapa para busca rápida
+	idMap := make(map[string]bool)
+	for _, id := range ids {
+		idMap[id] = true
+	}
+
+	// Filtrar apenas as aplicações solicitadas
+	var filteredApps []*entity.ApplicationWithCounts
+	for _, app := range allApps {
+		if idMap[app.ID] {
+			filteredApps = append(filteredApps, app)
+		}
+	}
+
+	return filteredApps, nil
+}

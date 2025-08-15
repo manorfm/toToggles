@@ -10,6 +10,9 @@ type Application struct {
 	Name      string    `json:"name" gorm:"not null;type:varchar(255)"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// Relacionamentos - usar ponteiro para evitar importação circular
+	Teams []*Team `json:"teams,omitempty" gorm:"many2many:team_applications;"`
 }
 
 // ApplicationWithCounts representa uma aplicação com contagem de toggles

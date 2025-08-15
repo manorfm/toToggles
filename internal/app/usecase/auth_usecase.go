@@ -35,31 +35,51 @@ func (uc *AuthUseCase) Login(username, password string) (*auth.AuthenticationRes
 	return strategy.Authenticate(credentials)
 }
 
-// InitializeDefaultAdmin cria o usuário admin padrão se não existir
-func (uc *AuthUseCase) InitializeDefaultAdmin() error {
-	// Verificar se já existe um usuário admin
+// InitializeRootUser cria o usuário root padrão se não existir
+func (uc *AuthUseCase) InitializeRootUser() error {
+	// Verificar se já existe um usuário root
 	existingUsers, err := uc.userRepo.GetAll()
 	if err != nil {
 		return err
 	}
 
-	// Se já existem usuários, não criar o admin padrão
+	// Se já existem usuários, não criar o root padrão
 	if len(existingUsers) > 0 {
 		return nil
 	}
 
-	// Criar usuário admin padrão
-	admin := &entity.User{
-		Username: "admin",
-		Role:     entity.UserRoleAdmin,
-	}
-
-	err = admin.SetPassword("admin")
+	// Gerar senha aleatória para o root
+	randomPassword, err := entity.GenerateRandomPassword()
 	if err != nil {
 		return err
 	}
 
-	return uc.userRepo.Create(admin)
+	// Criar usuário root padrão
+	root := &entity.User{
+		Username:           "root",
+		Role:               entity.UserRoleRoot,
+		MustChangePassword: true, // Obriga a troca de senha no primeiro login
+	}
+
+	err = root.SetPassword(randomPassword)
+	if err != nil {
+		return err
+	}
+
+	// Salvar usuário root
+	err = uc.userRepo.Create(root)
+	if err != nil {
+		return err
+	}
+
+	// Log da senha inicial (só para desenvolvimento - em produção deve ser enviada de forma segura)
+	println("=== USUÁRIO ROOT CRIADO ===")
+	println("Username: root")
+	println("Password:", randomPassword)
+	println("IMPORTANTE: Faça a troca da senha no primeiro login!")
+	println("============================")
+
+	return nil
 }
 
 // ValidateToken valida um token de autenticação
@@ -77,4 +97,58 @@ func (uc *AuthUseCase) ValidateToken(token string) (*entity.User, error) {
 	}
 
 	return nil, errors.New("invalid token")
+}
+
+// Authenticate valida credenciais do usuário sem gerar token
+func (uc *AuthUseCase) Authenticate(username, password string) (*auth.AuthenticationResult, error) {
+	strategy := uc.authManager.GetDefaultStrategy()
+	if strategy == nil {
+		return nil, errors.New("no authentication strategy available")
+	}
+
+	credentials := map[string]interface{}{
+		"username": username,
+		"password": password,
+	}
+
+	return strategy.Authenticate(credentials)
+}
+
+// ChangePasswordFirstTime atualiza a senha de um usuário e remove a flag MustChangePassword
+func (uc *AuthUseCase) ChangePasswordFirstTime(userID, newPassword string) error {
+	if userID == "" || newPassword == "" {
+		return errors.New("user ID and new password are required")
+	}
+
+	// Buscar o usuário
+	user, err := uc.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// Verificar se realmente precisa trocar senha
+	if !user.MustChangePassword {
+		return errors.New("password change not required for this user")
+	}
+
+	// Atualizar senha
+	err = user.SetPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	// Remover flag de troca obrigatória
+	user.MustChangePassword = false
+
+	// Salvar no banco
+	return uc.userRepo.Update(user)
+}
+
+// GetUserCount retorna o número total de usuários no sistema
+func (uc *AuthUseCase) GetUserCount() (int, error) {
+	users, err := uc.userRepo.GetAll()
+	if err != nil {
+		return 0, err
+	}
+	return len(users), nil
 }

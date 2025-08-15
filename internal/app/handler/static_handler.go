@@ -44,6 +44,21 @@ func isAPIRoute(path string) bool {
 		return true
 	}
 	
+	// Rotas de gerenciamento de usuários
+	if strings.HasPrefix(path, "/users") {
+		return true
+	}
+	
+	// Rotas de perfil do usuário
+	if strings.HasPrefix(path, "/profile") {
+		return true
+	}
+	
+	// Rotas de gerenciamento de times
+	if strings.HasPrefix(path, "/teams") {
+		return true
+	}
+	
 	// Rota base de applications
 	if path == "/applications" {
 		return true

@@ -195,3 +195,205 @@ func (m *MockToggleRepository) GetChildren(parentID string) ([]*entity.Toggle, e
 	}
 	return children, nil
 }
+
+// MockUserRepository represents a mock implementation of UserRepository
+type MockUserRepository struct {
+	Users       map[string]*entity.User
+	CreateError error
+	GetByIDError error
+	UpdateError error
+	DeleteError error
+}
+
+func NewMockUserRepository() *MockUserRepository {
+	return &MockUserRepository{
+		Users: make(map[string]*entity.User),
+	}
+}
+
+func (m *MockUserRepository) Create(user *entity.User) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+	m.Users[user.ID] = user
+	return nil
+}
+
+func (m *MockUserRepository) GetByID(id string) (*entity.User, error) {
+	if m.GetByIDError != nil {
+		return nil, m.GetByIDError
+	}
+	user, exists := m.Users[id]
+	if !exists {
+		return nil, errors.New("user not found")
+	}
+	return user, nil
+}
+
+func (m *MockUserRepository) GetByUsername(username string) (*entity.User, error) {
+	for _, user := range m.Users {
+		if user.Username == username {
+			return user, nil
+		}
+	}
+	return nil, errors.New("user not found")
+}
+
+func (m *MockUserRepository) GetAll() ([]*entity.User, error) {
+	users := make([]*entity.User, 0, len(m.Users))
+	for _, user := range m.Users {
+		users = append(users, user)
+	}
+	return users, nil
+}
+
+func (m *MockUserRepository) Update(user *entity.User) error {
+	if m.UpdateError != nil {
+		return m.UpdateError
+	}
+	m.Users[user.ID] = user
+	return nil
+}
+
+func (m *MockUserRepository) Delete(id string) error {
+	if m.DeleteError != nil {
+		return m.DeleteError
+	}
+	delete(m.Users, id)
+	return nil
+}
+
+func (m *MockUserRepository) GetApplicationsByUserID(userID string) ([]*entity.Application, error) {
+	return []*entity.Application{}, nil
+}
+
+func (m *MockUserRepository) AddUserToApplication(userID, applicationID string) error {
+	return nil
+}
+
+func (m *MockUserRepository) RemoveUserFromApplication(userID, applicationID string) error {
+	return nil
+}
+
+func (m *MockUserRepository) GetUsersByApplicationID(applicationID string) ([]*entity.User, error) {
+	return []*entity.User{}, nil
+}
+
+// MockTeamRepository represents a mock implementation of TeamRepository
+type MockTeamRepository struct {
+	Teams       map[string]*entity.Team
+	CreateError error
+	GetByIDError error
+	UpdateError error
+	DeleteError error
+}
+
+func NewMockTeamRepository() *MockTeamRepository {
+	return &MockTeamRepository{
+		Teams: make(map[string]*entity.Team),
+	}
+}
+
+func (m *MockTeamRepository) Create(team *entity.Team) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+	m.Teams[team.ID] = team
+	return nil
+}
+
+func (m *MockTeamRepository) GetByID(id string) (*entity.Team, error) {
+	if m.GetByIDError != nil {
+		return nil, m.GetByIDError
+	}
+	team, exists := m.Teams[id]
+	if !exists {
+		return nil, errors.New("team not found")
+	}
+	return team, nil
+}
+
+func (m *MockTeamRepository) GetAll() ([]*entity.Team, error) {
+	teams := make([]*entity.Team, 0, len(m.Teams))
+	for _, team := range m.Teams {
+		teams = append(teams, team)
+	}
+	return teams, nil
+}
+
+func (m *MockTeamRepository) Update(team *entity.Team) error {
+	if m.UpdateError != nil {
+		return m.UpdateError
+	}
+	m.Teams[team.ID] = team
+	return nil
+}
+
+func (m *MockTeamRepository) Delete(id string) error {
+	if m.DeleteError != nil {
+		return m.DeleteError
+	}
+	delete(m.Teams, id)
+	return nil
+}
+
+func (m *MockTeamRepository) GetByName(name string) (*entity.Team, error) {
+	for _, team := range m.Teams {
+		if team.Name == name {
+			return team, nil
+		}
+	}
+	return nil, errors.New("team not found")
+}
+
+func (m *MockTeamRepository) AddUserToTeam(teamID, userID string) error {
+	return nil
+}
+
+func (m *MockTeamRepository) RemoveUserFromTeam(teamID, userID string) error {
+	return nil
+}
+
+func (m *MockTeamRepository) GetUsersByTeamID(teamID string) ([]*entity.User, error) {
+	return []*entity.User{}, nil
+}
+
+func (m *MockTeamRepository) GetTeamsByUserID(userID string) ([]*entity.Team, error) {
+	return []*entity.Team{}, nil
+}
+
+func (m *MockTeamRepository) AddApplicationToTeam(teamID, applicationID string, permission entity.TeamPermissionLevel) error {
+	return nil
+}
+
+func (m *MockTeamRepository) RemoveApplicationFromTeam(teamID, applicationID string) error {
+	return nil
+}
+
+func (m *MockTeamRepository) UpdateApplicationPermission(teamID, applicationID string, permission entity.TeamPermissionLevel) error {
+	return nil
+}
+
+func (m *MockTeamRepository) GetApplicationsByTeamID(teamID string) ([]*entity.Application, error) {
+	return []*entity.Application{}, nil
+}
+
+func (m *MockTeamRepository) GetTeamsByApplicationID(applicationID string) ([]*entity.Team, error) {
+	return []*entity.Team{}, nil
+}
+
+func (m *MockTeamRepository) GetTeamApplicationPermission(teamID, applicationID string) (entity.TeamPermissionLevel, error) {
+	return entity.PermissionRead, nil
+}
+
+func (m *MockTeamRepository) GetUserTeamApplicationPermissions(userID, applicationID string) ([]entity.TeamPermissionLevel, error) {
+	return []entity.TeamPermissionLevel{entity.PermissionRead}, nil
+}
+
+func (m *MockTeamRepository) GetTeamsWithCounts() ([]*entity.TeamWithCounts, error) {
+	return []*entity.TeamWithCounts{}, nil
+}
+
+func (m *MockTeamRepository) GetTeamWithCounts(id string) (*entity.TeamWithCounts, error) {
+	return &entity.TeamWithCounts{}, nil
+}

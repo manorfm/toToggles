@@ -17,8 +17,24 @@ func NewUserUseCase(userRepo repository.UserRepository) *UserUseCase {
 	}
 }
 
-// CreateUser cria um novo usuário
-func (uc *UserUseCase) CreateUser(username, password string, role entity.UserRole) (*entity.User, error) {
+// CreateUser cria um novo usuário (aceita objeto User)
+func (uc *UserUseCase) CreateUser(user *entity.User) error {
+	// Verificar se o usuário já existe
+	existingUser, _ := uc.userRepo.GetByUsername(user.Username)
+	if existingUser != nil {
+		return errors.New("username already exists")
+	}
+
+	err := user.Validate()
+	if err != nil {
+		return err
+	}
+
+	return uc.userRepo.Create(user)
+}
+
+// CreateUserDeprecated cria um novo usuário (método antigo mantido para compatibilidade)
+func (uc *UserUseCase) CreateUserDeprecated(username, password string, role entity.UserRole) (*entity.User, error) {
 	// Verificar se o usuário já existe
 	existingUser, _ := uc.userRepo.GetByUsername(username)
 	if existingUser != nil {
@@ -49,7 +65,23 @@ func (uc *UserUseCase) CreateUser(username, password string, role entity.UserRol
 }
 
 // GetAllUsers retorna todos os usuários
-func (uc *UserUseCase) GetAllUsers() ([]*entity.User, error) {
+func (uc *UserUseCase) GetAllUsers() ([]entity.User, error) {
+	users, err := uc.userRepo.GetAll()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Converter []*entity.User para []entity.User
+	result := make([]entity.User, len(users))
+	for i, user := range users {
+		result[i] = *user
+	}
+	
+	return result, nil
+}
+
+// GetAllUsersPtr retorna todos os usuários como ponteiros (mantido para compatibilidade)
+func (uc *UserUseCase) GetAllUsersPtr() ([]*entity.User, error) {
 	return uc.userRepo.GetAll()
 }
 
@@ -58,8 +90,30 @@ func (uc *UserUseCase) GetUserByID(id string) (*entity.User, error) {
 	return uc.userRepo.GetByID(id)
 }
 
-// UpdateUser atualiza um usuário
-func (uc *UserUseCase) UpdateUser(id string, username string, role entity.UserRole) (*entity.User, error) {
+// UpdateUser atualiza um usuário (aceita objeto User)
+func (uc *UserUseCase) UpdateUser(user *entity.User) error {
+	// Verificar se o usuário existe
+	_, err := uc.userRepo.GetByID(user.ID)
+	if err != nil {
+		return err
+	}
+
+	// Verificar se o novo username já existe (se foi alterado)
+	existingUser, _ := uc.userRepo.GetByUsername(user.Username)
+	if existingUser != nil && existingUser.ID != user.ID {
+		return errors.New("username already exists")
+	}
+
+	err = user.Validate()
+	if err != nil {
+		return err
+	}
+
+	return uc.userRepo.Update(user)
+}
+
+// UpdateUserDeprecated atualiza um usuário (método antigo mantido para compatibilidade)
+func (uc *UserUseCase) UpdateUserDeprecated(id string, username string, role entity.UserRole) (*entity.User, error) {
 	user, err := uc.userRepo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -117,25 +171,12 @@ func (uc *UserUseCase) DeleteUser(id string) error {
 		return err
 	}
 
-	// Não permitir deletar o último admin
-	if user.IsAdmin() {
-		users, err := uc.userRepo.GetAll()
-		if err != nil {
-			return err
-		}
-
-		adminCount := 0
-		for _, u := range users {
-			if u.IsAdmin() {
-				adminCount++
-			}
-		}
-
-		if adminCount <= 1 {
-			return errors.New("cannot delete the last admin user")
-		}
+	// Não permitir deletar o usuário root
+	if user.IsRoot() {
+		return errors.New("cannot delete root user")
 	}
 
+	// Admins podem ser deletados normalmente
 	return uc.userRepo.Delete(id)
 }
 

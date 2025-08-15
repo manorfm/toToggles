@@ -20,7 +20,7 @@ func (r *userRepository) Create(user *entity.User) error {
 
 func (r *userRepository) GetByID(id string) (*entity.User, error) {
 	var user entity.User
-	err := r.db.Preload("Applications").First(&user, "id = ?", id).Error
+	err := r.db.Preload("Applications").Preload("Teams").First(&user, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (r *userRepository) GetByUsername(username string) (*entity.User, error) {
 
 func (r *userRepository) GetAll() ([]*entity.User, error) {
 	var users []*entity.User
-	err := r.db.Preload("Applications").Find(&users).Error
+	err := r.db.Preload("Applications").Preload("Teams").Find(&users).Error
 	return users, err
 }
 
@@ -49,6 +49,12 @@ func (r *userRepository) Update(user *entity.User) error {
 func (r *userRepository) Delete(id string) error {
 	// Primeiro, remover todas as associações com applications
 	err := r.db.Exec("DELETE FROM user_applications WHERE user_id = ?", id).Error
+	if err != nil {
+		return err
+	}
+	
+	// Remover todas as associações com teams
+	err = r.db.Exec("DELETE FROM team_users WHERE user_id = ?", id).Error
 	if err != nil {
 		return err
 	}
