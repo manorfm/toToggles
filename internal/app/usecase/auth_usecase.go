@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -151,4 +152,53 @@ func (uc *AuthUseCase) GetUserCount() (int, error) {
 		return 0, err
 	}
 	return len(users), nil
+}
+
+// GeneratePasswordChangeToken gera um token temporário para mudança de senha
+func (uc *AuthUseCase) GeneratePasswordChangeToken(userID, username string) (string, error) {
+	// Criar um token temporário simples no formato: "temp_password_change_userID_username"
+	return fmt.Sprintf("temp_password_change_%s_%s", userID, username), nil
+}
+
+// ValidatePasswordChangeToken valida um token temporário de mudança de senha
+func (uc *AuthUseCase) ValidatePasswordChangeToken(token string) (userID, username string, err error) {
+	// Verificar se é um token de mudança de senha
+	if len(token) < 20 || token[:20] != "temp_password_change" {
+		return "", "", errors.New("invalid token type")
+	}
+	
+	// Extrair dados do token: temp_password_change_userID_username
+	parts := token[21:] // Remove "temp_password_change_"
+	lastUnderscore := -1
+	
+	// Encontrar o último underscore para separar userID e username
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == '_' {
+			lastUnderscore = i
+			break
+		}
+	}
+	
+	if lastUnderscore == -1 {
+		return "", "", errors.New("invalid token format")
+	}
+	
+	userIDVal := parts[:lastUnderscore]
+	usernameVal := parts[lastUnderscore+1:]
+	
+	// Verificar se o usuário ainda existe e ainda precisa trocar senha
+	user, err := uc.userRepo.GetByID(userIDVal)
+	if err != nil {
+		return "", "", errors.New("user not found")
+	}
+	
+	if user.Username != usernameVal {
+		return "", "", errors.New("invalid token data")
+	}
+	
+	if !user.MustChangePassword {
+		return "", "", errors.New("password change no longer required")
+	}
+	
+	return userIDVal, usernameVal, nil
 }

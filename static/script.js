@@ -71,12 +71,21 @@ async function openNewApplicationModal() {
         document.getElementById('app-modal-title').textContent = 'New Application';
         document.getElementById('app-form').reset();
         
-        // Load teams for selection
-        const teamsResponse = await apiCall('/teams');
+        // Load teams for selection based on user role
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
         const teamSelect = document.getElementById('app-team-select');
         
         // Clear previous options except the first one
         teamSelect.innerHTML = '<option value="">Select a team...</option>';
+        
+        let teamsResponse;
+        if (currentUser.role === 'root') {
+            // Root users see all teams
+            teamsResponse = await apiCall('/teams');
+        } else {
+            // Admin users see only their associated teams
+            teamsResponse = await apiCall('/profile/teams');
+        }
         
         if (teamsResponse.success && teamsResponse.teams) {
             teamsResponse.teams.forEach(team => {
@@ -102,6 +111,15 @@ function openModal(modalId) {
     if (!modal) {
         console.error(`Modal with id "${modalId}" not found`);
         return;
+    }
+    
+    // Check user permissions for toggle modals
+    if ((modalId === 'toggle-modal' || modalId === 'edit-toggle-modal') && currentUser && currentUser.role === 'user') {
+        // For users with 'user' role, configure modal as read-only
+        configureToggleModalForViewOnly(modalId);
+    } else if (modalId === 'toggle-modal' || modalId === 'edit-toggle-modal') {
+        // For admin and root users, enable full functionality
+        configureToggleModalForEdit(modalId);
     }
     
     // Manage modal stack for proper z-index handling
@@ -133,7 +151,8 @@ function openModal(modalId) {
             focusElement = document.getElementById('edit-toggle-path-input');
         }
         
-        if (focusElement && modal.offsetHeight > 0) { // Verificar se o modal está visível
+        // Only focus and select for non-read-only modals
+        if (focusElement && modal.offsetHeight > 0 && !(currentUser && currentUser.role === 'user' && (modalId === 'toggle-modal' || modalId === 'edit-toggle-modal'))) {
             focusElement.focus();
             // Selecionar o texto se for um campo de edição
             if (modalId === 'edit-toggle-modal' || (modalId === 'app-modal' && currentEditingAppId)) {
@@ -141,6 +160,130 @@ function openModal(modalId) {
             }
         }
     }, 150); // Pequeno delay para garantir que o modal esteja completamente visível
+}
+
+// Configure toggle modal for view-only mode (users with 'user' role)
+function configureToggleModalForViewOnly(modalId) {
+    if (modalId === 'toggle-modal') {
+        // For create toggle modal, hide the submit button since users can't create
+        const submitButton = document.querySelector('#toggle-modal .btn-primary');
+        if (submitButton) {
+            submitButton.style.display = 'none';
+        }
+        
+        // Disable the input field
+        const pathInput = document.getElementById('toggle-path-input');
+        if (pathInput) {
+            pathInput.disabled = true;
+            pathInput.readonly = true;
+        }
+        
+        // Update modal title and subtitle
+        const title = document.getElementById('toggle-modal-title');
+        const subtitle = document.querySelector('#toggle-modal .modal-subtitle');
+        if (title) title.textContent = 'View Toggle Information';
+        if (subtitle) subtitle.textContent = 'Toggle information (view-only)';
+        
+    } else if (modalId === 'edit-toggle-modal') {
+        // For edit toggle modal, hide the submit button
+        const submitButton = document.querySelector('#edit-toggle-modal .btn-primary');
+        if (submitButton) {
+            submitButton.style.display = 'none';
+        }
+        
+        // Disable all input fields
+        const pathInput = document.getElementById('edit-toggle-path-input');
+        const enabledInput = document.getElementById('edit-toggle-enabled-input');
+        const activationRuleInput = document.getElementById('edit-toggle-activation-rule-input');
+        const ruleTypeSelect = document.getElementById('activation-rule-type');
+        const ruleValueInput = document.getElementById('activation-rule-value');
+        
+        if (pathInput) {
+            pathInput.disabled = true;
+            pathInput.readonly = true;
+        }
+        if (enabledInput) {
+            enabledInput.disabled = true;
+        }
+        if (activationRuleInput) {
+            activationRuleInput.disabled = true;
+        }
+        if (ruleTypeSelect) {
+            ruleTypeSelect.disabled = true;
+        }
+        if (ruleValueInput) {
+            ruleValueInput.disabled = true;
+            ruleValueInput.readonly = true;
+        }
+        
+        // Update modal title and subtitle
+        const title = document.getElementById('edit-toggle-title');
+        const subtitle = document.querySelector('#edit-toggle-modal .modal-subtitle');
+        if (title) title.textContent = 'View Toggle Configuration';
+        if (subtitle) subtitle.textContent = 'Toggle configuration (view-only)';
+    }
+}
+
+// Configure toggle modal for edit mode (admin and root users)
+function configureToggleModalForEdit(modalId) {
+    if (modalId === 'toggle-modal') {
+        // For create toggle modal, show the submit button
+        const submitButton = document.querySelector('#toggle-modal .btn-primary');
+        if (submitButton) {
+            submitButton.style.display = 'flex';
+        }
+        
+        // Enable the input field
+        const pathInput = document.getElementById('toggle-path-input');
+        if (pathInput) {
+            pathInput.disabled = false;
+            pathInput.readonly = false;
+        }
+        
+        // Restore original title and subtitle
+        const title = document.getElementById('toggle-modal-title');
+        const subtitle = document.querySelector('#toggle-modal .modal-subtitle');
+        if (title) title.textContent = 'New Toggle';
+        if (subtitle) subtitle.textContent = 'Create a new feature toggle for this application';
+        
+    } else if (modalId === 'edit-toggle-modal') {
+        // For edit toggle modal, show the submit button
+        const submitButton = document.querySelector('#edit-toggle-modal .btn-primary');
+        if (submitButton) {
+            submitButton.style.display = 'flex';
+        }
+        
+        // Enable all input fields
+        const pathInput = document.getElementById('edit-toggle-path-input');
+        const enabledInput = document.getElementById('edit-toggle-enabled-input');
+        const activationRuleInput = document.getElementById('edit-toggle-activation-rule-input');
+        const ruleTypeSelect = document.getElementById('activation-rule-type');
+        const ruleValueInput = document.getElementById('activation-rule-value');
+        
+        if (pathInput) {
+            pathInput.disabled = true; // Path should remain disabled even for edit
+            pathInput.readonly = true; // Path should remain readonly even for edit
+        }
+        if (enabledInput) {
+            enabledInput.disabled = false;
+        }
+        if (activationRuleInput) {
+            activationRuleInput.disabled = false;
+        }
+        if (ruleTypeSelect) {
+            ruleTypeSelect.disabled = false;
+        }
+        if (ruleValueInput) {
+            ruleValueInput.disabled = false;
+            ruleValueInput.readonly = false;
+        }
+        
+        // Restore original title and subtitle
+        const title = document.getElementById('edit-toggle-title');
+        const subtitle = document.querySelector('#edit-toggle-modal .modal-subtitle');
+        if (title) title.textContent = 'Edit Toggle Configuration';
+        if (subtitle) subtitle.textContent = 'Configure toggle settings and activation rules';
+    }
 }
 
 function closeModal(modalId) {
@@ -983,12 +1126,21 @@ async function editApplication(appId, appName) {
         document.getElementById('app-name-input').value = appName;
         document.getElementById('app-modal-title').textContent = 'Edit Application';
         
-        // Load teams for selection
-        const teamsResponse = await apiCall('/teams');
+        // Load teams for selection based on user role
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
         const teamSelect = document.getElementById('app-team-select');
         
         // Clear previous options
         teamSelect.innerHTML = '<option value="">Select a team...</option>';
+        
+        let teamsResponse;
+        if (currentUser.role === 'root') {
+            // Root users see all teams
+            teamsResponse = await apiCall('/teams');
+        } else {
+            // Admin users see only their associated teams
+            teamsResponse = await apiCall('/profile/teams');
+        }
         
         if (teamsResponse.success && teamsResponse.teams) {
             teamsResponse.teams.forEach(team => {
@@ -1475,6 +1627,16 @@ function updateUIBasedOnUserRole() {
         if (newToggleBtn) newToggleBtn.style.display = 'flex';
     }
     
+    // Controlar visibilidade do botão User Management (apenas para root)
+    const userManagementBtn = document.getElementById('user-management-btn');
+    if (userManagementBtn) {
+        if (currentUser.role === 'root') {
+            userManagementBtn.style.display = 'flex';
+        } else {
+            userManagementBtn.style.display = 'none';
+        }
+    }
+    
     // Update user info in header
     const userNameElements = document.querySelectorAll('#user-name, #dropdown-user-name');
     const userRoleElement = document.getElementById('dropdown-user-role');
@@ -1814,9 +1976,175 @@ function closeUserMenu() {
 }
 
 // Funções dos modais do menu do usuário
-function openProfileModal() {
+async function openProfileModal() {
     closeUserMenu();
-    showInfo('Profile settings modal will be implemented soon');
+    
+    try {
+        showGlobalLoading();
+        
+        // Get current user from session
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        if (!currentUser.id) {
+            showError('User information not found');
+            return;
+        }
+        
+        // Fetch user profile and teams separately
+        const [profileResponse, teamsResponse] = await Promise.all([
+            apiCall('/profile'),
+            apiCall('/profile/teams')
+        ]);
+        
+        if (!profileResponse.success) {
+            showError('Failed to load profile information');
+            return;
+        }
+        
+        const user = profileResponse.user;
+        
+        // Add teams to user object if the teams call was successful
+        if (teamsResponse.success && teamsResponse.teams) {
+            user.teams = teamsResponse.teams;
+        } else {
+            user.teams = [];
+        }
+        
+        // Populate profile information
+        document.getElementById('profile-username').value = user.username;
+        document.getElementById('profile-role').value = getRoleDisplayName(user.role);
+        
+        // Update profile avatar
+        const profileAvatar = document.getElementById('profile-avatar');
+        if (user.username) {
+            const initial = user.username.charAt(0).toUpperCase();
+            profileAvatar.innerHTML = `<div style="font-weight: 600; font-size: 28px;">${initial}</div>`;
+        }
+        
+        // Populate teams list
+        const teamsList = document.getElementById('profile-teams-list');
+        if (user.teams && user.teams.length > 0) {
+            teamsList.innerHTML = user.teams.map(team => `
+                <div class="team-item">
+                    <div class="team-icon">
+                        ${team.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="team-info">
+                        <div class="team-name">${team.name}</div>
+                        <div class="team-description">${team.description || 'No description'}</div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            teamsList.innerHTML = `
+                <div class="team-item">
+                    <div class="team-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M12 1v6m0 6v6"/>
+                        </svg>
+                    </div>
+                    <div class="team-info">
+                        <div class="team-name">No teams assigned</div>
+                        <div class="team-description">You are not currently associated with any teams</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        hideGlobalLoading();
+        openModal('profile-modal');
+        
+    } catch (error) {
+        hideGlobalLoading();
+        console.error('Failed to load profile:', error);
+        showError('Failed to load profile information');
+    }
+}
+
+function getRoleDisplayName(role) {
+    const roleMap = {
+        'root': 'Root User',
+        'admin': 'Administrator',
+        'user': 'User'
+    };
+    return roleMap[role] || role;
+}
+
+function openChangePasswordModal() {
+    // Clear form fields
+    document.getElementById('current-password-input').value = '';
+    document.getElementById('new-password-input').value = '';
+    document.getElementById('confirm-password-input').value = '';
+    
+    closeModal('profile-modal');
+    openModal('change-password-modal');
+}
+
+async function submitChangePassword() {
+    const currentPassword = document.getElementById('current-password-input').value;
+    const newPassword = document.getElementById('new-password-input').value;
+    const confirmPassword = document.getElementById('confirm-password-input').value;
+    
+    // Validation
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        showError('All password fields are required');
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        showError('New password and confirmation do not match');
+        return;
+    }
+    
+    if (newPassword.length < 6) {
+        showError('New password must be at least 6 characters long');
+        return;
+    }
+    
+    if (currentPassword === newPassword) {
+        showError('New password must be different from current password');
+        return;
+    }
+    
+    try {
+        showGlobalLoading();
+        
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        if (!currentUser.id) {
+            showError('User information not found');
+            return;
+        }
+        
+        const response = await apiCall('/profile/change-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+        
+        hideGlobalLoading();
+        
+        if (response.success) {
+            showSuccess('Password changed successfully');
+            closeModal('change-password-modal');
+            
+            // Clear form
+            document.getElementById('current-password-input').value = '';
+            document.getElementById('new-password-input').value = '';
+            document.getElementById('confirm-password-input').value = '';
+        } else {
+            showError(response.message || 'Failed to change password');
+        }
+        
+    } catch (error) {
+        hideGlobalLoading();
+        console.error('Failed to change password:', error);
+        showError('Failed to change password');
+    }
 }
 
 async function openUsersModal() {

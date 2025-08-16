@@ -62,6 +62,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Se o usuário precisa trocar a senha, não gerar token de autenticação
 	if result.User.MustChangePassword {
+		// Gerar um token temporário especial para mudança de senha
+		tempToken, err := h.authUseCase.GeneratePasswordChangeToken(result.User.ID, result.User.Username)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   "Failed to generate password change token",
+			})
+			return
+		}
+		
+		// Set secure HTTP-only cookie com o token temporário
+		c.SetSameSite(http.SameSiteStrictMode)
+		c.SetCookie(
+			"password_change_token",
+			tempToken,
+			3600, // 1 hora
+			"/",
+			"",
+			false, // não requer HTTPS em desenvolvimento
+			true,  // HTTP-only
+		)
+		
 		// Retornar resposta indicando que precisa trocar senha
 		c.JSON(http.StatusOK, gin.H{
 			"success":              true,
@@ -121,8 +143,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // ChangePasswordFirstTime permite mudança de senha para usuários que precisam trocar senha (sem token)
 func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 	var req struct {
-		UserID          string `json:"user_id" binding:"required"`
-		Username        string `json:"username" binding:"required"`
+		UserID          string `json:"user_id"`
+		Username        string `json:"username"`
 		CurrentPassword string `json:"current_password" binding:"required"`
 		NewPassword     string `json:"new_password" binding:"required"`
 	}
@@ -135,8 +157,38 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 		return
 	}
 
+	var username, userID string
+	
+	// Se não foi fornecido user_id/username no request, tentar obter do token temporário
+	if req.UserID == "" || req.Username == "" {
+		tempToken, err := c.Cookie("password_change_token")
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error":   "No authentication information provided",
+			})
+			return
+		}
+		
+		// Validar token temporário
+		tokenUserID, tokenUsername, err := h.authUseCase.ValidatePasswordChangeToken(tempToken)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"error":   "Invalid or expired session",
+			})
+			return
+		}
+		
+		userID = tokenUserID
+		username = tokenUsername
+	} else {
+		userID = req.UserID
+		username = req.Username
+	}
+
 	// Validar se o usuário existe e a senha atual está correta
-	result, err := h.authUseCase.Authenticate(req.Username, req.CurrentPassword)
+	result, err := h.authUseCase.Authenticate(username, req.CurrentPassword)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
@@ -146,7 +198,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 	}
 
 	// Verificar se o user_id corresponde
-	if result.User.ID != req.UserID {
+	if result.User.ID != userID {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"error":   "Invalid user data",
@@ -164,7 +216,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 	}
 
 	// Atualizar a senha e remover a flag MustChangePassword
-	err = h.authUseCase.ChangePasswordFirstTime(req.UserID, req.NewPassword)
+	err = h.authUseCase.ChangePasswordFirstTime(userID, req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -172,6 +224,17 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 		})
 		return
 	}
+	
+	// Limpar o cookie de token temporário após mudança bem-sucedida
+	c.SetCookie(
+		"password_change_token",
+		"",
+		-1, // max age -1 deletes the cookie
+		"/",
+		"",
+		false,
+		true,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -272,7 +335,7 @@ func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 // ValidatePasswordChangeAccess middleware para validar acesso à página de mudança de senha
 func (h *AuthHandler) ValidatePasswordChangeAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Para acesso à página de mudança de senha, verificamos se há um cookie de token
+		// Primeiro verificar se há um token de autenticação normal
 		token, err := c.Cookie("auth_token")
 		
 		if err == nil {
@@ -292,10 +355,24 @@ func (h *AuthHandler) ValidatePasswordChangeAccess() gin.HandlerFunc {
 			}
 		}
 		
-		// Se não há token ou token inválido, verificar se chegou aqui via fluxo de login
-		// A página em si fará a validação pelo sessionStorage
-		// Se não há dados válidos no sessionStorage, o JavaScript redirecionará para login
-		c.Next()
+		// Verificar se há token temporário de mudança de senha
+		tempToken, err := c.Cookie("password_change_token")
+		if err == nil {
+			// Validar o token temporário
+			userID, username, err := h.authUseCase.ValidatePasswordChangeToken(tempToken)
+			if err == nil {
+				// Token temporário válido - permitir acesso à página
+				// Adicionar dados do usuário ao contexto para uso na página
+				c.Set("temp_user_id", userID)
+				c.Set("temp_username", username)
+				c.Next()
+				return
+			}
+		}
+		
+		// Se não há tokens válidos, redirecionar para login
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		c.Abort()
 	}
 }
 
