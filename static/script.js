@@ -576,6 +576,11 @@ function renderApplications(applications) {
         showEmptyState(applicationsList, 'No applications found', 'Create your first application to manage feature toggles and get started!', 'applications');
         return;
     }
+    
+    // Check user role for permissions
+    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+    const isAdminOrRoot = currentUser.role === 'admin' || currentUser.role === 'root';
+    
     applicationsList.innerHTML = applications.map(app => `
         <div class="card app-card" data-app-id="${app.id}">
             <div class="app-card-header">
@@ -586,6 +591,7 @@ function renderApplications(applications) {
                             <circle cx="12" cy="12" r="3"/>
                         </svg>
                     </button>
+                    ${isAdminOrRoot ? `
                     <button class="icon-btn" title="Gerar Secret Key" onclick="event.stopPropagation(); generateSecretKey('${app.id}', '${app.name}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M7 10V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V10"/>
@@ -611,6 +617,7 @@ function renderApplications(applications) {
                             <line x1="14" y1="11" x2="14" y2="17"/>
                         </svg>
                     </button>
+                    ` : ''}
                 </div>
             </div>
             <div class="toggle-divider"></div>
@@ -713,6 +720,10 @@ function renderToggles(toggles) {
         return;
     }
     
+    // Check user role for permissions
+    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+    const isAdminOrRoot = currentUser.role === 'admin' || currentUser.role === 'root';
+    
     // Extrair todos os caminhos folha
     const leafNodes = [];
     function traverse(node, path = [], enabledPath = [], idPath = []) {
@@ -771,7 +782,11 @@ function renderToggles(toggles) {
             if (!disabledFound && !toggle.enabledPath[idx]) disabledFound = true;
             const linkClass = disabledFound ? 'path-link disabled' : 'path-link';
             const toggleId = toggle.idPath[idx];
-            return `<a href="#" class="${linkClass}" onclick="editTogglePath('${toggleId}'); return false;">${part}</a>`;
+            if (isAdminOrRoot) {
+                return `<a href="#" class="${linkClass}" onclick="editTogglePath('${toggleId}'); return false;">${part}</a>`;
+            } else {
+                return `<span class="${linkClass}">${part}</span>`;
+            }
         }).join('<span class="path-separator">.</span>');
 
         return `
@@ -779,6 +794,7 @@ function renderToggles(toggles) {
                 <div class="toggle-card-header">
                     <div class="toggle-header-left"><span class="toggle-status-dot">${statusSVG}</span></div>
                     <div class="toggle-header-right">
+                        ${isAdminOrRoot ? `
                         <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${toggle.id}', '${pathStr}')">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="3,6 5,6 21,6"/>
@@ -787,6 +803,7 @@ function renderToggles(toggles) {
                                 <line x1="14" y1="11" x2="14" y2="17"/>
                             </svg>
                         </button>
+                        ` : ''}
                     </div>
                 </div>
                 <div class="toggle-divider"></div>
