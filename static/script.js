@@ -975,11 +975,36 @@ async function showConfirmationModal(title, message, description, confirmText, c
         document.body.insertAdjacentHTML('beforeend', modalHTML);
         
         const modal = document.getElementById(modalId);
+        
+        // Apply correct z-index using modal stack system
+        if (modal) {
+            // Initialize modal stack if needed
+            if (!window.modalStack) {
+                window.modalStack = [];
+            }
+            
+            // Add to modal stack
+            if (!window.modalStack.includes(modalId)) {
+                window.modalStack.push(modalId);
+            }
+            
+            // Calculate correct z-index
+            const baseZIndex = 1000;
+            const zIndex = baseZIndex + (window.modalStack.length * 10);
+            modal.style.zIndex = zIndex;
+        }
         const confirmBtn = modal.querySelector('.confirmation-confirm-btn');
         const cancelBtn = modal.querySelector('.confirmation-cancel-btn');
         
         // Handle button clicks
         confirmBtn.addEventListener('click', () => {
+            // Remove from modal stack
+            if (window.modalStack) {
+                const index = window.modalStack.indexOf(modalId);
+                if (index > -1) {
+                    window.modalStack.splice(index, 1);
+                }
+            }
             modal.classList.add('closing');
             setTimeout(() => {
                 modal.remove();
@@ -988,6 +1013,13 @@ async function showConfirmationModal(title, message, description, confirmText, c
         });
         
         cancelBtn.addEventListener('click', () => {
+            // Remove from modal stack
+            if (window.modalStack) {
+                const index = window.modalStack.indexOf(modalId);
+                if (index > -1) {
+                    window.modalStack.splice(index, 1);
+                }
+            }
             modal.classList.add('closing');
             setTimeout(() => {
                 modal.remove();
@@ -999,6 +1031,13 @@ async function showConfirmationModal(title, message, description, confirmText, c
         const handleEsc = (e) => {
             if (e.key === 'Escape') {
                 document.removeEventListener('keydown', handleEsc);
+                // Remove from modal stack
+                if (window.modalStack) {
+                    const index = window.modalStack.indexOf(modalId);
+                    if (index > -1) {
+                        window.modalStack.splice(index, 1);
+                    }
+                }
                 modal.classList.add('closing');
                 setTimeout(() => {
                     modal.remove();
@@ -1537,13 +1576,30 @@ function showPasswordModal(username, password) {
     // Add modal to DOM
     document.body.insertAdjacentHTML('beforeend', modalHTML);
     
-    // Show modal with animation
-    setTimeout(() => {
-        const modal = document.getElementById('password-modal');
-        if (modal) {
-            modal.classList.add('show');
+    // Apply correct z-index using modal stack system
+    const modal = document.getElementById('password-modal');
+    if (modal) {
+        // Initialize modal stack if needed
+        if (!window.modalStack) {
+            window.modalStack = [];
         }
-    }, 10);
+        
+        // Add to modal stack
+        const modalId = 'password-modal';
+        if (!window.modalStack.includes(modalId)) {
+            window.modalStack.push(modalId);
+        }
+        
+        // Calculate correct z-index
+        const baseZIndex = 1000;
+        const zIndex = baseZIndex + (window.modalStack.length * 10);
+        modal.style.zIndex = zIndex;
+        
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('show');
+        }, 10);
+    }
 }
 
 function copyPassword() {
@@ -1573,6 +1629,15 @@ function copyPassword() {
 function closePasswordModal() {
     const modal = document.getElementById('password-modal');
     if (modal) {
+        // Remove from modal stack
+        if (window.modalStack) {
+            const modalId = 'password-modal';
+            const index = window.modalStack.indexOf(modalId);
+            if (index > -1) {
+                window.modalStack.splice(index, 1);
+            }
+        }
+        
         modal.classList.add('closing');
         setTimeout(() => {
             modal.remove();
