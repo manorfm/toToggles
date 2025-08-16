@@ -3097,6 +3097,73 @@ document.addEventListener('DOMContentLoaded', async function() {
     initializeEventListeners();
     
     console.log('[DEBUG] DOMContentLoaded: Loading applications');
-    loadApplications();
+    await loadApplications();
+    
+    // Após carregar tudo, fazer fade-in suave da página
+    console.log('[DEBUG] DOMContentLoaded: Showing page with smooth transition');
+    showPageWithTransition();
 });
+
+// Função para mostrar a página com transição suave
+function showPageWithTransition() {
+    // Encontrar overlay de transição
+    const overlay = document.getElementById('page-transition-overlay');
+    const appLayout = document.querySelector('.app-layout');
+    
+    // Garantir que o layout da página esteja pronto
+    if (appLayout) {
+        // Adicionar classe loaded para fade-in
+        appLayout.classList.add('loaded');
+        
+        // Ocultar overlay de loading após um breve delay
+        setTimeout(() => {
+            if (overlay) {
+                overlay.classList.add('hidden');
+                
+                // Remover o overlay do DOM após a transição
+                setTimeout(() => {
+                    if (overlay && overlay.parentNode) {
+                        overlay.parentNode.removeChild(overlay);
+                    }
+                }, 500);
+            }
+        }, 300);
+    }
+}
+
+// Função para criar overlay de transição (compatibilidade com login.js)
+function createPageTransition(text, subtext) {
+    // Verificar se já existe um overlay
+    let overlay = document.getElementById('page-transition-overlay');
+    
+    if (!overlay) {
+        // Criar overlay se não existir
+        overlay = document.createElement('div');
+        overlay.id = 'page-transition-overlay';
+        overlay.className = 'page-transition-overlay';
+        
+        overlay.innerHTML = `
+            <div class="page-transition-content">
+                <div class="page-transition-spinner"></div>
+                <div class="page-transition-text">${text}</div>
+                <div class="page-transition-subtext">${subtext}</div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+    } else {
+        // Atualizar conteúdo se já existir
+        const textElement = overlay.querySelector('.page-transition-text');
+        const subtextElement = overlay.querySelector('.page-transition-subtext');
+        
+        if (textElement) textElement.textContent = text;
+        if (subtextElement) subtextElement.textContent = subtext;
+        
+        // Mostrar overlay se estiver oculto
+        overlay.classList.remove('hidden');
+    }
+    
+    // Forçar o reflow para garantir que a transição funcione
+    overlay.offsetHeight;
+}
 

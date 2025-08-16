@@ -18,8 +18,8 @@ func ServeStatic(c *gin.Context) {
 		c.Next()
 		return
 	}
-	// NÃO intercepta rotas de autenticação
-	if strings.HasPrefix(c.Request.URL.Path, "/auth/") || c.Request.URL.Path == "/login" {
+	// NÃO intercepta rotas de autenticação e páginas especiais
+	if strings.HasPrefix(c.Request.URL.Path, "/auth/") || c.Request.URL.Path == "/login" || c.Request.URL.Path == "/change-password" {
 		c.Next()
 		return
 	}
