@@ -75,12 +75,12 @@ func (h *SecretKeyHandler) GenerateSecretKey(c *gin.Context) {
 }
 
 // GetTogglessBySecret retorna todos os toggles de uma aplicação usando secret key
-// GET /api/toggles/by-secret/{secret_key}
+// GET /api/toggles - Header: X-API-Key
 func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
-	secretKey := c.Param("secret")
+	secretKey := c.GetHeader("X-API-Key")
 	if secretKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Secret key is required",
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "X-API-Key header is required",
 		})
 		return
 	}

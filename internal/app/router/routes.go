@@ -28,10 +28,10 @@ func Init(router *gin.Engine) {
 		auth.POST("/change-password-first-time", handler.ChangePasswordFirstTime)
 	}
 
-	// Rotas públicas da API (acesso por secret key)
+	// Rotas públicas da API (acesso por secret key via header X-API-Key)
 	api := router.Group("/api")
 	{
-		api.GET("/toggles/by-secret/:secret", handler.GetTogglesBySecret)
+		api.GET("/toggles", handler.GetTogglesBySecret)
 	}
 
 	// Rotas protegidas que requerem autenticação

@@ -262,7 +262,7 @@ curl -X DELETE http://localhost:8081/secret-keys/{secret_key_id} \
   -H "Authorization: Bearer {token}"
 
 # Get toggles using secret key (public API)
-curl http://localhost:8081/api/toggles/by-secret/{secret_key}
+curl -H "X-API-Key: {secret_key}" http://localhost:8081/api/toggles
 ```
 
 #### Feature Toggles
@@ -310,21 +310,27 @@ curl -X DELETE http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
 
 ```bash
 # Get toggles using secret key (no authentication required)
-curl http://localhost:8081/api/toggles/by-secret/sk_1234567890abcdef...
+curl -H "X-API-Key: sk_1234567890abcdef..." http://localhost:8081/api/toggles
 
-# Response includes application ID and all toggles
+# Response includes application info and all toggles
 {
-  "success": true,
-  "application_id": "01JZDH3YFPR88WB6DTRPMRSHRE",
-  "toggles": [
-    {
-      "id": "toggle123",
-      "application_id": "01JZDH3YFPR88WB6DTRPMRSHRE",
-      "toggle": "feature.new.dashboard",
-      "enabled": true,
-      "created_at": "2024-01-01T00:00:00Z"
-    }
-  ]
+  "application": {
+    "id": "01JZDH3YFPR88WB6DTRPMRSHRE",
+    "name": "user-service",
+    "toggles": [
+      {
+        "id": "toggle123",
+        "value": "dashboard",
+        "enabled": true,
+        "path": "feature.new.dashboard",
+        "level": 2,
+        "parent_id": "feature_parent_id",
+        "app_id": "01JZDH3YFPR88WB6DTRPMRSHRE",
+        "has_activation_rule": false,
+        "activation_rule": {"type": "", "value": ""}
+      }
+    ]
+  }
 }
 ```
 
@@ -664,8 +670,8 @@ For questions, issues, or contributions, please open an issue on GitHub.
 - `DELETE /applications/:id/toggles/:toggleId`      → DeleteToggle
 - `PUT    /applications/:id/toggle/:toggleId`       → UpdateEnabled (recursively)
 
-### Public API (Secret Key Access)
-- `GET    /api/toggles/by-secret/:secret`           → GetTogglesBySecret
+### Public API (Secret Key Access via Header)
+- `GET    /api/toggles` (Header: X-API-Key)         → GetTogglesBySecret
 
 ### Static & Frontend
 - `GET    /static/*`                   → Serve static assets (HTML, CSS, JS)

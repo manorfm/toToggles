@@ -1316,8 +1316,13 @@ function showSecretKeyModal(secretKey, appName, isRegeneration = false) {
         </div>
         
         <div class="secret-key-usage">
-            <p><strong>Usage:</strong> <code>GET /api/toggles/by-secret/YOUR_SECRET_KEY</code></p>
-            <p class="usage-note">Replace YOUR_SECRET_KEY with the actual key value. Keep this key secure and never expose it in client-side code.</p>
+            <p><strong>API Endpoint:</strong> <code>GET /api/toggles</code></p>
+            <p><strong>Authentication:</strong> <code>X-API-Key: YOUR_SECRET_KEY</code></p>
+            <p class="usage-note">Always pass the secret key in the X-API-Key header for security. Replace YOUR_SECRET_KEY with your actual key value.</p>
+            <div style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: 600; color: #374151;">Example:</p>
+                <code style="display: block; background: #1e293b; color: #e2e8f0; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-family: monospace; border: 1px solid #334155;">curl -H "X-API-Key: YOUR_SECRET_KEY" "https://your-domain.com/api/toggles"</code>
+            </div>
         </div>
     `;
     

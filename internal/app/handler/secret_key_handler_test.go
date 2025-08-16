@@ -44,7 +44,7 @@ func setupSecretKeyTestRouter() (*gin.Engine, *gorm.DB) {
 		applications.GET("/:id/secret-keys", GetSecretKeys)
 	}
 	
-	router.GET("/api/toggles/by-secret/:secret", GetTogglesBySecret)
+	router.GET("/api/toggles", GetTogglesBySecret)
 	router.DELETE("/secret-keys/:id", DeleteSecretKey)
 	
 	return router, db
@@ -109,12 +109,33 @@ func TestGetSecretKeys(t *testing.T) {
 	}
 }
 
+func TestGetTogglesBySecret_MissingHeader(t *testing.T) {
+	router, _ := setupSecretKeyTestRouter()
+	
+	// Test without X-API-Key header
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/toggles", nil)
+	router.ServeHTTP(w, req)
+	
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status 401, got %d", w.Code)
+	}
+	
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	
+	if response["error"] == nil {
+		t.Error("Expected error message")
+	}
+}
+
 func TestGetTogglesBySecret_InvalidSecret(t *testing.T) {
 	router, _ := setupSecretKeyTestRouter()
 	
 	// Test with invalid secret key
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/toggles/by-secret/invalid-secret", nil)
+	req, _ := http.NewRequest("GET", "/api/toggles", nil)
+	req.Header.Set("X-API-Key", "invalid-secret")
 	router.ServeHTTP(w, req)
 	
 	if w.Code != http.StatusNotFound {
@@ -170,7 +191,8 @@ func TestGetTogglesBySecret_ValidSecret(t *testing.T) {
 	
 	// Test with valid secret key
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/toggles/by-secret/"+plainKey, nil)
+	req, _ := http.NewRequest("GET", "/api/toggles", nil)
+	req.Header.Set("X-API-Key", plainKey)
 	router.ServeHTTP(w, req)
 	
 	if w.Code != http.StatusOK {
@@ -230,7 +252,7 @@ func TestSecretKeyRegeneration(t *testing.T) {
 		applications.POST("/:id/generate-secret", GenerateSecretKey)
 	}
 	
-	router.GET("/api/toggles/by-secret/:secret", GetTogglesBySecret)
+	router.GET("/api/toggles", GetTogglesBySecret)
 	
 	// Setup: Create application and initial secret key
 	app := &entity.Application{
@@ -264,7 +286,8 @@ func TestSecretKeyRegeneration(t *testing.T) {
 	
 	// First key should no longer work
 	w3 := httptest.NewRecorder()
-	req3, _ := http.NewRequest("GET", "/api/toggles/by-secret/"+firstKey, nil)
+	req3, _ := http.NewRequest("GET", "/api/toggles", nil)
+	req3.Header.Set("X-API-Key", firstKey)
 	router.ServeHTTP(w3, req3)
 	
 	if w3.Code != http.StatusNotFound {
@@ -273,7 +296,8 @@ func TestSecretKeyRegeneration(t *testing.T) {
 	
 	// Second key should work
 	w4 := httptest.NewRecorder()
-	req4, _ := http.NewRequest("GET", "/api/toggles/by-secret/"+secondKey, nil)
+	req4, _ := http.NewRequest("GET", "/api/toggles", nil)
+	req4.Header.Set("X-API-Key", secondKey)
 	router.ServeHTTP(w4, req4)
 	
 	if w4.Code != http.StatusOK {
