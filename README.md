@@ -1,19 +1,50 @@
-# ToToggle
+# ToToogle
 
-A simple and effective feature toggle management application built with Go and modern web technologies.
+A comprehensive feature toggle management platform built with Go and modern web technologies, designed for enterprise-scale feature flag management with robust user access controls and team collaboration.
 
 ## 🚀 Features
 
+### Core Toggle Management
 - **Hierarchical Feature Toggles**: Manage complex toggle hierarchies with parent-child relationships
-- **RESTful API**: Clean, well-documented API built with Go and Gin framework
-- **Modern UI**: Responsive, intuitive interface built with vanilla HTML, CSS, and JavaScript
-- **Real-time Status**: Visual indicators for toggle status with color-coded states
-- **Application Management**: Create and manage multiple applications with their respective toggles
-- **Hierarchical Visualization**: View toggle hierarchies in a tree-like structure
+- **Conditional Activation Rules**: Advanced rule-based toggle activation with support for:
+  - Percentage-based rollouts
+  - Canary releases
+  - Parameter-based targeting
+  - User ID targeting
+  - IP address filtering
+  - Country-based activation
+  - Time-based activation
 - **Bulk Operations**: Enable/disable toggles recursively affecting all child toggles
-- **🔐 Authentication System**: Secure login system with token-based authentication and HTTP-only cookies
-- **🔑 Application Secret Keys**: Generate and manage API keys for secure external access to feature toggles
-- **🛡️ Memory Authentication**: Persistent authentication with secure token management
+- **Interactive Toggle Paths**: Modern visual toggle path representation with responsive hover effects
+
+### User Management & Security
+- **Multi-Level Authentication**: Secure role-based access control system
+  - **Root Users**: Super administrators with full system access
+  - **Admin Users**: Application and data management capabilities
+  - **Regular Users**: Read-only access to assigned applications
+- **Team-Based Access Control**: Organize users into teams with granular permissions
+- **Session Management**: Persistent authentication with secure HTTP-only cookies
+- **Password Security**: Bcrypt-hashed passwords with forced password change support
+
+### Application & Secret Management
+- **Multi-Application Support**: Create and manage multiple applications with isolated toggle sets
+- **Secret Key Management**: Generate and manage API keys for secure external access
+- **Team-Application Permissions**: Assign teams to applications with specific permission levels:
+  - Read: View-only access
+  - Write: Modify toggles and settings
+  - Admin: Full application control
+
+### Modern Web Interface
+- **Responsive Design**: Modern, intuitive interface optimized for all devices
+- **Real-time Status Indicators**: Visual toggle status with color-coded states
+- **Profile Management**: User profile settings with team visibility (hidden for root users)
+- **User Management Interface**: Comprehensive user administration for root users
+- **Dark Mode Ready**: Modern design system with CSS custom properties
+
+### API & Integration
+- **RESTful API**: Clean, well-documented API built with Go and Gin framework
+- **External API Access**: Public API endpoints using secret keys for integration
+- **Comprehensive Error Handling**: Structured error responses with detailed codes
 
 
 ## 🏗️ Architecture
@@ -99,45 +130,75 @@ The application follows Clean Architecture and Hexagonal Architecture principles
 
 ## 🎯 Usage
 
-### Authentication
+### Initial Setup
 
-1. **Login**
+1. **First Run**
    - Access http://localhost:8081/login
    - Use default credentials: `admin / admin`
-   - Authentication uses secure HTTP-only cookies
-   - Sessions persist across browser restarts
+   - Root user has access to all features including user management
 
-2. **API Authentication**
-   - Use session cookies for web interface
-   - Use Bearer tokens for API access
-   - Generate application secret keys for external API access
+### User Management (Root Users Only)
 
-### Web Interface
+1. **Managing Users**
+   - Access User Management from the profile menu
+   - Create new users with specific roles (root/admin/user)
+   - Assign users to teams for application access
+   - Force password changes for security
 
-1. **Create an Application**
+2. **Team Management**
+   - Create teams to organize users
+   - Assign teams to applications with specific permissions
+   - Manage team membership and access levels
+
+### Application Management
+
+1. **Create Applications**
    - Click "New Application" button
-   - Enter application name
-   - Click "Create"
+   - Enter application name and assign to a team
+   - Teams control which users can access the application
 
 2. **Generate Secret Keys**
-   - Navigate to application details
+   - Navigate to application toggles view
    - Click "Generate Secret Key" 
-   - Copy the generated key (shown only once)
+   - Copy the generated key (shown only once for security)
    - Use for external API access without authentication
 
-3. **Add Feature Toggles**
-   - Click the "eye" icon on an application card
-   - Click "New Toggle" button
-   - Enter toggle path (e.g., `feature.new.dashboard`)
-   - Set initial enabled state
-   - Click "Create"
+### Feature Toggle Management
 
-4. **Manage Toggle Hierarchy**
-   - Toggles are automatically organized in a hierarchical structure
-   - Parent toggles control child toggles
-   - Click on toggle paths to edit individual nodes
-   - Use the recursive update feature to affect all children
-   - **Novo:** O caminho dos toggles aparece como uma palavra corrida, cada parte é interativa e ao passar o mouse há um efeito visual moderno e responsivo.
+1. **Create Feature Toggles**
+   - Click the application card to view toggles
+   - Click "New Toggle" button
+   - Enter hierarchical toggle path (e.g., `feature.new.dashboard`)
+   - Toggles are automatically organized in a tree structure
+
+2. **Configure Advanced Rules**
+   - Edit toggles to access activation rules
+   - Set conditional activation based on:
+     - Percentage rollouts (e.g., 25% of users)
+     - Parameter values
+     - User IDs, IP addresses, countries
+     - Time-based activation
+   - Combine rules for complex targeting
+
+3. **Manage Toggle Hierarchy**
+   - Interactive toggle paths with hover effects
+   - Parent toggles control child toggle behavior
+   - Use recursive updates to affect entire subtrees
+   - Real-time visual status indicators
+
+### Profile & Security
+
+1. **Profile Management**
+   - Access via user menu in header
+   - View user information and role
+   - See team memberships (hidden for root users)
+   - Change password with secure validation
+
+2. **Security Features**
+   - Session persistence across browser restarts
+   - Secure HTTP-only cookies
+   - Role-based access control
+   - Team-based application isolation
 
 ### API Usage
 
@@ -273,46 +334,82 @@ curl http://localhost:8081/api/toggles/by-secret/sk_1234567890abcdef...
 toToogle/
 ├── internal/
 │   └── app/
-│       ├── config/              # Configuration and initialization
-│       │   ├── config.go        # Main configuration
-│       │   ├── db.go           # Database setup
-│       │   └── logger.go       # Logging configuration
-│       ├── domain/             # Domain layer
-│       │   ├── entity/         # Business entities
-│       │   │   ├── application.go
-│       │   │   ├── toggle.go
-│       │   │   └── error.go
-│       │   └── repository/     # Repository interfaces
+│       ├── config/                    # Configuration and initialization
+│       │   ├── config.go             # Main configuration
+│       │   ├── db.go                 # Database setup and migrations
+│       │   ├── logger.go             # Logging configuration
+│       │   └── config_test.go        # Configuration tests
+│       ├── domain/                   # Domain layer (Clean Architecture)
+│       │   ├── entity/               # Business entities and domain logic
+│       │   │   ├── application.go    # Application entity
+│       │   │   ├── toggle.go         # Toggle entity with activation rules
+│       │   │   ├── user.go           # User entity with roles and permissions
+│       │   │   ├── team.go           # Team entity with user associations
+│       │   │   ├── secret_key.go     # Secret key management
+│       │   │   ├── activation_rule.go # Advanced toggle activation rules
+│       │   │   ├── error.go          # Domain error definitions
+│       │   │   └── validation.go     # Domain validation logic
+│       │   ├── auth/                 # Authentication strategies
+│       │   │   ├── auth_strategy.go  # Auth strategy interface
+│       │   │   └── local_strategy.go # Local authentication
+│       │   └── repository/           # Repository interfaces
 │       │       ├── application_repository.go
-│       │       └── toggle_repository.go
-│       ├── usecase/            # Application layer
+│       │       ├── toggle_repository.go
+│       │       ├── user_repository.go
+│       │       ├── team_repository.go
+│       │       └── secret_key_repository.go
+│       ├── usecase/                  # Application layer (business logic)
 │       │   ├── application_usecase.go
 │       │   ├── toggle_usecase.go
-│       │   └── mocks.go        # Test mocks
-│       ├── infrastructure/     # Infrastructure layer
-│       │   └── database/       # Database implementations
+│       │   ├── user_usecase.go
+│       │   ├── team_usecase.go
+│       │   ├── auth_usecase.go
+│       │   ├── secret_key_usecase.go
+│       │   └── mocks.go              # Test mocks
+│       ├── infrastructure/           # Infrastructure layer
+│       │   └── database/             # Database implementations
 │       │       ├── application_repository.go
-│       │       └── toggle_repository.go
-│       ├── handler/            # Presentation layer
+│       │       ├── toggle_repository.go
+│       │       ├── user_repository.go
+│       │       ├── team_repository.go
+│       │       └── secret_key_repository.go
+│       ├── handler/                  # Presentation layer (HTTP handlers)
 │       │   ├── application_handler.go
 │       │   ├── toggle_handler.go
+│       │   ├── user_handler.go
+│       │   ├── user_management_handler.go
+│       │   ├── team_handler.go
+│       │   ├── auth_handler.go
+│       │   ├── secret_key_handler.go
 │       │   ├── static_handler.go
-│       │   └── init.go
-│       └── router/             # Routing configuration
-│           ├── router.go
-│           └── routes.go
-├── static/                     # Frontend assets
-│   ├── index.html
-│   ├── script.js
-│   └── styles.css
-├── db/                         # Database files
-├── main.go                     # Application entry point
-├── go.mod                      # Go module definition
-├── go.sum                      # Go module checksums
-├── Makefile                    # Build and development commands
-├── Dockerfile                  # Container configuration
-├── docker-compose.yml          # Docker orchestration
-└── README.md                   # This file
+│       │   └── init.go               # Dependency injection
+│       ├── middleware/               # HTTP middleware
+│       │   └── security.go          # Authentication and authorization
+│       └── router/                   # Routing configuration
+│           ├── router.go             # Main router setup
+│           └── routes.go             # Route definitions
+├── static/                           # Frontend assets
+│   ├── index.html                    # Main application interface
+│   ├── login.html                    # Login page
+│   ├── change-password.html          # Password change page
+│   ├── script.js                     # Application JavaScript
+│   ├── login.js                      # Login functionality
+│   └── styles.css                    # Modern CSS with responsive design
+├── db/                               # Database files and migrations
+│   ├── migrations/                   # Database migration files
+│   │   ├── 20230703_create_applications_and_toggles.sql
+│   │   ├── 20241213_add_activation_rules.sql
+│   │   ├── 20241214_add_auth_system.sql
+│   │   ├── 20250814_add_teams_system.sql
+│   │   └── 20250815_add_user_management_features.sql
+│   └── toggles.db                    # SQLite database file
+├── main.go                           # Application entry point
+├── go.mod                            # Go module definition
+├── go.sum                            # Go module checksums
+├── Makefile                          # Build and development commands
+├── Dockerfile                        # Container configuration
+├── docker-compose.yml                # Docker orchestration
+└── README.md                         # This documentation
 ```
 
 ## 🧪 Testing
@@ -373,13 +470,34 @@ make dev           # Development mode (migrate + run)
 make run           # Run the application
 make build         # Build binary
 make test          # Run tests
-make clean         # Clean build artifacts
+make clean         # Clean build artifacts and database
 make migrate-up    # Run database migrations
 make migrate-down  # Rollback migrations
 make migrate-status # Show migration status
 make docker-build  # Build Docker image
 make docker-run    # Run Docker container
 ```
+
+## 🆕 Recent Updates & Improvements
+
+### Version 2.0 Features
+- **Complete User Management System**: Multi-role authentication with root, admin, and user levels
+- **Team-Based Access Control**: Organize users into teams with granular application permissions
+- **Advanced Activation Rules**: Conditional toggle activation with multiple targeting options
+- **Modern UI Enhancements**: Responsive design with improved user experience
+- **Profile Management**: User-specific settings with role-aware interface adjustments
+- **Security Improvements**: Enhanced authentication, password management, and session handling
+
+### Database Evolution
+- **Migration System**: Comprehensive database versioning with goose
+- **Entity Relationships**: Complex many-to-many relationships between users, teams, and applications
+- **Security Schema**: Encrypted passwords, secret key management, and audit trails
+
+### API Maturity
+- **RESTful Design**: Full CRUD operations across all entities
+- **Role-Based Endpoints**: Different API access levels based on user roles
+- **Public API**: External integration support via secret keys
+- **Comprehensive Error Handling**: Structured error responses with detailed codes
 
 ### Database Migrations
 ```bash
@@ -504,6 +622,27 @@ For questions, issues, or contributions, please open an issue on GitHub.
 ### Authentication
 - `POST   /auth/login`                  → Login (public)
 - `POST   /auth/logout`                 → Logout (public)
+- `POST   /auth/change-password`        → Change password (protected)
+
+### User Management (Root Only)
+- `POST   /users`                       → CreateUser
+- `GET    /users`                       → GetAllUsers
+- `GET    /users/:id`                   → GetUser
+- `PUT    /users/:id`                   → UpdateUser
+- `DELETE /users/:id`                   → DeleteUser
+
+### Team Management (Protected)
+- `POST   /teams`                       → CreateTeam
+- `GET    /teams`                       → GetAllTeams
+- `GET    /teams/:id`                   → GetTeam
+- `PUT    /teams/:id`                   → UpdateTeam
+- `DELETE /teams/:id`                   → DeleteTeam
+- `POST   /teams/:id/users`             → AddUserToTeam
+- `DELETE /teams/:id/users/:userId`     → RemoveUserFromTeam
+
+### Profile Management (Protected)
+- `GET    /profile`                     → GetUserProfile
+- `GET    /profile/teams`               → GetUserTeams
 
 ### Applications (Protected)
 - `POST   /applications`                → CreateApplication
@@ -521,17 +660,18 @@ For questions, issues, or contributions, please open an issue on GitHub.
 - `POST   /applications/:id/toggles`                → CreateToggle
 - `GET    /applications/:id/toggles`                → GetAllToggles
 - `GET    /applications/:id/toggles/:toggleId`      → GetToggleStatus
-- `PUT    /applications/:id/toggles/:toggleId`      → UpdateToggle
+- `PUT    /applications/:id/toggles/:toggleId`      → UpdateToggle (with activation rules)
 - `DELETE /applications/:id/toggles/:toggleId`      → DeleteToggle
 - `PUT    /applications/:id/toggle/:toggleId`       → UpdateEnabled (recursively)
 
 ### Public API (Secret Key Access)
 - `GET    /api/toggles/by-secret/:secret`           → GetTogglesBySecret
 
-### Static & Misc
+### Static & Frontend
 - `GET    /static/*`                   → Serve static assets (HTML, CSS, JS)
 - `GET    /LICENSE`                    → Serve LICENSE file
 - `GET    /login`                      → Login page (public)
+- `GET    /change-password`            → Change password page (public)
 - `GET    /`                           → Serve frontend (protected)
 
 --- 

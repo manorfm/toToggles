@@ -2085,35 +2085,45 @@ async function openProfileModal() {
             profileAvatar.innerHTML = `<div style="font-weight: 600; font-size: 28px;">${initial}</div>`;
         }
         
-        // Populate teams list
-        const teamsList = document.getElementById('profile-teams-list');
-        if (user.teams && user.teams.length > 0) {
-            teamsList.innerHTML = user.teams.map(team => `
-                <div class="team-item">
-                    <div class="team-icon">
-                        ${team.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div class="team-info">
-                        <div class="team-name">${team.name}</div>
-                        <div class="team-description">${team.description || 'No description'}</div>
-                    </div>
-                </div>
-            `).join('');
+        // Show/hide teams section based on user role
+        const teamsSection = document.querySelector('#profile-modal .form-section:nth-child(2)');
+        if (user.role === 'root') {
+            // Hide teams section for root users
+            teamsSection.style.display = 'none';
         } else {
-            teamsList.innerHTML = `
-                <div class="team-item">
-                    <div class="team-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M12 1v6m0 6v6"/>
-                        </svg>
+            // Show teams section for non-root users
+            teamsSection.style.display = 'block';
+            
+            // Populate teams list
+            const teamsList = document.getElementById('profile-teams-list');
+            if (user.teams && user.teams.length > 0) {
+                teamsList.innerHTML = user.teams.map(team => `
+                    <div class="team-item">
+                        <div class="team-icon">
+                            ${team.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="team-info">
+                            <div class="team-name">${team.name}</div>
+                            <div class="team-description">${team.description || 'No description'}</div>
+                        </div>
                     </div>
-                    <div class="team-info">
-                        <div class="team-name">No teams assigned</div>
-                        <div class="team-description">You are not currently associated with any teams</div>
+                `).join('');
+            } else {
+                teamsList.innerHTML = `
+                    <div class="team-item">
+                        <div class="team-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v6m0 6v6"/>
+                            </svg>
+                        </div>
+                        <div class="team-info">
+                            <div class="team-name">No teams assigned</div>
+                            <div class="team-description">You are not currently associated with any teams</div>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            }
         }
         
         hideGlobalLoading();
