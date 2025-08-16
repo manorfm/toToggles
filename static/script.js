@@ -988,8 +988,8 @@ async function showConfirmationModal(title, message, description, confirmText, c
                 window.modalStack.push(modalId);
             }
             
-            // Calculate correct z-index
-            const baseZIndex = 1000;
+            // Calculate correct z-index (higher than global loading spinner at 10000)
+            const baseZIndex = 10100;
             const zIndex = baseZIndex + (window.modalStack.length * 10);
             modal.style.zIndex = zIndex;
         }
@@ -1240,6 +1240,7 @@ async function generateSecretKey(appId, appName) {
         }
         
         if (!confirmed) {
+            hideGlobalLoading();
             return;
         }
         

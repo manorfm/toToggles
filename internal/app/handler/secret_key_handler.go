@@ -102,9 +102,11 @@ func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":        true,
-		"application_id": key.ApplicationID,
-		"toggles":        toggles,
+		"applications": []gin.H{
+			{
+				"toggles": toggles,
+			},
+		},
 	})
 }
 
