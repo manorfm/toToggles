@@ -112,7 +112,23 @@ func (h *ApplicationHandler) GetApplication(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, app)
+	// Get teams associated with this application
+	teams, err := h.teamUseCase.GetApplicationTeams(id)
+	if err != nil {
+		// If we can't get teams, just log and continue without teams info
+		teams = []*entity.Team{}
+	}
+
+	// Create response with application and teams
+	response := gin.H{
+		"id":         app.ID,
+		"name":       app.Name,
+		"created_at": app.CreatedAt,
+		"updated_at": app.UpdatedAt,
+		"teams":      teams,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // GetAllApplications busca todas as aplicações filtradas por permissão do usuário

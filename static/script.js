@@ -1001,7 +1001,7 @@ async function editApplication(appId, appName) {
         
         // Get current application details to find its team
         const appResponse = await apiCall(`/applications/${appId}`);
-        if (appResponse.success && appResponse.teams && appResponse.teams.length > 0) {
+        if (appResponse && appResponse.teams && appResponse.teams.length > 0) {
             // Select the current team
             teamSelect.value = appResponse.teams[0].id;
         }
