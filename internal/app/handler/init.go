@@ -51,7 +51,7 @@ func InitHandlers(db *gorm.DB) {
 	userHandler = NewUserHandler(userUseCase)
 	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase)
 	teamHandler = NewTeamHandler(teamUseCase)
-	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase)
+	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase, appUseCase)
 }
 
 // Funções globais para as rotas

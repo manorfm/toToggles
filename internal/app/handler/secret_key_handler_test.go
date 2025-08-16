@@ -180,16 +180,22 @@ func TestGetTogglesBySecret_ValidSecret(t *testing.T) {
 	var response map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &response)
 	
-	if !response["success"].(bool) {
-		t.Error("Expected success to be true")
+	if response["application"] == nil {
+		t.Error("Expected application to be present")
 	}
 	
-	if response["toggles"] == nil {
+	application := response["application"].(map[string]interface{})
+	
+	if application["id"] != "test-app-id" {
+		t.Error("Expected correct application id")
+	}
+	
+	if application["name"] != "Test App" {
+		t.Error("Expected correct application name")
+	}
+	
+	if application["toggles"] == nil {
 		t.Error("Expected toggles to be present")
-	}
-	
-	if response["application_id"] != "test-app-id" {
-		t.Error("Expected correct application_id")
 	}
 }
 

@@ -9,14 +9,16 @@ import (
 )
 
 type SecretKeyHandler struct {
-	secretKeyUseCase *usecase.SecretKeyUseCase
-	toggleUseCase    *usecase.ToggleUseCase
+	secretKeyUseCase    *usecase.SecretKeyUseCase
+	toggleUseCase       *usecase.ToggleUseCase
+	applicationUseCase  *usecase.ApplicationUseCase
 }
 
-func NewSecretKeyHandler(secretKeyUseCase *usecase.SecretKeyUseCase, toggleUseCase *usecase.ToggleUseCase) *SecretKeyHandler {
+func NewSecretKeyHandler(secretKeyUseCase *usecase.SecretKeyUseCase, toggleUseCase *usecase.ToggleUseCase, applicationUseCase *usecase.ApplicationUseCase) *SecretKeyHandler {
 	return &SecretKeyHandler{
-		secretKeyUseCase: secretKeyUseCase,
-		toggleUseCase:    toggleUseCase,
+		secretKeyUseCase:   secretKeyUseCase,
+		toggleUseCase:      toggleUseCase,
+		applicationUseCase: applicationUseCase,
 	}
 }
 
@@ -92,6 +94,15 @@ func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
 		return
 	}
 
+	// Buscar dados da aplicação
+	application, err := h.applicationUseCase.GetApplicationByID(key.ApplicationID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve application: " + err.Error(),
+		})
+		return
+	}
+
 	// Buscar todos os toggles da aplicação
 	toggles, err := h.toggleUseCase.GetAllTogglesByApp(key.ApplicationID)
 	if err != nil {
@@ -101,11 +112,28 @@ func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
 		return
 	}
 
+	// Simplificar toggles removendo children e parent
+	simplifiedToggles := make([]gin.H, 0, len(toggles))
+	for _, toggle := range toggles {
+		simplifiedToggle := gin.H{
+			"id":                toggle.ID,
+			"value":             toggle.Value,
+			"enabled":           toggle.Enabled,
+			"path":              toggle.Path,
+			"level":             toggle.Level,
+			"parent_id":         toggle.ParentID,
+			"app_id":            toggle.AppID,
+			"has_activation_rule": toggle.HasActivationRule,
+			"activation_rule":   toggle.ActivationRule,
+		}
+		simplifiedToggles = append(simplifiedToggles, simplifiedToggle)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"applications": []gin.H{
-			{
-				"toggles": toggles,
-			},
+		"application": gin.H{
+			"id":      application.ID,
+			"name":    application.Name,
+			"toggles": simplifiedToggles,
 		},
 	})
 }
