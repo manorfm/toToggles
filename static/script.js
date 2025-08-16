@@ -445,7 +445,13 @@ function renderApplications(applications) {
                     </button>
                     <button class="icon-btn" title="Gerar Secret Key" onclick="event.stopPropagation(); generateSecretKey('${app.id}', '${app.name}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                            <path d="M7 10V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V10"/>
+                            <rect x="5" y="10" width="14" height="11" rx="2"/>
+                            <circle cx="12" cy="15.5" r="1.5"/>
+                            <path d="M12 17L12 19"/>
+                            <path d="M21 10L22 9"/>
+                            <path d="M22 15L21 14"/>
+                            <path d="M21 18L22 19"/>
                         </svg>
                     </button>
                     <button class="icon-btn" title="Editar Aplicação" onclick="event.stopPropagation(); editApplication('${app.id}', '${app.name}')">
@@ -755,7 +761,118 @@ async function deleteToggle(toggleId, togglePath) {
     }
 }
 
-// Função para criar modal de confirmação profissional
+// Função moderna para modal de confirmação profissional
+async function showConfirmationModal(title, message, description, confirmText, cancelText, iconType = 'danger') {
+    return new Promise((resolve) => {
+        const modalId = 'confirmation-modal-' + Date.now();
+        
+        let iconSVG = '';
+        let iconClass = '';
+        
+        if (iconType === 'danger') {
+            iconSVG = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M15 9l-6 6"/>
+                    <path d="M9 9l6 6"/>
+                </svg>
+            `;
+            iconClass = 'confirmation-modal-danger';
+        } else if (iconType === 'warning') {
+            iconSVG = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                </svg>
+            `;
+            iconClass = 'confirmation-modal-warning';
+        } else if (iconType === 'info') {
+            iconSVG = `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4"/>
+                    <path d="M12 8h.01"/>
+                </svg>
+            `;
+            iconClass = 'confirmation-modal-info';
+        }
+        
+        const modalHTML = `
+            <div id="${modalId}" class="modal-overlay confirmation-modal">
+                <div class="confirmation-modal-container">
+                    <div class="confirmation-modal-content ${iconClass}">
+                        <div class="confirmation-modal-header">
+                            <div class="confirmation-modal-icon">
+                                ${iconSVG}
+                            </div>
+                            <div class="confirmation-modal-text">
+                                <h3 class="confirmation-modal-title">${title}</h3>
+                                <p class="confirmation-modal-message">${message}</p>
+                                <p class="confirmation-modal-description">${description}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="confirmation-modal-actions">
+                            <button type="button" class="btn btn-secondary confirmation-cancel-btn">
+                                ${cancelText}
+                            </button>
+                            <button type="button" class="btn btn-danger confirmation-confirm-btn">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1ZM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118ZM2.5 3h11V2h-11v1Z"/>
+                                </svg>
+                                ${confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to DOM
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        const modal = document.getElementById(modalId);
+        const confirmBtn = modal.querySelector('.confirmation-confirm-btn');
+        const cancelBtn = modal.querySelector('.confirmation-cancel-btn');
+        
+        // Handle button clicks
+        confirmBtn.addEventListener('click', () => {
+            modal.classList.add('closing');
+            setTimeout(() => {
+                modal.remove();
+                resolve(true);
+            }, 300);
+        });
+        
+        cancelBtn.addEventListener('click', () => {
+            modal.classList.add('closing');
+            setTimeout(() => {
+                modal.remove();
+                resolve(false);
+            }, 300);
+        });
+        
+        // Handle ESC key
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') {
+                document.removeEventListener('keydown', handleEsc);
+                modal.classList.add('closing');
+                setTimeout(() => {
+                    modal.remove();
+                    resolve(false);
+                }, 300);
+            }
+        };
+        document.addEventListener('keydown', handleEsc);
+        
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('show');
+        }, 10);
+    });
+}
+
+// Função para criar modal de confirmação profissional (legacy - manter compatibilidade)
 function createConfirmModal(title, message, description, confirmText, cancelText, iconType = 'danger') {
     const modal = document.createElement('div');
     modal.className = 'confirm-modal';
@@ -899,44 +1016,239 @@ async function editApplication(appId, appName) {
 }
 
 async function generateSecretKey(appId, appName) {
-    if (!confirm(`Generate a new secret key for "${appName}"?\n\nThis will create a new API key for accessing toggles.`)) {
-        return;
-    }
-    
     try {
+        showGlobalLoading();
+        
+        // Check if secret keys already exist
+        const existingKeysResponse = await apiCall(`/applications/${appId}/secret-keys`);
+        const hasExistingKeys = existingKeysResponse.success && 
+                               existingKeysResponse.secret_keys && 
+                               existingKeysResponse.secret_keys.length > 0;
+        
+        let confirmed;
+        if (hasExistingKeys) {
+            // Show warning about regeneration
+            confirmed = await showConfirmationModal(
+                'Regenerate Secret Key',
+                `Generate a new secret key for "${appName}"?`,
+                '⚠️ WARNING: This will invalidate the current secret key. Any systems using the existing key will stop working until updated with the new key. This action cannot be undone.',
+                'Generate New Key',
+                'Cancel',
+                'warning'
+            );
+        } else {
+            // First time generation
+            confirmed = await showConfirmationModal(
+                'Generate Secret Key',
+                `Generate a secret key for "${appName}"?`,
+                'This will create a new API key for accessing toggles. You will only see this key once, so make sure to copy it safely.',
+                'Generate Key',
+                'Cancel',
+                'info'
+            );
+        }
+        
+        if (!confirmed) {
+            return;
+        }
+        
         const response = await apiCall(`/applications/${appId}/generate-secret`, {
             method: 'POST'
         });
         
         if (response.success) {
-            // Show the generated secret key in the proper modal
-            const secretKey = response.secret_key || response.key || 'Generated successfully';
+            // Use plain_key which contains the actual secret key value
+            let secretKey = response.plain_key || response.plainTextKey || response.secret_key || 'Generated successfully';
             
-            // Set the secret key in the modal
-            document.getElementById('secret-key-display').value = secretKey;
+            // If secret_key is an object, try to extract the plain text key
+            if (typeof secretKey === 'object' && secretKey !== null) {
+                secretKey = secretKey.plain_key || secretKey.plainTextKey || secretKey.key || 'Generated successfully';
+            }
             
-            // Set up copy button
-            const copyBtn = document.getElementById('copy-secret-btn');
-            copyBtn.onclick = function() {
-                navigator.clipboard.writeText(secretKey).then(() => {
-                    showSuccess('Secret key copied to clipboard!');
-                }).catch(() => {
-                    // Fallback for older browsers
-                    document.getElementById('secret-key-display').select();
-                    document.execCommand('copy');
-                    showSuccess('Secret key copied to clipboard!');
-                });
-            };
+            // Ensure secretKey is a string
+            if (typeof secretKey === 'object') {
+                secretKey = 'Generated successfully';
+            }
+            if (!secretKey || secretKey === '') {
+                secretKey = 'Generated successfully';
+            }
             
-            // Open the modal
-            openModal('secret-key-modal');
-            
+            showSecretKeyModal(secretKey, appName, hasExistingKeys);
             showSuccess('Secret key generated successfully!');
         } else {
             showError(response.error || 'Failed to generate secret key');
         }
     } catch (error) {
-        showError('Error generating secret key');
+        showError('Error generating secret key: ' + error.message);
+    } finally {
+        hideGlobalLoading();
+    }
+}
+
+// Professional secret key modal following system standard
+function showSecretKeyModal(secretKey, appName, isRegeneration = false) {
+    const modalId = 'professional-secret-modal-' + Date.now();
+    
+    // Ensure secretKey is a valid string
+    if (!secretKey || typeof secretKey === 'object') {
+        secretKey = 'Secret key generated successfully';
+    }
+    secretKey = String(secretKey).trim();
+    
+    const secretKeyDescription = `
+        <div class="secret-key-warning">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+            </svg>
+            <span><strong>Important:</strong> This key will only be shown once. Copy and store it securely.${isRegeneration ? ' The previous key has been invalidated.' : ''}</span>
+        </div>
+        
+        <div class="secret-key-display-container">
+            <label class="secret-key-label">Secret Key</label>
+            <div class="secret-key-input-group">
+                <input type="text" 
+                       class="secret-key-input" 
+                       value="${secretKey}" 
+                       readonly 
+                       id="secret-display-${modalId}">
+                <button type="button" 
+                        class="secret-key-copy-btn" 
+                        onclick="copySecretKey('${modalId}', '${secretKey}')">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                    </svg>
+                    Copy
+                </button>
+            </div>
+        </div>
+        
+        <div class="secret-key-usage">
+            <p><strong>Usage:</strong> <code>GET /api/toggles/by-secret/YOUR_SECRET_KEY</code></p>
+            <p class="usage-note">Replace YOUR_SECRET_KEY with the actual key value. Keep this key secure and never expose it in client-side code.</p>
+        </div>
+    `;
+    
+    const modalHTML = `
+        <div id="${modalId}" class="modal-overlay confirmation-modal">
+            <div class="confirmation-modal-container">
+                <div class="confirmation-modal-content">
+                    <div class="confirmation-modal-header">
+                        <div class="confirmation-modal-icon secret-key-modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M7 10V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V10"/>
+                                <rect x="5" y="10" width="14" height="11" rx="2"/>
+                                <circle cx="12" cy="15.5" r="1.5"/>
+                                <path d="M12 17L12 19"/>
+                                <path d="M21 10L22 9"/>
+                                <path d="M22 15L21 14"/>
+                                <path d="M21 18L22 19"/>
+                            </svg>
+                        </div>
+                        <div class="confirmation-modal-text">
+                            <h3 class="confirmation-modal-title">
+                                ${isRegeneration ? 'Secret Key Regenerated' : 'Secret Key Generated'}
+                            </h3>
+                            <p class="confirmation-modal-message">for ${appName}</p>
+                            <div class="confirmation-modal-description">
+                                ${secretKeyDescription}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="confirmation-modal-actions">
+                        <button type="button" 
+                                class="btn btn-primary secret-key-close-btn"
+                                onclick="closeSecretKeyModal('${modalId}')">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+                            </svg>
+                            I've Saved the Key
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add modal to DOM
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Initialize modal stack and show modal
+    if (!window.modalStack) {
+        window.modalStack = [];
+    }
+    window.modalStack.push(modalId);
+    
+    const modal = document.getElementById(modalId);
+    modal.style.zIndex = 1000 + (window.modalStack.length * 10);
+    modal.style.animation = 'slideInScale 0.3s ease-out';
+    
+    // Auto-select the secret key for easy copying
+    setTimeout(() => {
+        const secretInput = document.getElementById(`secret-display-${modalId}`);
+        if (secretInput) {
+            secretInput.focus();
+            secretInput.select();
+        }
+    }, 100);
+}
+
+// Function to copy secret key
+function copySecretKey(modalId, secretKey) {
+    // Get the actual value from the input field as backup
+    const secretInput = document.getElementById(`secret-display-${modalId}`);
+    const actualSecretKey = secretInput ? secretInput.value : secretKey;
+    
+    navigator.clipboard.writeText(actualSecretKey).then(() => {
+        showSuccess('Secret key copied to clipboard!');
+        
+        // Visual feedback on copy button
+        const copyBtn = document.querySelector(`#${modalId} .secret-key-copy-btn`);
+        const originalHTML = copyBtn.innerHTML;
+        copyBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/>
+            </svg>
+            Copied!
+        `;
+        copyBtn.classList.add('copied');
+        
+        setTimeout(() => {
+            copyBtn.innerHTML = originalHTML;
+            copyBtn.classList.remove('copied');
+        }, 2000);
+    }).catch(() => {
+        // Fallback for older browsers
+        const secretInput = document.getElementById(`secret-display-${modalId}`);
+        if (secretInput) {
+            secretInput.select();
+            secretInput.setSelectionRange(0, 99999); // For mobile devices
+            document.execCommand('copy');
+            showSuccess('Secret key copied to clipboard!');
+        } else {
+            showError('Failed to copy secret key');
+        }
+    });
+}
+
+// Function to close secret key modal
+function closeSecretKeyModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.animation = 'slideOutScale 0.3s ease-in';
+        
+        // Remove from modal stack
+        if (window.modalStack) {
+            const index = window.modalStack.indexOf(modalId);
+            if (index > -1) {
+                window.modalStack.splice(index, 1);
+            }
+        }
+        
+        setTimeout(() => {
+            modal.remove();
+        }, 300);
     }
 }
 
@@ -2100,7 +2412,16 @@ async function saveUserChanges(userId, username) {
 }
 
 async function deleteUser(userId, username) {
-    if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+    const confirmed = await showConfirmationModal(
+        'Delete User',
+        `Are you sure you want to delete user "${username}"?`,
+        'This action cannot be undone. The user will be permanently removed from the system and will lose access to all applications and teams.',
+        'Delete User',
+        'Cancel',
+        'danger'
+    );
+    
+    if (!confirmed) {
         return;
     }
     
@@ -2223,7 +2544,16 @@ async function createNewTeam(event) {
 }
 
 async function deleteTeam(teamId, teamName) {
-    if (!confirm(`Are you sure you want to delete team "${teamName}"?`)) {
+    const confirmed = await showConfirmationModal(
+        'Delete Team',
+        `Are you sure you want to delete team "${teamName}"?`,
+        'This action cannot be undone. The team will be permanently removed from the system and all user associations will be lost.',
+        'Delete Team',
+        'Cancel',
+        'danger'
+    );
+    
+    if (!confirmed) {
         return;
     }
     
