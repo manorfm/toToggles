@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Test data files
+test-data.json
+gatling-test-data.json
+
+# Test results and reports
+stress-test.log
+stress-test-summary.md
+reports/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp

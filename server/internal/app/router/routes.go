@@ -12,6 +12,10 @@ func Init(router *gin.Engine) {
 	router.Use(middleware.CORSHeaders())
 	router.Use(middleware.RequestID())
 
+	// Health check endpoints (no authentication required for k8s probes)
+	router.GET("/health", handler.HealthCheck)
+	router.GET("/ready", handler.ReadinessCheck)
+
 	// Middleware para servir arquivos estáticos
 	router.Use(handler.ServeStatic)
 
