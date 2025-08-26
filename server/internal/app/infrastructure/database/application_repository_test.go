@@ -15,7 +15,12 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 
 	// Auto migrate
-	err = db.AutoMigrate(&entity.Application{}, &entity.Toggle{})
+	err = db.AutoMigrate(
+		&entity.Application{}, 
+		&entity.Toggle{}, 
+		&entity.SecretKey{},
+		&entity.ApprovalRequest{},
+	)
 	if err != nil {
 		t.Fatalf("Failed to migrate test database: %v", err)
 	}

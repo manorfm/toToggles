@@ -48,7 +48,7 @@ func (r *ApplicationRepositoryImpl) Update(app *entity.Application) error {
 	return r.db.Save(app).Error
 }
 
-// Delete remove uma aplicação e todas as suas toggles em cascata
+// Delete remove uma aplicação e todos os relacionamentos em cascata
 func (r *ApplicationRepositoryImpl) Delete(id string) error {
 	// Inicia uma transação
 	tx := r.db.Begin()
@@ -58,6 +58,27 @@ func (r *ApplicationRepositoryImpl) Delete(id string) error {
 
 	// Deleta todas as toggles da aplicação primeiro
 	err := tx.Where("app_id = ?", id).Delete(&entity.Toggle{}).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Deleta relacionamentos team_applications
+	err = tx.Exec("DELETE FROM team_applications WHERE application_id = ?", id).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Deleta secret keys relacionadas (se existirem)
+	err = tx.Where("application_id = ?", id).Delete(&entity.SecretKey{}).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Deleta approval requests relacionadas (opcional - para limpeza)
+	err = tx.Where("application_id = ?", id).Delete(&entity.ApprovalRequest{}).Error
 	if err != nil {
 		tx.Rollback()
 		return err

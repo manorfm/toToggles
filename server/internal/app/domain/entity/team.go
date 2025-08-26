@@ -44,10 +44,11 @@ type TeamApplication struct {
 
 // TeamUser representa a associação entre team e user
 type TeamUser struct {
-	TeamID    string    `gorm:"primaryKey;type:varchar(26)"`
-	UserID    string    `gorm:"primaryKey;type:varchar(26)"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	TeamID     string    `gorm:"primaryKey;type:varchar(26)"`
+	UserID     string    `gorm:"primaryKey;type:varchar(26)"`
+	IsApprover bool      `gorm:"default:false"` // Se o usuário é aprovador deste time
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 
 	// Relacionamentos
 	Team Team `gorm:"foreignKey:TeamID"`
@@ -122,6 +123,42 @@ type TeamWithCounts struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 	UserCount       int       `json:"user_count"`
 	ApplicationCount int      `json:"application_count"`
+}
+
+// GetApprovers retorna os usuários que são aprovadores deste time
+func (t *Team) GetApprovers() []*User {
+	var approvers []*User
+	// Para verificar se é aprovador, precisamos consultar TeamUser
+	// Esta função será complementada no repositório
+	return approvers
+}
+
+// GetApproverCount retorna o número de aprovadores do time
+func (t *Team) GetApproverCount() int {
+	return len(t.GetApprovers())
+}
+
+// HasApprover verifica se um usuário é aprovador deste time
+func (t *Team) HasApprover(userID string) bool {
+	for _, approver := range t.GetApprovers() {
+		if approver.ID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// TeamUserWithApprover representa um usuário de team com informação de aprovador
+type TeamUserWithApprover struct {
+	TeamID     string    `json:"team_id"`
+	UserID     string    `json:"user_id"`
+	IsApprover bool      `json:"is_approver"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	
+	// Dados do usuário
+	Username string   `json:"username"`
+	Role     UserRole `json:"role"`
 }
 
 // ValidatePermission valida se um nível de permissão é válido

@@ -59,6 +59,11 @@ func isAPIRoute(path string) bool {
 		return true
 	}
 	
+	// Rotas do sistema de aprovação
+	if strings.HasPrefix(path, "/approval") {
+		return true
+	}
+	
 	// Rota base de applications
 	if path == "/applications" {
 		return true

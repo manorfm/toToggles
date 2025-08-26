@@ -5,6 +5,50 @@ let currentEditingAppId = null;
 let editingToggleId = null;
 let lastEditedTogglePath = null;
 
+// Cache system to optimize API calls
+const apiCache = {
+    data: new Map(),
+    ttl: 30000, // 30 seconds TTL
+    
+    set(key, value) {
+        this.data.set(key, {
+            value,
+            timestamp: Date.now()
+        });
+    },
+    
+    get(key) {
+        const item = this.data.get(key);
+        if (!item) return null;
+        
+        // Check if expired
+        if (Date.now() - item.timestamp > this.ttl) {
+            this.data.delete(key);
+            return null;
+        }
+        
+        return item.value;
+    },
+    
+    clear(pattern = null) {
+        if (pattern) {
+            // Clear specific pattern
+            for (const key of this.data.keys()) {
+                if (key.includes(pattern)) {
+                    this.data.delete(key);
+                }
+            }
+        } else {
+            // Clear all
+            this.data.clear();
+        }
+    },
+    
+    has(key) {
+        return this.get(key) !== null;
+    }
+};
+
 // Elementos DOM
 const applicationsSection = document.getElementById('applications-section');
 const togglesSection = document.getElementById('toggles-section');
@@ -15,7 +59,7 @@ const globalLoadingSpinner = document.getElementById('global-loading-spinner');
 
 
 // Event Listeners initialization function
-function initializeEventListeners() {
+async function initializeEventListeners() {
     // Verificar se os elementos necessários existem
     if (!document.getElementById('applications-section')) {
         console.log('[DEBUG] initializeEventListeners: Main app elements not found - skipping');
@@ -56,10 +100,19 @@ function initializeEventListeners() {
     });
 
     // Após carregar aplicações, verificar se deve abrir tela de toggles
-    const savedAppId = sessionStorage.getItem('currentAppId');
-    const savedAppName = sessionStorage.getItem('currentAppName');
-    if (savedAppId && savedAppName) {
-        showToggles(savedAppId, savedAppName);
+    try {
+        const savedAppId = sessionStorage.getItem('currentAppId');
+        const savedAppName = sessionStorage.getItem('currentAppName');
+        if (savedAppId && savedAppName) {
+            console.log('[DEBUG] Restoring saved application:', savedAppId, savedAppName);
+            await showToggles(savedAppId, savedAppName);
+        }
+    } catch (error) {
+        console.error('[ERROR] Failed to restore saved application:', error);
+        // If restoration fails, clear the saved state and continue
+        sessionStorage.removeItem('currentAppId');
+        sessionStorage.removeItem('currentAppName');
+        sessionStorage.removeItem('current_application');
     }
 }
 
@@ -366,25 +419,63 @@ function showApplications() {
     // Clear sessionStorage
     sessionStorage.removeItem('currentAppId');
     sessionStorage.removeItem('currentAppName');
+    sessionStorage.removeItem('current_application');
     loadApplications();
 }
 
-function showToggles(appId, appName) {
+async function showToggles(appId, appName) {
     currentAppId = appId;
     currentAppName = appName;
     appNameElement.textContent = `Toggles of ${appName}`;
     applicationsSection.classList.add('hidden');
     togglesSection.classList.remove('hidden');
+    
     // Persistir no sessionStorage
     sessionStorage.setItem('currentAppId', appId);
     sessionStorage.setItem('currentAppName', appName);
+    
+    // Load application details and store in sessionStorage for approval system
+    try {
+        const appResponse = await apiCall(`/applications/${appId}`);
+        if (appResponse && appResponse.data) {
+            sessionStorage.setItem('current_application', JSON.stringify(appResponse.data));
+        }
+    } catch (error) {
+        console.warn('Failed to load application details:', error);
+    }
+    
     loadToggles(appId);
+}
+
+// Helper function for onclick events (since they can't be async)
+function handleShowToggles(appId, appName) {
+    showToggles(appId, appName).catch(error => {
+        console.error('Error showing toggles:', error);
+        showError('Erro ao carregar toggles da aplicação');
+    });
 }
 
 // Funções de API
 async function apiCall(url, options = {}) {
+    const method = options.method || 'GET';
+    const cacheKey = `${method}:${url}`;
+    
+    // Check cache for GET requests only (but skip cache for ALL approval endpoints)
+    const skipCache = url.includes('/approval/') || 
+                     options.forceRefresh === true;
+    
+    if (method === 'GET' && !skipCache && apiCache.has(cacheKey)) {
+        const cachedData = apiCache.get(cacheKey);
+        console.log(`[DEBUG] apiCall: Using cached data for ${url}`);
+        return cachedData;
+    }
+    
+    if (skipCache) {
+        console.log(`[DEBUG] apiCall: Skipping cache for critical endpoint ${url}`);
+    }
+    
     console.log(`[DEBUG] apiCall: Making request to ${url}`, {
-        method: options.method || 'GET',
+        method,
         headers: options.headers,
         hasBody: !!options.body
     });
@@ -486,6 +577,66 @@ async function apiCall(url, options = {}) {
         
         const data = await response.json();
         console.log(`[DEBUG] apiCall: Success response data:`, data);
+        
+        // Check if the response indicates approval is required
+        if (data.approval_required === true && data.message === "action requires approval") {
+            console.log(`[DEBUG] apiCall: Action intercepted by approval middleware`);
+            // Throw an error that can be caught specifically to handle approval flow
+            const approvalError = new Error(`Approval required for ${data.action_type}`);
+            approvalError.approvalRequired = true;
+            approvalError.actionType = data.action_type;
+            approvalError.originalResponse = data;
+            throw approvalError;
+        }
+        
+        // Cache GET requests (but not critical approval endpoints)
+        if (method === 'GET' && !skipCache) {
+            apiCache.set(cacheKey, data);
+        }
+        
+        // Clear related cache for non-GET requests to ensure fresh data
+        if (method !== 'GET') {
+            // Clear approval-related cache when making approval changes
+            if (url.includes('/approval/')) {
+                apiCache.clear('/approval/');
+            }
+            // Clear applications cache when making application changes
+            if (url.includes('/applications')) {
+                apiCache.clear('/applications');
+                // Also clear approval cache as application changes may create/delete approval requests
+                apiCache.clear('/approval/');
+            }
+            // Clear toggles cache when making toggle changes
+            if (url.includes('/toggles')) {
+                apiCache.clear('/toggles');
+                // Also clear approval cache as toggle changes may create approval requests
+                apiCache.clear('/approval/');
+            }
+        }
+        
+        // Debug específico para endpoints problemáticos
+        if (url.includes('/approval/my-approver-teams')) {
+            console.log(`[DEBUG] MY-APPROVER-TEAMS Response:`, {
+                url,
+                status: response.status,
+                dataType: typeof data,
+                dataKeys: Object.keys(data || {}),
+                data: JSON.stringify(data),
+                arrayLength: data?.data?.length
+            });
+        }
+        
+        if (url.includes('/approval/requests/approvable')) {
+            console.log(`[DEBUG] APPROVABLE-REQUESTS Response:`, {
+                url,
+                status: response.status,
+                dataType: typeof data,
+                dataKeys: Object.keys(data || {}),
+                data: JSON.stringify(data),
+                arrayLength: data?.data?.length
+            });
+        }
+        
         return data;
     } catch (error) {
         console.error('[DEBUG] API Error:', error);
@@ -495,7 +646,6 @@ async function apiCall(url, options = {}) {
             error: error.message,
             stack: error.stack
         });
-        showError(`Error in request: ${error.message}`);
         throw error;
     }
 }
@@ -554,14 +704,70 @@ async function handleCreateApplication(event) {
                 return;
             }
             
-            await apiCall('/applications', {
-                method: 'POST',
-                body: JSON.stringify({ 
-                    name: name,
-                    team_id: teamId
-                })
-            });
-            showSuccess('Application created successfully!');
+            // Check if approval is required for application creation
+            const approvalRequired = await checkIfApprovalRequired('application_create');
+            
+            if (approvalRequired) {
+                // Create approval request instead of executing immediately
+                try {
+                    const actionData = { name: name, team_id: teamId };
+                    const description = `Criar aplicação: ${name}`;
+                    
+                    // For application creation, we need to create a generic approval request
+                    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+                    const approvalData = {
+                        action_type: 'application_create',
+                        description: description,
+                        requested_by: currentUser.id,
+                        team_id: teamId,
+                        application_id: null,
+                        toggle_id: null,
+                        action_data: actionData
+                    };
+                    
+                    const response = await apiCall('/approval/requests', {
+                        method: 'POST',
+                        body: JSON.stringify(approvalData)
+                    });
+                    
+                    // Immediately refresh approval-related UI components
+                    console.log('[DEBUG] Application create approval request created successfully, refreshing UI...');
+                    
+                    // Refresh pending count badge
+                    await loadPendingRequestsCount();
+                    
+                    // If approval modal is open, refresh the current tab
+                    const approvalModal = document.getElementById('approval-modal');
+                    if (approvalModal && approvalModal.classList.contains('show')) {
+                        console.log('[DEBUG] Approval modal is open, refreshing approval requests list...');
+                        await loadApprovalRequests();
+                    }
+                    
+                    // Force a menu visibility update to ensure menu stays visible for approvers
+                    await updateApprovalMenuVisibility();
+                    
+                    // Show approval required message (simplified to avoid permission issues)
+                    showApprovalRequiredMessage([]);
+                    closeModal('app-modal');
+                    return; // Exit early when approval is required
+                    
+                } catch (approvalError) {
+                    console.error('Error creating approval request:', approvalError);
+                    showError('Erro ao criar solicitação de aprovação. Tente novamente.');
+                    return;
+                }
+                
+            } else {
+                // Execute the creation immediately if no approval required
+                await apiCall('/applications', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        name: name,
+                        team_id: teamId
+                    })
+                });
+                showSuccess('Application created successfully!');
+            }
         }
         
         closeModal('app-modal');
@@ -585,7 +791,7 @@ function renderApplications(applications) {
         <div class="card app-card" data-app-id="${app.id}">
             <div class="app-card-header">
                 <div class="app-card-header-right">
-                    <button class="icon-btn" title="Ver Toggles" onclick="event.stopPropagation(); showToggles('${app.id}', '${app.name}')">
+                    <button class="icon-btn" title="Ver Toggles" onclick="event.stopPropagation(); handleShowToggles('${app.id}', '${app.name}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                             <circle cx="12" cy="12" r="3"/>
@@ -623,7 +829,7 @@ function renderApplications(applications) {
             <div class="toggle-divider"></div>
             <div class="app-card-body">
                 <div class="app-title-row">
-                    <a href="#" class="app-title-link" onclick="event.preventDefault(); showToggles('${app.id}', '${app.name}')">${app.name}</a>
+                    <a href="#" class="app-title-link" onclick="event.preventDefault(); handleShowToggles('${app.id}', '${app.name}')">${app.name}</a>
                 </div>
                 <div class="app-counters-row">
                     <span title="Toggles enabled" class="counter enabled"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M9 12l2 2l4-4"/></svg> ${app.toggles_enabled}</span>
@@ -658,15 +864,44 @@ async function handleCreateToggle(event) {
     if (!path) return;
     
     try {
-        await apiCall(`/applications/${currentAppId}/toggles`, {
-            method: 'POST',
-            body: JSON.stringify({ toggle: path })
-        });
+        // Check if approval is required for toggle creation
+        const approvalRequired = await checkIfApprovalRequired('toggle_create');
         
-        closeModal('toggle-modal');
-        showSuccess('Toggle created successfully!');
-        loadToggles(currentAppId);
+        if (approvalRequired) {
+            // Create approval request instead of executing immediately
+            try {
+                const actionData = { toggle: path };
+                const description = `Create toggle: ${path}`;
+                
+                await createApprovalRequestForToggle(
+                    'toggle_create',
+                    null, // No toggle ID for creation
+                    actionData,
+                    description
+                );
+                
+                // Show approval required message (simplified to avoid permission issues)
+                showApprovalRequiredMessage([]);
+                closeModal('toggle-modal');
+                
+            } catch (approvalError) {
+                console.error('Error creating approval request:', approvalError);
+                showError('Erro ao criar solicitação de aprovação. Tente novamente.');
+            }
+            
+        } else {
+            // Execute the creation immediately if no approval required
+            await apiCall(`/applications/${currentAppId}/toggles`, {
+                method: 'POST',
+                body: JSON.stringify({ toggle: path })
+            });
+            
+            closeModal('toggle-modal');
+            showSuccess('Toggle created successfully!');
+            loadToggles(currentAppId);
+        }
     } catch (error) {
+        console.error('Error creating toggle:', error);
         showError('Error creating toggle');
     }
 }
@@ -679,6 +914,30 @@ async function handleUpdateToggle(event) {
     if (!editingToggleId) return;
     
     let updateData = { enabled };
+    let actionType = 'toggle_update';
+    let description = `Atualizar toggle: `;
+    
+    // Get current toggle data to compare changes
+    let currentToggle;
+    try {
+        // Get specific toggle by ID instead of all toggles
+        currentToggle = await apiCall(`/applications/${currentAppId}/toggles/${editingToggleId}`);
+    } catch (error) {
+        console.error('Error getting current toggle data:', error);
+        showError('Error getting current toggle data');
+        return;
+    }
+    
+    if (!currentToggle) {
+        showError('Toggle not found');
+        return;
+    }
+    
+    // Determine specific action type and description based on changes
+    if (currentToggle.enabled !== enabled) {
+        actionType = enabled ? 'toggle_enable' : 'toggle_disable';
+        description = `${enabled ? 'Enable' : 'Disable'} toggle ${currentToggle.value || currentToggle.id}`;
+    }
     
     // Se tem regra de ativação, incluir os dados da regra
     if (hasActivationRule) {
@@ -695,22 +954,232 @@ async function handleUpdateToggle(event) {
             type: ruleType,
             value: ruleValue
         };
+        
+        // If rule is being added/changed, this requires approval
+        const hasCurrentRule = currentToggle.has_activation_rule;
+        const currentRule = currentToggle.activation_rule;
+        const ruleChanged = !hasCurrentRule || 
+                           currentRule?.type !== ruleType || 
+                           currentRule?.value !== ruleValue;
+        
+        if (ruleChanged) {
+            actionType = 'toggle_rule';
+            description = `Change activation rule for toggle ${currentToggle.value || currentToggle.id}`;
+        }
     } else {
         updateData.has_activation_rule = false;
         updateData.activation_rule = null;
+        
+        // If rule is being removed, this requires approval
+        if (currentToggle.has_activation_rule) {
+            actionType = 'toggle_rule';
+            description = `Remove activation rule from toggle ${currentToggle.value || currentToggle.id}`;
+        }
     }
     
     try {
-        await apiCall(`/applications/${currentAppId}/toggles/${editingToggleId}`, {
-            method: 'PUT',
-            body: JSON.stringify(updateData)
-        });
-        showSuccess('Toggle updated successfully!');
-        closeModal('edit-toggle-modal');
-        loadToggles(currentAppId);
-        editingToggleId = null;
+        // Check if approval is required for this action
+        const approvalRequired = await checkIfApprovalRequired(actionType);
+        
+        if (approvalRequired) {
+            // Create approval request instead of executing immediately
+            try {
+                await createApprovalRequestForToggle(
+                    actionType,
+                    editingToggleId,
+                    updateData,
+                    description
+                );
+                
+                // Get team info for user notification
+                console.log('[DEBUG] Getting team info for approval notification...');
+                let currentApp = JSON.parse(sessionStorage.getItem('current_application') || '{}');
+                
+                // If current_application is not available, fetch it
+                if (!currentApp.teams && currentAppId) {
+                    console.log('[DEBUG] current_application missing teams info, fetching from API...');
+                    const appResponse = await apiCall(`/applications/${currentAppId}`);
+                    currentApp = appResponse;
+                    sessionStorage.setItem('current_application', JSON.stringify(currentApp));
+                }
+                
+                // Get team info from app.teams (multiple teams possible)
+                const approverTeams = currentApp.teams || [];
+                console.log('[DEBUG] Approver teams found:', approverTeams);
+                
+                showApprovalRequiredMessage(approverTeams);
+                closeModal('edit-toggle-modal');
+                editingToggleId = null;
+                
+            } catch (approvalError) {
+                console.error('Error creating approval request:', approvalError);
+                showError('Erro ao criar solicitação de aprovação. Tente novamente.');
+            }
+            
+        } else {
+            // Execute the change immediately if no approval required
+            try {
+                await apiCall(`/applications/${currentAppId}/toggles/${editingToggleId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(updateData)
+                });
+                showSuccess('Toggle updated successfully!');
+                closeModal('edit-toggle-modal');
+                loadToggles(currentAppId);
+                editingToggleId = null;
+            } catch (error) {
+                // Check if this is an approval-required error
+                if (error.approvalRequired === true) {
+                    console.log(`[DEBUG] Middleware intercepted action requiring approval:`, error.actionType);
+                    
+                    // Get team info for user notification
+                    console.log('[DEBUG] Getting team info for approval notification...');
+                    let currentApp = JSON.parse(sessionStorage.getItem('current_application') || '{}');
+                    
+                    // If current_application is not available, fetch it
+                    if (!currentApp.teams && currentAppId) {
+                        console.log('[DEBUG] current_application missing teams info, fetching from API...');
+                        const appResponse = await apiCall(`/applications/${currentAppId}`);
+                        currentApp = appResponse;
+                        sessionStorage.setItem('current_application', JSON.stringify(currentApp));
+                    }
+                    
+                    // Get team info from app.teams (multiple teams possible)
+                    const approverTeams = currentApp.teams || [];
+                    console.log('[DEBUG] Approver teams found:', approverTeams);
+                    
+                    showApprovalRequiredMessage(approverTeams);
+                    closeModal('edit-toggle-modal');
+                    editingToggleId = null;
+                    
+                    // Refresh to show any approval requests created
+                    setTimeout(() => {
+                        loadToggles(currentAppId);
+                    }, 1000);
+                } else {
+                    // Handle other errors normally
+                    console.error('Error updating toggle:', error);
+                    showError('Error updating toggle: ' + error.message);
+                }
+            }
+        }
+        
     } catch (error) {
+        console.error('Error updating toggle:', error);
         showError('Error saving toggle');
+    }
+}
+
+// Helper functions for approval workflow
+async function checkIfApprovalRequired(actionType) {
+    try {
+        console.log('[DEBUG] Checking approval requirements for action:', actionType);
+        
+        // First check if approval system is enabled
+        const enabledResponse = await apiCall('/approval/enabled');
+        console.log('[DEBUG] Approval enabled response:', enabledResponse);
+        
+        if (!enabledResponse.data || !enabledResponse.data.enabled) {
+            console.log('[DEBUG] Approval system is disabled');
+            return false;
+        }
+        
+        // Then check if this specific action requires approval
+        const requiredResponse = await apiCall(`/approval/required?action_type=${actionType}`);
+        console.log('[DEBUG] Approval required response:', requiredResponse);
+        
+        return requiredResponse.data && requiredResponse.data.required === true;
+    } catch (error) {
+        console.error('Error checking approval requirements:', error);
+        // Default to false if there's an error checking approval requirements
+        return false;
+    }
+}
+
+async function createApprovalRequestForToggle(actionType, toggleId, actionData, description) {
+    try {
+        // Get current application and team info
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        let currentApp = JSON.parse(sessionStorage.getItem('current_application') || '{}');
+        
+        // If current_application is not available, fetch it
+        if (!currentApp.teams && currentAppId) {
+            console.log('[DEBUG] current_application missing teams info, fetching from API...');
+            const appResponse = await apiCall(`/applications/${currentAppId}`);
+            currentApp = appResponse;
+            sessionStorage.setItem('current_application', JSON.stringify(currentApp));
+        }
+        
+        // Get the first team ID (apps are associated with teams via team_applications table)
+        const teamId = currentApp.teams && currentApp.teams.length > 0 ? currentApp.teams[0].id : null;
+        
+        if (!teamId) {
+            throw new Error('No team associated with this application');
+        }
+        
+        console.log('[DEBUG] Creating approval request with data:', {
+            actionType,
+            toggleId,
+            teamId,
+            currentUser: currentUser.id
+        });
+        
+        const approvalData = {
+            action_type: actionType,
+            description: description,
+            requested_by: currentUser.id,
+            team_id: teamId,
+            application_id: currentAppId,
+            toggle_id: toggleId,
+            action_data: actionData
+        };
+        
+        const response = await apiCall('/approval/requests', {
+            method: 'POST',
+            body: JSON.stringify(approvalData)
+        });
+        
+        // Immediately refresh approval-related UI components
+        console.log('[DEBUG] Approval request created successfully, refreshing UI...');
+        
+        // Refresh pending count badge
+        await loadPendingRequestsCount();
+        
+        // If approval modal is open, refresh the current tab
+        const approvalModal = document.getElementById('approval-modal');
+        if (approvalModal && approvalModal.classList.contains('show')) {
+            console.log('[DEBUG] Approval modal is open, refreshing approval requests list...');
+            await loadApprovalRequests();
+        }
+        
+        // Force a menu visibility update to ensure menu stays visible for approvers
+        await updateApprovalMenuVisibility();
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error creating approval request:', error);
+        throw error;
+    }
+}
+
+function showApprovalRequiredMessage(approverTeams) {
+    console.log('[DEBUG] showApprovalRequiredMessage called with:', approverTeams);
+    
+    if (!approverTeams || !Array.isArray(approverTeams)) {
+        console.error('[DEBUG] approverTeams is not a valid array:', approverTeams);
+        showInfo('Sua alteração foi enviada para aprovação. Você será notificado quando a aprovação for processada.');
+        return;
+    }
+    
+    const teamNames = approverTeams
+        .filter(team => team && team.name) // Filter out invalid teams
+        .map(team => team.name)
+        .join(', ');
+    
+    if (teamNames) {
+        showInfo(`Sua alteração foi enviada para aprovação dos administradores do time: ${teamNames}. Você será notificado quando a aprovação for processada.`);
+    } else {
+        showInfo('Sua alteração foi enviada para aprovação. Você será notificado quando a aprovação for processada.');
     }
 }
 
@@ -795,14 +1264,16 @@ function renderToggles(toggles) {
                     <div class="toggle-header-left"><span class="toggle-status-dot">${statusSVG}</span></div>
                     <div class="toggle-header-right">
                         ${isAdminOrRoot ? `
-                        <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${toggle.id}', '${pathStr}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3,6 5,6 21,6"/>
-                                <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
-                                <line x1="10" y1="11" x2="10" y2="17"/>
-                                <line x1="14" y1="11" x2="14" y2="17"/>
-                            </svg>
-                        </button>
+                        <div class="toggle-controls">
+                            <button class="icon-btn danger" title="Excluir Toggle" onclick="deleteToggle('${toggle.idPath[toggle.idPath.length - 1]}', '${pathStr}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3,6 5,6 21,6"/>
+                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+                                    <line x1="10" y1="11" x2="10" y2="17"/>
+                                    <line x1="14" y1="11" x2="14" y2="17"/>
+                                </svg>
+                            </button>
+                        </div>
                         ` : ''}
                     </div>
                 </div>
@@ -814,7 +1285,13 @@ function renderToggles(toggles) {
             </div>
         `;
     }).join('');
+    
+    // Quick toggle switches were removed - no longer needed
+    // Event listeners for quick switches are no longer necessary
 }
+
+// Quick toggle switches were removed from cards
+// This function is no longer needed since toggles can only be changed via modal
 
 // Funções de Edição
 function editToggle(path, enabled) {
@@ -910,13 +1387,41 @@ async function deleteToggle(toggleId, togglePath) {
     }
     
     try {
-        await apiCall(`/applications/${currentAppId}/toggles/${toggleId}`, {
-            method: 'DELETE'
-        });
+        // Check if approval is required for toggle deletion
+        const approvalRequired = await checkIfApprovalRequired('toggle_delete');
         
-        showSuccess('Toggle deleted successfully!');
-        loadToggles(currentAppId);
+        if (approvalRequired) {
+            // Create approval request instead of executing immediately
+            try {
+                const actionData = { toggle_id: toggleId };
+                const description = `Delete toggle: ${togglePath}`;
+                
+                await createApprovalRequestForToggle(
+                    'toggle_delete',
+                    toggleId,
+                    actionData,
+                    description
+                );
+                
+                // Show approval required message (simplified to avoid permission issues)
+                showApprovalRequiredMessage([]);
+                
+            } catch (approvalError) {
+                console.error('Error creating approval request:', approvalError);
+                showError('Erro ao criar solicitação de aprovação. Tente novamente.');
+            }
+            
+        } else {
+            // Execute the deletion immediately if no approval required
+            await apiCall(`/applications/${currentAppId}/toggles/${toggleId}`, {
+                method: 'DELETE'
+            });
+            
+            showSuccess('Toggle deleted successfully!');
+            loadToggles(currentAppId);
+        }
     } catch (error) {
+        console.error('Error deleting toggle:', error);
         showError('Error deleting toggle');
     }
 }
@@ -1158,21 +1663,114 @@ async function deleteApplication(appId, appName) {
     }
     
     try {
-        await apiCall(`/applications/${appId}`, {
-            method: 'DELETE'
-        });
+        console.log('[DEBUG] Checking approval requirements for action: application_delete');
         
-        showSuccess(`Application "${appName}" deleted successfully!`);
+        // Check if approval is required
+        const approvalRequired = await checkApprovalRequired('application_delete');
         
-        // Se estava visualizando os toggles desta aplicação, volta para a lista de aplicações
-        if (currentAppId === appId) {
-            showApplications();
+        if (approvalRequired) {
+            console.log('[DEBUG] Approval required for application deletion, creating approval request');
+            
+            try {
+                // Determine which team this application belongs to
+                let teamId = null;
+                
+                // First try to get the team from the current loaded applications
+                const applications = JSON.parse(sessionStorage.getItem('applications') || '[]');
+                const targetApp = applications.find(app => app.id === appId);
+                
+                if (targetApp && targetApp.teams && targetApp.teams.length > 0) {
+                    // Use the first team associated with this application
+                    teamId = targetApp.teams[0].id;
+                } else {
+                    // Fallback: get user teams and use the first one
+                    const userTeams = await getUserTeams();
+                    if (userTeams && userTeams.length > 0) {
+                        teamId = userTeams[0].id;
+                    }
+                }
+                
+                if (!teamId) {
+                    showError('Unable to determine team for approval request');
+                    return;
+                }
+                
+                const description = `Delete application: ${appName}`;
+                const actionData = {
+                    application_id: appId,
+                    name: appName
+                };
+                
+                // Create approval request
+                const approvalData = {
+                    action_type: 'application_delete',
+                    description: description,
+                    team_id: teamId,
+                    application_id: appId,
+                    action_data: actionData
+                };
+                
+                const response = await apiCall('/approval/requests', {
+                    method: 'POST',
+                    body: JSON.stringify(approvalData)
+                });
+                
+                // Immediately refresh approval-related UI components
+                console.log('[DEBUG] Application delete approval request created successfully, refreshing UI...');
+                
+                // Refresh pending count badge
+                await loadPendingRequestsCount();
+                
+                // If approval modal is open, refresh the current tab
+                const approvalModal = document.getElementById('approval-modal');
+                if (approvalModal && approvalModal.classList.contains('show')) {
+                    console.log('[DEBUG] Approval modal is open, refreshing approval requests list...');
+                    await loadApprovalRequests();
+                }
+                
+                // Force a menu visibility update to ensure menu stays visible for approvers
+                await updateApprovalMenuVisibility();
+                
+                // Show approval required message
+                showApprovalRequiredMessage([]);
+                
+            } catch (approvalError) {
+                console.error('Error creating approval request:', approvalError);
+                showError('Error creating approval request. Please try again.');
+                return;
+            }
+            
         } else {
-            // Recarrega a lista de aplicações
-            loadApplications();
+            // Execute deletion immediately if no approval required
+            await apiCall(`/applications/${appId}`, {
+                method: 'DELETE'
+            });
+            
+            showSuccess(`Application "${appName}" deleted successfully!`);
+            
+            // Se estava visualizando os toggles desta aplicação, volta para a lista de aplicações
+            if (currentAppId === appId) {
+                showApplications();
+            } else {
+                // Recarrega a lista de aplicações
+                loadApplications();
+            }
         }
+        
     } catch (error) {
+        console.error('Error deleting application:', error);
         showError('Error deleting application');
+    }
+}
+
+// Get user teams for approval requests
+async function getUserTeams() {
+    try {
+        const response = await apiCall('/profile/teams');
+        return response.teams || [];
+    } catch (error) {
+        console.error('Error getting user teams:', error);
+        return [];
     }
 }
 
@@ -1226,6 +1824,92 @@ async function editApplication(appId, appName) {
 async function generateSecretKey(appId, appName) {
     try {
         showGlobalLoading();
+        
+        console.log('[DEBUG] Checking approval requirements for action: secret_key_create');
+        
+        // Check if approval is required
+        const approvalRequired = await checkApprovalRequired('secret_key_create');
+        
+        if (approvalRequired) {
+            console.log('[DEBUG] Approval required for secret key generation, creating approval request');
+            
+            try {
+                // Determine which team this application belongs to
+                let teamId = null;
+                
+                // First try to get the team from the current loaded applications
+                const applications = JSON.parse(sessionStorage.getItem('applications') || '[]');
+                const currentApp = applications.find(app => app.id === appId);
+                if (currentApp && currentApp.teams && currentApp.teams.length > 0) {
+                    teamId = currentApp.teams[0].id;
+                } else {
+                    // If not found, get application details
+                    const appDetailsResponse = await apiCall(`/applications/${appId}`);
+                    if (appDetailsResponse && appDetailsResponse.teams && appDetailsResponse.teams.length > 0) {
+                        teamId = appDetailsResponse.teams[0].id;
+                    } else {
+                        // Fallback: get user teams and use the first one
+                        const userTeams = await getUserTeams();
+                        if (userTeams && userTeams.length > 0) {
+                            teamId = userTeams[0].id;
+                        }
+                    }
+                }
+                
+                if (!teamId) {
+                    hideGlobalLoading();
+                    showError('Unable to determine team for approval request');
+                    return;
+                }
+                
+                // Check if secret keys already exist for description
+                const existingKeysResponse = await apiCall(`/applications/${appId}/secret-keys`);
+                const hasExistingKeys = existingKeysResponse && 
+                                       existingKeysResponse.secret_keys && 
+                                       existingKeysResponse.secret_keys.length > 0;
+                
+                const description = hasExistingKeys ? 
+                    `Regenerar chave secreta da aplicação "${appName}"` :
+                    `Gerar chave secreta da aplicação "${appName}"`;
+                
+                const approvalRequestData = {
+                    action_type: 'secret_key_create',
+                    description: description,
+                    team_id: teamId,
+                    application_id: appId,
+                    action_data: {
+                        application_id: appId,
+                        application_name: appName,
+                        regenerate: hasExistingKeys
+                    }
+                };
+                
+                console.log('[DEBUG] Creating approval request with data:', approvalRequestData);
+                
+                const approvalResponse = await apiCall('/approval/requests', {
+                    method: 'POST',
+                    body: JSON.stringify(approvalRequestData)
+                });
+                
+                if (approvalResponse && approvalResponse.data) {
+                    hideGlobalLoading();
+                    showSuccess('Solicitação de aprovação criada! A chave secreta será gerada após aprovação.');
+                    return;
+                } else {
+                    console.error('[DEBUG] Failed to create approval request:', approvalResponse);
+                    hideGlobalLoading();
+                    showError('Erro ao criar solicitação de aprovação: ' + (approvalResponse.message || 'Erro desconhecido'));
+                    return;
+                }
+            } catch (approvalError) {
+                console.error('[DEBUG] Error creating approval request:', approvalError);
+                hideGlobalLoading();
+                showError('Erro ao verificar necessidade de aprovação: ' + approvalError.message);
+                return;
+            }
+        }
+        
+        console.log('[DEBUG] No approval required, proceeding with direct secret key generation');
         
         // Check if secret keys already exist
         const existingKeysResponse = await apiCall(`/applications/${appId}/secret-keys`);
@@ -1699,7 +2383,8 @@ async function loadCurrentUser() {
 }
 
 function updateUIBasedOnUserRole() {
-    if (!currentUser) return;
+    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+    if (!currentUser.id) return;
     
     // Hide create buttons for regular users (only root and admin can create)
     const newAppBtn = document.getElementById('new-app-btn');
@@ -1725,6 +2410,9 @@ function updateUIBasedOnUserRole() {
         }
     }
     
+    // Controlar visibilidade do botão Approval
+    updateApprovalMenuVisibility();
+    
     // Update user info in header
     const userNameElements = document.querySelectorAll('#user-name, #dropdown-user-name');
     const userRoleElement = document.getElementById('dropdown-user-role');
@@ -1740,6 +2428,114 @@ function updateUIBasedOnUserRole() {
             'user': 'User'
         };
         userRoleElement.textContent = roleMap[currentUser.role] || currentUser.role;
+    }
+}
+
+// Controlar visibilidade do menu de approval baseado no papel do usuário e se o sistema está habilitado
+async function updateApprovalMenuVisibility() {
+    const approvalBtn = document.getElementById('approval-management-btn');
+    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+    
+    console.log('[DEBUG] updateApprovalMenuVisibility: Starting check', { 
+        hasApprovalBtn: !!approvalBtn, 
+        currentUserId: currentUser.id,
+        userRole: currentUser.role 
+    });
+    
+    if (!approvalBtn || !currentUser.id) {
+        console.log('[DEBUG] updateApprovalMenuVisibility: Early exit - missing button or user');
+        return;
+    }
+    
+    try {
+        // Root sempre vê o menu (pode habilitar/desabilitar o sistema)
+        if (currentUser.role === 'root') {
+            console.log('[DEBUG] updateApprovalMenuVisibility: Root user - showing menu');
+            approvalBtn.style.display = 'flex';
+            return;
+        }
+        
+        // Para admin, verificar se o sistema está habilitado E se é aprovador de algum team
+        let approvalStatusResponse, approverTeamsResponse;
+        
+        try {
+            [approvalStatusResponse, approverTeamsResponse] = await Promise.all([
+                apiCall('/approval/enabled'),
+                currentUser.role === 'admin' ? apiCall('/approval/my-approver-teams') : Promise.resolve({ data: [] })
+            ]);
+        } catch (error) {
+            console.error('[ERROR] updateApprovalMenuVisibility: Failed to get approval data', error);
+            // In case of error, hide menu for non-root users
+            if (currentUser.role !== 'root') {
+                approvalBtn.style.display = 'none';
+            }
+            return;
+        }
+        
+        const isApprovalEnabled = approvalStatusResponse.data?.enabled || false;
+        let approverTeams = approverTeamsResponse.data || [];
+        
+        // Retry logic: Se retornou vazio mas usuário é admin, tentar novamente uma vez
+        if (currentUser.role === 'admin' && approverTeams.length === 0 && isApprovalEnabled) {
+            console.log('[DEBUG] updateApprovalMenuVisibility: Approver teams returned empty for admin, retrying...');
+            try {
+                const retryResponse = await apiCall('/approval/my-approver-teams');
+                approverTeams = retryResponse.data || [];
+                console.log('[DEBUG] updateApprovalMenuVisibility: Retry result:', { approverTeams });
+            } catch (retryError) {
+                console.warn('[DEBUG] updateApprovalMenuVisibility: Retry failed:', retryError);
+            }
+        }
+        
+        console.log('[DEBUG] updateApprovalMenuVisibility: API responses', {
+            isApprovalEnabled,
+            approverTeams,
+            approverTeamsLength: approverTeams.length,
+            userRole: currentUser.role,
+            approvalStatusResponse: JSON.stringify(approvalStatusResponse),
+            approverTeamsResponse: JSON.stringify(approverTeamsResponse),
+            approvalStatusType: typeof approvalStatusResponse,
+            approverTeamsType: typeof approverTeamsResponse
+        });
+        
+        if (currentUser.role === 'admin' && isApprovalEnabled) {
+            if (approverTeams.length > 0) {
+                // Admin com teams de aprovação - mostrar menu
+                console.log('[DEBUG] updateApprovalMenuVisibility: Admin with approval teams - showing menu');
+                approvalBtn.style.display = 'flex';
+                // Cache positive result for longer to reduce flickering
+                window.approvalMenuLastPositiveCheck = Date.now();
+            } else {
+                // Admin sem teams de aprovação - mostrar aviso
+                console.log('[DEBUG] updateApprovalMenuVisibility: Admin without approval teams - check team configuration');
+                console.warn('[WARNING] Admin user is not configured as approver for any team. To see the approval menu, the admin must be added as an approver to at least one team.');
+                
+                // Check if we had a positive result recently (prevent flickering)
+                const recentPositiveCheck = window.approvalMenuLastPositiveCheck && 
+                    (Date.now() - window.approvalMenuLastPositiveCheck) < 5000; // 5 second grace period
+                
+                if (!recentPositiveCheck) {
+                    approvalBtn.style.display = 'none';
+                } else {
+                    console.log('[DEBUG] updateApprovalMenuVisibility: Keeping menu visible due to recent positive check');
+                }
+            }
+        } else {
+            // User nunca vê o menu, admin não vê se sistema estiver desabilitado
+            console.log('[DEBUG] updateApprovalMenuVisibility: Hiding menu', {
+                reason: currentUser.role !== 'admin' ? 'not admin' : 
+                       !isApprovalEnabled ? 'approval disabled' : 'unknown'
+            });
+            approvalBtn.style.display = 'none';
+            window.approvalMenuLastPositiveCheck = null;
+        }
+        
+    } catch (error) {
+        console.error('[ERROR] updateApprovalMenuVisibility: Error checking approval status', error);
+        // Em caso de erro, ocultar para usuários não-root
+        if (currentUser.role !== 'root') {
+            approvalBtn.style.display = 'none';
+        }
     }
 }
 
@@ -2482,16 +3278,53 @@ function switchManagementTab(tabName) {
 
 function formatDate(dateString) {
     if (!dateString) return 'Unknown';
+    
     const date = new Date(dateString);
     const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
-    if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
-    return date.getFullYear().toString();
+    // Check if date is invalid
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    
+    const diffTime = now - date; // Positive = past, negative = future
+    const absDiffTime = Math.abs(diffTime);
+    const diffDays = Math.floor(absDiffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(absDiffTime / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(absDiffTime / (1000 * 60));
+    
+    // For very recent times (less than 1 hour)
+    if (diffHours < 1) {
+        if (diffMinutes < 1) {
+            return 'Just now';
+        }
+        return diffTime > 0 ? `${diffMinutes} minutes ago` : `in ${diffMinutes} minutes`;
+    }
+    
+    // For same day (less than 24 hours)
+    if (diffHours < 24) {
+        return diffTime > 0 ? `${diffHours} hours ago` : `in ${diffHours} hours`;
+    }
+    
+    // For dates
+    if (diffDays === 0) {
+        return diffTime > 0 ? 'Today' : 'Today';
+    } else if (diffDays === 1) {
+        return diffTime > 0 ? 'Yesterday' : 'Tomorrow';
+    } else if (diffDays < 7) {
+        return diffTime > 0 ? `${diffDays} days ago` : `in ${diffDays} days`;
+    } else if (diffDays < 30) {
+        const weeks = Math.floor(diffDays / 7);
+        return diffTime > 0 ? `${weeks} week${weeks > 1 ? 's' : ''} ago` : `in ${weeks} week${weeks > 1 ? 's' : ''}`;
+    } else if (diffDays < 365) {
+        const months = Math.floor(diffDays / 30);
+        return diffTime > 0 ? `${months} month${months > 1 ? 's' : ''} ago` : `in ${months} month${months > 1 ? 's' : ''}`;
+    } else {
+        // For dates more than a year, show actual date
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    }
 }
 
 function generateTeamsHTML(teams) {
@@ -3014,8 +3847,215 @@ function manageTeamMembers(teamId, teamName) {
     showInfo(`Member management for team "${teamName}" will be implemented soon`);
 }
 
-function editTeam(teamId, teamName, description) {
-    showInfo(`Edit functionality for team "${teamName}" will be implemented soon`);
+async function editTeam(teamId, teamName, description) {
+    try {
+        // Load team data and check if approval is enabled
+        const [teamData, approvalEnabled] = await Promise.all([
+            apiCall(`/teams/${teamId}`),
+            apiCall('/approval/enabled')
+        ]);
+
+        // Populate modal fields
+        document.getElementById('edit-team-name').value = teamName || '';
+        document.getElementById('edit-team-description').value = description || '';
+        document.getElementById('edit-team-modal-title').textContent = `Edit ${teamName}`;
+        
+        // Store team ID for later use
+        document.getElementById('edit-team-modal').dataset.teamId = teamId;
+        
+        // Reset approval section visibility
+        document.getElementById('edit-team-approval-section').style.display = 'block';
+        
+        // Load team members and approvers if user has permission
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        
+        if (currentUser.role === 'root') {
+            // Root sempre pode gerenciar approvers
+            await loadTeamMembers(teamId);
+            document.getElementById('edit-team-approval-disabled').classList.add('hidden');
+            document.getElementById('edit-team-approvers-container').classList.remove('hidden');
+        } else if (currentUser.role === 'admin' && approvalEnabled.data?.enabled) {
+            // Admin só pode se sistema estiver habilitado
+            await loadTeamMembers(teamId);
+            document.getElementById('edit-team-approval-disabled').classList.add('hidden');
+            document.getElementById('edit-team-approvers-container').classList.remove('hidden');
+        } else if (currentUser.role === 'admin' && !approvalEnabled.data?.enabled) {
+            // Admin mas sistema desabilitado
+            document.getElementById('edit-team-approval-disabled').classList.remove('hidden');
+            document.getElementById('edit-team-approvers-container').classList.add('hidden');
+        } else {
+            // User - ocultar toda a seção de approval
+            document.getElementById('edit-team-approval-section').style.display = 'none';
+        }
+        
+        // Show modal
+        openModal('edit-team-modal');
+    } catch (error) {
+        console.error('Error loading team data:', error);
+        showError('Failed to load team information');
+    }
+}
+
+async function loadTeamMembers(teamId) {
+    try {
+        const [membersResponse, approversResponse] = await Promise.all([
+            apiCall(`/teams/${teamId}/users`),
+            apiCall(`/teams/${teamId}/approvers`)
+        ]);
+        
+        const members = membersResponse.users || [];
+        const approvers = approversResponse.data || [];
+        
+        // Create a map of approver user IDs for quick lookup
+        const approverMap = new Map();
+        approvers.forEach(approver => {
+            if (approver.is_approver) {
+                approverMap.set(approver.user_id, true);
+            }
+        });
+        
+        const approversList = document.getElementById('edit-team-approvers-list');
+        const emptyState = document.getElementById('edit-team-approvers-empty');
+        
+        if (members.length === 0) {
+            approversList.innerHTML = '';
+            emptyState.classList.remove('hidden');
+            return;
+        }
+        
+        emptyState.classList.add('hidden');
+        
+        // Filter to show only admin and root members
+        const adminMembers = members.filter(member => member.role === 'admin' || member.role === 'root');
+        
+        if (adminMembers.length === 0) {
+            approversList.innerHTML = '<div class="empty-state">No admin/root members in this team</div>';
+            return;
+        }
+        
+        // Render admin/root team members with approver toggles
+        approversList.innerHTML = adminMembers.map(member => {
+            const canBeApprover = true; // All filtered members can be approvers
+            
+            return `
+                <div class="approver-item" data-user-id="${member.id}">
+                    <div class="approver-info">
+                        <div class="approver-avatar">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <div class="approver-details">
+                            <h6>${member.username}</h6>
+                            <span class="role-badge ${member.role.toLowerCase()}">${member.role}</span>
+                        </div>
+                    </div>
+                    <div class="approver-toggle">
+                        <label class="switch">
+                            <input type="checkbox" 
+                                   onchange="toggleApprover('${teamId}', '${member.id}', this.checked)"
+                                   ${approverMap.has(member.id) ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label">Approver</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Error loading team members:', error);
+        showError('Failed to load team members');
+    }
+}
+
+async function toggleApprover(teamId, userId, isApprover) {
+    try {
+        const response = await apiCall(`/teams/${teamId}/approvers/${userId}`, {
+            method: 'POST',
+            body: JSON.stringify({ is_approver: isApprover })
+        });
+        
+        // A API agora retorna os approvers atualizados, vamos usar isso para atualizar a interface
+        if (response.data) {
+            // Atualizar o mapa de approvers
+            const newApprovers = response.data;
+            
+            // Reconstruir o mapa de approvers
+            const approverMap = new Map();
+            newApprovers.forEach(approver => {
+                if (approver.is_approver) {
+                    approverMap.set(approver.user_id, true);
+                }
+            });
+            
+            // Atualizar todos os switches baseado no novo estado
+            const allToggles = document.querySelectorAll('#edit-team-approvers-list input[type="checkbox"]');
+            allToggles.forEach(toggle => {
+                const userDiv = toggle.closest('[data-user-id]');
+                if (userDiv) {
+                    const currentUserId = userDiv.dataset.userId;
+                    toggle.checked = approverMap.has(currentUserId);
+                }
+            });
+        }
+        
+        showSuccess(isApprover ? 'User added as approver' : 'User removed as approver');
+    } catch (error) {
+        console.error('Error updating approver status:', error);
+        showError('Failed to update approver status');
+        
+        // Revert toggle state on error
+        const toggle = document.querySelector(`[data-user-id="${userId}"] input[type="checkbox"]`);
+        if (toggle) {
+            toggle.checked = !isApprover;
+        }
+    }
+}
+
+async function saveTeamChanges() {
+    const teamId = document.getElementById('edit-team-modal').dataset.teamId;
+    const name = document.getElementById('edit-team-name').value.trim();
+    const description = document.getElementById('edit-team-description').value.trim();
+    
+    if (!name) {
+        showError('Team name is required');
+        return;
+    }
+    
+    const saveBtn = document.getElementById('save-team-btn');
+    const btnText = saveBtn.querySelector('.btn-text');
+    const btnLoading = saveBtn.querySelector('.btn-loading');
+    
+    try {
+        // Show loading state
+        btnText.classList.add('hidden');
+        btnLoading.classList.remove('hidden');
+        saveBtn.disabled = true;
+        
+        await apiCall(`/teams/${teamId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                name,
+                description
+            })
+        });
+        
+        showSuccess('Team updated successfully');
+        closeModal('edit-team-modal');
+        
+        // Note: Team list refresh would be handled by the calling context if needed
+        
+    } catch (error) {
+        console.error('Error saving team changes:', error);
+        showError('Failed to save team changes');
+    } finally {
+        // Reset button state
+        btnText.classList.remove('hidden');
+        btnLoading.classList.add('hidden');
+        saveBtn.disabled = false;
+    }
 }
 
 async function openCreateUserForm() {
@@ -3192,10 +4232,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     initializeUserInterface();
     
     console.log('[DEBUG] DOMContentLoaded: Initializing event listeners');
-    initializeEventListeners();
+    await initializeEventListeners();
     
     console.log('[DEBUG] DOMContentLoaded: Loading applications');
     await loadApplications();
+    
+    // Inicializar sistema de aprovação após aplicações carregarem com sucesso
+    console.log('[DEBUG] DOMContentLoaded: Initializing approval system');
+    initializeApprovalSystemAfterAuth();
     
     // Após carregar tudo, fazer fade-in suave da página
     console.log('[DEBUG] DOMContentLoaded: Showing page with smooth transition');
@@ -3263,5 +4307,831 @@ function createPageTransition(text, subtext) {
     
     // Forçar o reflow para garantir que a transição funcione
     overlay.offsetHeight;
+}
+
+// ============================
+// Sistema de Aprovação
+// ============================
+
+let approvalData = {
+    settings: null,
+    pendingRequests: [],
+    myRequests: [],
+    allRequests: [],
+    currentTab: 'pending'
+};
+
+// Abrir modal de aprovação
+async function openApprovalModal() {
+    try {
+        closeUserMenu();
+        
+        // Carregar dados iniciais
+        await loadApprovalData();
+        
+        // Configurar visibilidade baseada no role do usuário
+        setupApprovalModalForUser();
+        
+        openModal('approval-modal');
+        
+        // Carregar requests da aba ativa
+        await loadApprovalRequests();
+        
+    } catch (error) {
+        console.error('Erro ao abrir modal de aprovação:', error);
+        showToast('Erro ao carregar dados de aprovação', 'error');
+    }
+}
+
+// Função para obter o role do usuário atual
+function getCurrentUserRole() {
+    const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+    return currentUser.role || null;
+}
+
+// Configurar modal baseado no role do usuário
+function setupApprovalModalForUser() {
+    const settingsTabBtn = document.getElementById('approval-settings-tab-btn');
+    const userRole = getCurrentUserRole();
+    
+    // Show settings tab only for root users
+    if (userRole === 'root') {
+        settingsTabBtn.style.display = 'flex';
+        // Start with Settings tab active for root
+        switchApprovalMainTab('settings');
+    } else {
+        settingsTabBtn.style.display = 'none';
+        // Start with Requests tab active for non-root users
+        switchApprovalMainTab('requests');
+    }
+}
+
+
+// Carregar dados de aprovação
+async function loadApprovalData() {
+    try {
+        // Verificar se há usuário logado antes de carregar dados
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        if (!currentUser.id) {
+            console.log('[DEBUG] loadApprovalData: No user logged in, skipping');
+            return;
+        }
+        
+        // Carregar contadores de requests pendentes
+        await loadPendingRequestsCount();
+        
+    } catch (error) {
+        console.error('Erro ao carregar dados de aprovação:', error);
+    }
+}
+
+// Carregar contagem de requests pendentes
+async function loadPendingRequestsCount() {
+    try {
+        // Verificar se há usuário logado antes de fazer a requisição
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        if (!currentUser.id) {
+            return;
+        }
+        
+        let requests = await apiCall('/approval/requests/approvable');
+        console.log('[DEBUG] loadPendingRequestsCount: Raw response:', {
+            requests,
+            requestsType: typeof requests,
+            requestsKeys: Object.keys(requests || {}),
+            requestsData: requests?.data,
+            requestsDataType: typeof requests?.data,
+            requestsDataLength: requests?.data?.length
+        });
+        
+        // Retry logic: Se retornou null ou vazio mas há dados esperados, tentar novamente
+        if (requests && !requests.data && requests.message) {
+            console.log('[DEBUG] loadPendingRequestsCount: Requests data is null, attempting session refresh strategy...');
+            try {
+                // First, clear any cached data
+                apiCache.clear('/approval/');
+                
+                // Try to refresh user profile to ensure session is valid
+                const profileResponse = await apiCall('/profile', { forceRefresh: true });
+                if (profileResponse && profileResponse.success && profileResponse.user) {
+                    // Update session storage with fresh user data
+                    sessionStorage.setItem('current_user', JSON.stringify(profileResponse.user));
+                    
+                    // Now retry the approvable requests with force refresh
+                    const retryResponse = await apiCall('/approval/requests/approvable', { forceRefresh: true });
+                    if (retryResponse && retryResponse.data) {
+                        requests = retryResponse;
+                        console.log('[DEBUG] loadPendingRequestsCount: Session refresh successful:', { requests: retryResponse });
+                    } else {
+                        console.warn('[DEBUG] loadPendingRequestsCount: Session refresh still returned null data');
+                    }
+                } else {
+                    console.warn('[DEBUG] loadPendingRequestsCount: Failed to refresh user profile');
+                }
+            } catch (retryError) {
+                console.warn('[DEBUG] loadPendingRequestsCount: Session refresh failed:', retryError);
+            }
+        }
+        
+        if (requests && requests.data) {
+            const count = requests.data.length;
+            
+            // Atualizar badge no menu
+            const badge = document.getElementById('approval-badge');
+            if (count > 0) {
+                badge.textContent = count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+            
+            // Atualizar badge na tab principal de requests
+            const mainTabBadge = document.getElementById('main-pending-count-badge');
+            if (mainTabBadge) {
+                mainTabBadge.textContent = count;
+            }
+            
+            // Atualizar badge na sub-tab de pending requests
+            const pendingTabBadge = document.getElementById('pending-count-badge');
+            if (pendingTabBadge) {
+                pendingTabBadge.textContent = count;
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar contagem de requests:', error);
+    }
+}
+
+// Switch between main approval tabs (Settings and Requests)
+function switchApprovalMainTab(tabName) {
+    // Update main tab buttons
+    const settingsBtn = document.getElementById('approval-settings-tab-btn');
+    const requestsBtn = document.getElementById('approval-requests-tab-btn');
+    
+    settingsBtn.classList.remove('active');
+    requestsBtn.classList.remove('active');
+    
+    // Update main tab content
+    const settingsTab = document.getElementById('approval-settings-main-tab');
+    const requestsTab = document.getElementById('approval-requests-main-tab');
+    
+    settingsTab.classList.add('hidden');
+    requestsTab.classList.add('hidden');
+    
+    if (tabName === 'settings') {
+        settingsBtn.classList.add('active');
+        settingsTab.classList.remove('hidden');
+    } else if (tabName === 'requests') {
+        requestsBtn.classList.add('active');
+        requestsTab.classList.remove('hidden');
+    }
+}
+
+// Switch between nested request tabs (Pending, My Requests, All Requests)  
+function switchApprovalTab(tabName) {
+    // Update nested tab buttons
+    const nestedContainer = document.querySelector('.tabs-container.nested');
+    if (!nestedContainer) return;
+    
+    const nestedButtons = nestedContainer.querySelectorAll('.tab-button');
+    nestedButtons.forEach(btn => btn.classList.remove('active'));
+    
+    const activeButton = nestedContainer.querySelector(`[onclick="switchApprovalTab('${tabName}')"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+    
+    // Update nested tab content
+    const nestedTabContents = nestedContainer.querySelectorAll('.tab-content');
+    nestedTabContents.forEach(content => content.classList.add('hidden'));
+    
+    // Convert tab name to correct ID
+    let tabId = tabName;
+    if (tabName === 'pending') {
+        tabId = 'pending-requests';
+    }
+    tabId += '-tab';
+    
+    const tabElement = document.getElementById(tabId);
+    if (tabElement) {
+        tabElement.classList.remove('hidden');
+    } else {
+        console.error(`Tab element not found: ${tabId}`);
+    }
+    
+    approvalData.currentTab = tabName;
+    loadApprovalRequests();
+}
+
+// Carregar requests de aprovação
+async function loadApprovalRequests() {
+    try {
+        let endpoint = '';
+        let listId = '';
+        
+        switch (approvalData.currentTab) {
+            case 'pending':
+                endpoint = '/approval/requests/approvable';
+                listId = 'pending-requests-list';
+                break;
+            case 'my-requests':
+                endpoint = '/approval/requests/my';
+                listId = 'my-requests-list';
+                break;
+            case 'all-requests':
+                endpoint = '/approval/requests';
+                listId = 'all-requests-list';
+                break;
+        }
+        
+        let response = await apiCall(endpoint);
+        
+        // Retry logic: Se retornou null nos dados mas tem mensagem de sucesso, tentar novamente
+        if (response && !response.data && response.message && approvalData.currentTab === 'pending') {
+            console.log('[DEBUG] loadApprovalRequests: Pending requests returned null, attempting session refresh strategy...');
+            try {
+                // First, clear any cached data
+                apiCache.clear('/approval/');
+                
+                // Try to refresh user profile to ensure session is valid
+                const profileResponse = await apiCall('/profile', { forceRefresh: true });
+                if (profileResponse && profileResponse.success && profileResponse.user) {
+                    // Update session storage with fresh user data
+                    sessionStorage.setItem('current_user', JSON.stringify(profileResponse.user));
+                    
+                    // Now retry the endpoint with force refresh
+                    const retryResponse = await apiCall(endpoint, { forceRefresh: true });
+                    if (retryResponse && retryResponse.data) {
+                        response = retryResponse;
+                        console.log('[DEBUG] loadApprovalRequests: Session refresh successful for pending requests');
+                    } else {
+                        console.warn('[DEBUG] loadApprovalRequests: Session refresh still returned null data');
+                    }
+                } else {
+                    console.warn('[DEBUG] loadApprovalRequests: Failed to refresh user profile');
+                }
+            } catch (retryError) {
+                console.warn('[DEBUG] loadApprovalRequests: Retry failed:', retryError);
+            }
+        }
+        
+        if (response) {
+            // Extrair array de requests da resposta da API
+            const requests = response.data || [];
+            
+            // Atualizar lista correspondente
+            const listElement = document.getElementById(listId);
+            listElement.innerHTML = renderApprovalRequests(requests, approvalData.currentTab);
+            
+            // Armazenar dados
+            switch (approvalData.currentTab) {
+                case 'pending':
+                    approvalData.pendingRequests = requests;
+                    break;
+                case 'my-requests':
+                    approvalData.myRequests = requests;
+                    break;
+                case 'all-requests':
+                    approvalData.allRequests = requests;
+                    break;
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar requests de aprovação:', error);
+        showToast('Erro ao carregar solicitações de aprovação', 'error');
+    }
+}
+
+// Renderizar lista de requests
+function renderApprovalRequests(requests, tabType) {
+    if (!requests || !Array.isArray(requests) || requests.length === 0) {
+        return `
+            <div class="approval-empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 12l2 2 4-4"/>
+                    <circle cx="12" cy="12" r="10"/>
+                </svg>
+                <h3>No Requests Found</h3>
+                <p>There are no approval requests in this category.</p>
+            </div>
+        `;
+    }
+    
+    return requests.map(request => renderApprovalRequestCard(request, tabType)).join('');
+}
+
+// Renderizar card de request individual
+function renderApprovalRequestCard(request, tabType) {
+    const statusClass = getRequestStatusClass(request.status);
+    const actionTypeDisplay = getActionTypeDisplay(request.action_type);
+    const canApprove = tabType === 'pending';
+    
+    return `
+        <div class="approval-request-card ${statusClass}">
+            <div class="approval-request-header">
+                <div class="approval-request-info">
+                    <h4 class="approval-request-title">${actionTypeDisplay}</h4>
+                    <p class="approval-request-meta">
+                        by ${request.requester_name} in ${request.team_name}
+                        ${request.application_name ? ` • ${request.application_name}` : ''}
+                        ${request.toggle_path ? ` • ${request.toggle_path}` : ''}
+                    </p>
+                </div>
+                <div class="approval-request-status">
+                    <span class="status-badge ${statusClass}">${getStatusDisplay(request.status)}</span>
+                </div>
+            </div>
+            
+            <div class="approval-request-body">
+                <p class="approval-request-description">${request.description || 'No description provided'}</p>
+                
+                <div class="approval-request-timestamps">
+                    <span class="timestamp">Requested: ${formatDate(request.created_at)}</span>
+                    ${request.expires_at ? `<span class="timestamp">Expires: ${formatDate(request.expires_at)}</span>` : ''}
+                </div>
+            </div>
+            
+            ${canApprove ? `
+                <div class="approval-request-actions">
+                    <button class="btn btn-success btn-sm" onclick="approveRequest('${request.id}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 6L9 17l-5-5"/>
+                        </svg>
+                        Approve
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="toggleRejectForm('${request.id}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        Reject
+                    </button>
+                </div>
+                
+                <div class="reject-form hidden" id="reject-form-${request.id}">
+                    <div class="reject-form-content">
+                        <label for="reject-reason-${request.id}" class="reject-form-label">Reason for rejection:</label>
+                        <textarea id="reject-reason-${request.id}" class="reject-form-textarea" placeholder="Please provide a reason for rejecting this request..." rows="3"></textarea>
+                        <div class="reject-form-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="toggleRejectForm('${request.id}')">Cancel</button>
+                            <button class="btn btn-danger btn-sm" onclick="confirmRejectRequest('${request.id}')">Confirm Rejection</button>
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Funções auxiliares
+function getRequestStatusClass(status) {
+    const classes = {
+        'pending': 'status-pending',
+        'approved': 'status-approved',
+        'rejected': 'status-rejected',
+        'expired': 'status-expired'
+    };
+    return classes[status] || 'status-unknown';
+}
+
+function getActionTypeDisplay(actionType) {
+    const displays = {
+        'toggle_create': 'Create Toggle',
+        'toggle_update': 'Update Toggle',
+        'toggle_delete': 'Delete Toggle',
+        'toggle_enable': 'Enable Toggle',
+        'toggle_disable': 'Disable Toggle',
+        'toggle_rule': 'Change Toggle Rules',
+        'application_create': 'Create Application',
+        'application_delete': 'Delete Application',
+        'secret_key_create': 'Create Secret Key',
+        'secret_key_delete': 'Delete Secret Key'
+    };
+    return displays[actionType] || actionType;
+}
+
+function getStatusDisplay(status) {
+    const displays = {
+        'pending': 'Pending',
+        'approved': 'Approved',
+        'rejected': 'Rejected',
+        'expired': 'Expired'
+    };
+    return displays[status] || status;
+}
+
+// Aprovar request
+async function approveRequest(requestId) {
+    try {
+        // First approve the request
+        const response = await apiCall(`/approval/requests/${requestId}/approve`, {
+            method: 'POST'
+        });
+        
+        if (response) {
+            showToast('Request approved successfully', 'success');
+            
+            // Then execute the approved action
+            try {
+                const executeResponse = await apiCall(`/approval/requests/${requestId}/execute`, {
+                    method: 'POST'
+                });
+                
+                if (executeResponse) {
+                    showToast('Action executed successfully', 'success');
+                    
+                    // Refresh applications data asynchronously to reflect changes
+                    console.log('[DEBUG] executeApprovedAction: Refreshing applications data after successful execution...');
+                    try {
+                        await loadApplications();
+                        console.log('[DEBUG] executeApprovedAction: Applications data refreshed successfully');
+                    } catch (refreshError) {
+                        console.warn('[WARN] executeApprovedAction: Failed to refresh applications data:', refreshError);
+                    }
+                } else {
+                    showToast('Warning: Request approved but action execution failed', 'warning');
+                }
+            } catch (executeError) {
+                console.error('Erro ao executar ação aprovada:', executeError);
+                showToast('Warning: Request approved but action execution failed: ' + executeError.message, 'warning');
+            }
+            
+            // Recarregar dados
+            await loadApprovalData();
+            await loadApprovalRequests();
+        } else {
+            throw new Error('Failed to approve request');
+        }
+    } catch (error) {
+        console.error('Erro ao aprovar request:', error);
+        showToast('Error approving request: ' + error.message, 'error');
+    }
+}
+
+// Toggle inline reject form
+function toggleRejectForm(requestId) {
+    const rejectForm = document.getElementById(`reject-form-${requestId}`);
+    if (rejectForm) {
+        rejectForm.classList.toggle('hidden');
+        
+        // Clear textarea when hiding form
+        if (rejectForm.classList.contains('hidden')) {
+            const textarea = document.getElementById(`reject-reason-${requestId}`);
+            if (textarea) {
+                textarea.value = '';
+            }
+        } else {
+            // Focus textarea when showing form
+            const textarea = document.getElementById(`reject-reason-${requestId}`);
+            if (textarea) {
+                textarea.focus();
+            }
+        }
+    }
+}
+
+// Confirm reject request with inline form
+function confirmRejectRequest(requestId) {
+    const textarea = document.getElementById(`reject-reason-${requestId}`);
+    if (textarea) {
+        const reason = textarea.value.trim();
+        if (reason === '') {
+            showToast('Please provide a reason for rejection', 'error');
+            textarea.focus();
+            return;
+        }
+        rejectRequest(requestId, reason);
+    }
+}
+
+// Rejeitar request
+async function rejectRequest(requestId, reason) {
+    try {
+        const response = await apiCall(`/approval/requests/${requestId}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ reason })
+        });
+        
+        if (response) {
+            showToast('Request rejected successfully', 'success');
+            
+            // Hide the reject form
+            const rejectForm = document.getElementById(`reject-form-${requestId}`);
+            if (rejectForm) {
+                rejectForm.classList.add('hidden');
+            }
+            
+            // Recarregar dados
+            await loadApprovalData();
+            await loadApprovalRequests();
+        } else {
+            throw new Error('Failed to reject request');
+        }
+    } catch (error) {
+        console.error('Erro ao rejeitar request:', error);
+        showToast('Error rejecting request: ' + error.message, 'error');
+    }
+}
+
+// Verificar se aprovação está habilitada e se uma ação precisa aprovação
+async function checkApprovalRequired(actionType) {
+    try {
+        // Root users are always exempt from approval requirements
+        const currentUser = JSON.parse(sessionStorage.getItem('current_user') || '{}');
+        if (currentUser.role === 'root') {
+            console.log('[DEBUG] checkApprovalRequired: Root user detected - skipping approval');
+            return false;
+        }
+
+        // First check if approval system is enabled
+        const enabledResponse = await apiCall('/approval/enabled');
+        console.log('[DEBUG] checkApprovalRequired: Approval enabled response:', enabledResponse);
+        
+        if (!enabledResponse.data || !enabledResponse.data.enabled) {
+            console.log('[DEBUG] checkApprovalRequired: Approval system is disabled');
+            return false;
+        }
+
+        const result = await apiCall(`/approval/required?action_type=${actionType}`);
+        if (result && result.data) {
+            return result.data.required;
+        }
+        return false;
+    } catch (error) {
+        console.error('Erro ao verificar se aprovação é necessária:', error);
+        return false;
+    }
+}
+
+// Inicializar sistema de aprovação
+function initializeApprovalSystem() {
+    // Approval menu visibility is already updated by updateUIBasedOnUserRole()
+    // No need to call updateApprovalMenuVisibility() again to avoid duplicate API calls
+    
+    // Removed automatic polling to reduce server load
+    // Users can manually refresh approval data using the refresh button in the modal
+    // Initial count will be loaded only when modal is opened
+}
+
+// Manual refresh function for approval data
+async function refreshApprovalData() {
+    const refreshBtn = document.getElementById('refresh-approval-btn');
+    if (!refreshBtn) return;
+    
+    // Show loading state
+    const originalContent = refreshBtn.innerHTML;
+    refreshBtn.disabled = true;
+    refreshBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin">
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+        </svg>
+        Refreshing...
+    `;
+    
+    try {
+        console.log('[DEBUG] Manual refresh of approval data requested');
+        
+        // Refresh all approval-related data
+        await Promise.all([
+            loadPendingRequestsCount(),
+            loadApprovalRequests(),
+            updateApprovalMenuVisibility()
+        ]);
+        
+        console.log('[DEBUG] Manual refresh completed successfully');
+        showToast('Approval data refreshed successfully', 'success');
+        
+    } catch (error) {
+        console.error('[ERROR] Failed to refresh approval data:', error);
+        showToast('Failed to refresh approval data', 'error');
+    } finally {
+        // Restore button state
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = originalContent;
+    }
+}
+
+// Função para inicializar o sistema de aprovação após autenticação
+function initializeApprovalSystemAfterAuth() {
+    if (document.getElementById('approval-modal')) {
+        initializeApprovalSystem();
+    }
+}
+
+// ========================================
+// APPROVAL SETTINGS MANAGEMENT
+// ========================================
+
+/**
+ * Save approval settings configuration
+ */
+async function saveApprovalSettings() {
+    const saveBtn = document.getElementById('save-approval-settings-btn');
+    const successFeedback = document.getElementById('save-success-feedback');
+    
+    if (!saveBtn) return;
+    
+    try {
+        // Show loading state
+        saveBtn.classList.add('loading');
+        saveBtn.disabled = true;
+        
+        // Hide any previous success feedback
+        successFeedback.classList.remove('show');
+        
+        // Get approval enabled state
+        const approvalEnabledCheckbox = document.getElementById('approval-enabled-checkbox');
+        const approvalEnabled = approvalEnabledCheckbox ? approvalEnabledCheckbox.checked : false;
+        
+        // Collect all approval action settings
+        const approvalActions = {};
+        const actionCheckboxes = document.querySelectorAll('#approval-actions-config input[data-action]');
+        
+        actionCheckboxes.forEach(checkbox => {
+            const actionType = checkbox.getAttribute('data-action');
+            if (actionType) {
+                approvalActions[actionType] = checkbox.checked;
+            }
+        });
+        
+        console.log('[DEBUG] Saving approval settings:', {
+            approval_enabled: approvalEnabled,
+            required_actions: approvalActions
+        });
+        
+        // Prepare request data
+        const requestData = {
+            approval_enabled: approvalEnabled,
+            required_actions: approvalActions
+        };
+        
+        // Make API call to save settings
+        const response = await apiCall('/approval/settings', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        console.log('[DEBUG] Save approval settings response:', response);
+        
+        // Check if response indicates success (has data and message)
+        if (response && (response.data || response.message)) {
+            // Show success feedback
+            successFeedback.classList.add('show');
+            
+            // Hide success feedback after 3 seconds
+            setTimeout(() => {
+                successFeedback.classList.remove('show');
+            }, 3000);
+            
+            // Auto-close modal after successful save
+            setTimeout(() => {
+                closeModal('approval-modal');
+            }, 1500);
+            
+            // Clear cache to force reload of approval settings
+            apiCache.clear('approval');
+            
+            console.log('[SUCCESS] Approval settings saved successfully');
+        } else {
+            throw new Error(response.message || 'Failed to save approval settings - no data received');
+        }
+        
+    } catch (error) {
+        console.error('Error saving approval settings:', error);
+        showError('Failed to save approval settings: ' + (error.message || 'Unknown error'));
+        
+    } finally {
+        // Reset button state
+        saveBtn.classList.remove('loading');
+        saveBtn.disabled = false;
+    }
+}
+
+/**
+ * Load and populate approval settings
+ */
+async function loadApprovalSettings() {
+    try {
+        console.log('[DEBUG] Loading approval settings...');
+        
+        // Get current approval settings
+        const response = await apiCall('/approval/settings');
+        
+        if (response && response.data) {
+            const settings = response.data;
+            
+            console.log('[DEBUG] Loaded approval settings:', settings);
+            
+            // Set approval enabled checkbox
+            const approvalEnabledCheckbox = document.getElementById('approval-enabled-checkbox');
+            if (approvalEnabledCheckbox) {
+                approvalEnabledCheckbox.checked = settings.approval_enabled || false;
+                
+                // Toggle actions config visibility
+                const actionsConfig = document.getElementById('approval-actions-config');
+                if (actionsConfig) {
+                    if (settings.approval_enabled) {
+                        actionsConfig.classList.remove('hidden');
+                    } else {
+                        actionsConfig.classList.add('hidden');
+                    }
+                }
+            }
+            
+            // Set individual action checkboxes
+            if (settings.required_actions) {
+                Object.entries(settings.required_actions).forEach(([actionType, required]) => {
+                    const checkbox = document.querySelector(`input[data-action="${actionType}"]`);
+                    if (checkbox) {
+                        checkbox.checked = required;
+                    }
+                });
+            }
+            
+        } else {
+            console.warn('Failed to load approval settings:', response.message);
+        }
+        
+    } catch (error) {
+        console.error('Error loading approval settings:', error);
+    }
+}
+
+/**
+ * Initialize approval settings when modal opens
+ */
+function initializeApprovalSettings() {
+    // Load current settings
+    loadApprovalSettings();
+    
+    // Setup approval enabled checkbox listener
+    const approvalEnabledCheckbox = document.getElementById('approval-enabled-checkbox');
+    const actionsConfig = document.getElementById('approval-actions-config');
+    
+    if (approvalEnabledCheckbox && actionsConfig) {
+        approvalEnabledCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                actionsConfig.classList.remove('hidden');
+            } else {
+                actionsConfig.classList.add('hidden');
+            }
+        });
+    }
+}
+
+/**
+ * Open approval modal and initialize settings
+ */
+function openApprovalModal() {
+    // Open the modal
+    const modal = document.getElementById('approval-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        
+        // Initialize approval settings
+        setTimeout(() => {
+            initializeApprovalSettings();
+        }, 100);
+        
+        // Focus management for accessibility
+        const firstFocusableElement = modal.querySelector('button, [tabindex="0"]');
+        if (firstFocusableElement) {
+            firstFocusableElement.focus();
+        }
+    }
+}
+
+/**
+ * Switch between main tabs in approval modal (settings/requests)
+ */
+function switchApprovalMainTab(tabName) {
+    // Remove active class from all main tab buttons
+    document.querySelectorAll('#approval-modal .tabs-nav .tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Hide all main tab contents
+    document.querySelectorAll('#approval-modal .tabs-content > .tab-content').forEach(content => {
+        content.classList.remove('active');
+        content.classList.add('hidden');
+    });
+    
+    // Show selected tab
+    const tabButton = document.getElementById(`approval-${tabName}-tab-btn`);
+    const tabContent = document.getElementById(`approval-${tabName}-main-tab`);
+    
+    if (tabButton && tabContent) {
+        tabButton.classList.add('active');
+        tabContent.classList.add('active');
+        tabContent.classList.remove('hidden');
+        
+        // If switching to settings tab, initialize settings
+        if (tabName === 'settings') {
+            initializeApprovalSettings();
+        }
+    }
 }
 

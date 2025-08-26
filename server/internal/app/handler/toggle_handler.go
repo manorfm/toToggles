@@ -172,7 +172,7 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		return
 	}
 
-	err := h.toggleUseCase.UpdateToggleWithRule(toggleID, req.Enabled, req.HasActivationRule, req.ActivationRule, appID)
+	updatedToggle, err := h.toggleUseCase.UpdateToggleWithRule(toggleID, req.Enabled, req.HasActivationRule, req.ActivationRule, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
@@ -187,7 +187,7 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "toggle updated successfully"})
+	c.JSON(http.StatusOK, updatedToggle)
 }
 
 // DeleteToggle remove um toggle por ID
@@ -320,5 +320,12 @@ func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "toggle enabled updated successfully"})
+	// Buscar o toggle atualizado para retornar
+	updatedToggle, err := h.toggleUseCase.GetToggleByID(toggleID, appID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "error fetching updated toggle"))
+		return
+	}
+
+	c.JSON(http.StatusOK, updatedToggle)
 }

@@ -7,13 +7,15 @@ import (
 
 // ApplicationUseCase define os casos de uso para aplicações
 type ApplicationUseCase struct {
-	appRepo repository.ApplicationRepository
+	appRepo    repository.ApplicationRepository
+	toggleRepo repository.ToggleRepository
 }
 
 // NewApplicationUseCase cria uma nova instância de ApplicationUseCase
-func NewApplicationUseCase(appRepo repository.ApplicationRepository) *ApplicationUseCase {
+func NewApplicationUseCase(appRepo repository.ApplicationRepository, toggleRepo repository.ToggleRepository) *ApplicationUseCase {
 	return &ApplicationUseCase{
-		appRepo: appRepo,
+		appRepo:    appRepo,
+		toggleRepo: toggleRepo,
 	}
 }
 
@@ -117,6 +119,20 @@ func (uc *ApplicationUseCase) DeleteApplication(id string) error {
 		return entity.NewAppError(entity.ErrCodeNotFound, "application not found")
 	}
 
+	// Excluir todos os toggles da aplicação em cascata
+	toggles, err := uc.toggleRepo.GetByAppID(id)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error getting toggles for deletion")
+	}
+
+	// Excluir cada toggle
+	for _, toggle := range toggles {
+		if err := uc.toggleRepo.Delete(toggle.ID); err != nil {
+			return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle: "+toggle.Path)
+		}
+	}
+
+	// Excluir a aplicação
 	err = uc.appRepo.Delete(id)
 	if err != nil {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting application")

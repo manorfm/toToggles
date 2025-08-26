@@ -45,7 +45,7 @@ func TestApplicationUseCase_CreateApplication(t *testing.T) {
 			mockRepo := NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
 
-			useCase := NewApplicationUseCase(mockRepo)
+			useCase := NewApplicationUseCase(mockRepo, NewMockToggleRepository())
 			app, err := useCase.CreateApplication(tt.appName)
 
 			if tt.expectedError != "" {
@@ -113,7 +113,7 @@ func TestApplicationUseCase_GetApplicationByID(t *testing.T) {
 			mockRepo := NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
 
-			useCase := NewApplicationUseCase(mockRepo)
+			useCase := NewApplicationUseCase(mockRepo, NewMockToggleRepository())
 			app, err := useCase.GetApplicationByID(tt.appID)
 
 			if tt.expectedError != "" {
@@ -147,7 +147,7 @@ func TestApplicationUseCase_GetAllApplications(t *testing.T) {
 	mockRepo.Applications["app1"] = &entity.Application{ID: "app1", Name: "App 1"}
 	mockRepo.Applications["app2"] = &entity.Application{ID: "app2", Name: "App 2"}
 
-	useCase := NewApplicationUseCase(mockRepo)
+	useCase := NewApplicationUseCase(mockRepo, NewMockToggleRepository())
 	apps, err := useCase.GetAllApplications()
 
 	if err != nil {
@@ -201,7 +201,7 @@ func TestApplicationUseCase_UpdateApplication(t *testing.T) {
 			mockRepo := NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
 
-			useCase := NewApplicationUseCase(mockRepo)
+			useCase := NewApplicationUseCase(mockRepo, NewMockToggleRepository())
 			app, err := useCase.UpdateApplication(tt.appID, tt.newName)
 
 			if tt.expectedError != "" {
@@ -258,7 +258,7 @@ func TestApplicationUseCase_DeleteApplication(t *testing.T) {
 			mockRepo := NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
 
-			useCase := NewApplicationUseCase(mockRepo)
+			useCase := NewApplicationUseCase(mockRepo, NewMockToggleRepository())
 			err := useCase.DeleteApplication(tt.appID)
 
 			if tt.expectedError != "" {

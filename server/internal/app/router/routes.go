@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/handler"
 	"github.com/manorfm/totoogle/internal/app/middleware"
 )
@@ -45,11 +46,11 @@ func Init(router *gin.Engine) {
 		// Rotas de aplicações
 		applications := protected.Group("/applications")
 		{
-			applications.POST("", handler.RequireAdmin(), handler.CreateApplication)
+			applications.POST("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.CreateApplication)
 			applications.GET("", handler.GetAllApplications) // Filtrado por permissão internamente
 			applications.GET("/:id", handler.GetApplication)
-			applications.PUT("/:id", handler.RequireAdmin(), handler.UpdateApplication)
-			applications.DELETE("/:id", handler.RequireRoot(), handler.DeleteApplication)
+			applications.PUT("/:id", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.UpdateApplication)
+			applications.DELETE("/:id", handler.RequireApprovalAware(entity.UserRoleRoot), handler.DeleteApplication)
 			
 			// Rotas de secret keys para aplicações (apenas admin/root)
 			applications.POST("/:id/generate-secret", handler.RequireAdmin(), handler.GenerateSecretKey)
@@ -59,18 +60,18 @@ func Init(router *gin.Engine) {
 		// Rotas de toggles
 		toggles := protected.Group("/applications/:id/toggles")
 		{
-			toggles.POST("", handler.RequireAdmin(), handler.CreateToggle)
+			toggles.POST("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.CreateToggle)
 			toggles.GET("", handler.GetAllToggles) // Filtrado por permissão internamente
 		}
 		toggleById := protected.Group("/applications/:id/toggles/:toggleId")
 		{
 			toggleById.GET("", handler.GetToggleStatus)
-			toggleById.PUT("", handler.RequireAdmin(), handler.UpdateToggle)
-			toggleById.DELETE("", handler.RequireAdmin(), handler.DeleteToggle)
+			toggleById.PUT("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.UpdateToggle)
+			toggleById.DELETE("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.DeleteToggle)
 		}
 
 		// Rota para atualizar enabled recursivamente (apenas admin/root)
-		protected.PUT("/applications/:id/toggle/:toggleId", handler.RequireAdmin(), handler.UpdateEnabled)
+		protected.PUT("/applications/:id/toggle/:toggleId", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.UpdateEnabled)
 
 		// Rotas de gerenciamento de secret keys (apenas admin/root)
 		secretKeys := protected.Group("/secret-keys")
@@ -117,6 +118,48 @@ func Init(router *gin.Engine) {
 			teamManagement.DELETE("/:id/applications/:app_id", handler.RemoveApplicationFromTeam)
 			teamManagement.PUT("/:id/applications/:app_id", handler.UpdateApplicationPermission)
 			teamManagement.GET("/:id/applications", handler.GetTeamApplications)
+			
+			// Gestão de aprovadores nos times
+			teamManagement.POST("/:id/approvers/:user_id", handler.SetTeamApprover)
+			teamManagement.GET("/:id/approvers", handler.GetTeamApprovers)
+		}
+
+		// Rotas do sistema de aprovação (protegidas)
+		approval := protected.Group("/approval")
+		{
+			// Configurações de aprovação (apenas root)
+			approval.GET("/settings", handler.RequireRoot(), handler.GetApprovalSettings)
+			approval.PUT("/settings", handler.RequireRoot(), handler.UpdateApprovalSettings)
+			
+			// Verificações de status
+			approval.GET("/enabled", handler.IsApprovalEnabled)
+			approval.GET("/required", handler.CheckApprovalRequired)
+			
+			// Solicitações de aprovação
+			approval.POST("/requests", handler.CreateApprovalRequest)
+			approval.GET("/requests", handler.GetAllApprovalRequests)
+			approval.GET("/requests/pending", handler.GetPendingApprovalRequests)
+			approval.GET("/requests/my", handler.GetMyApprovalRequests)
+			approval.GET("/requests/approvable", handler.GetApprovableRequests)
+			approval.GET("/requests/:id", handler.GetApprovalRequest)
+			
+			// Ações de aprovação/rejeição
+			approval.POST("/requests/:id/approve", handler.ApproveRequest)
+			approval.POST("/requests/:id/reject", handler.RejectRequest)
+			approval.POST("/requests/:id/execute", handler.ExecuteApprovedAction)
+			
+			// Solicitações por team
+			approval.GET("/teams/:id/requests", handler.GetApprovalRequestsByTeam)
+			
+			// Estatísticas
+			approval.GET("/stats", handler.GetApprovalStats)
+			approval.GET("/teams/:id/stats", handler.GetApprovalStatsByTeam)
+			
+			// Manutenção
+			approval.POST("/mark-expired", handler.RequireRoot(), handler.MarkExpiredRequests)
+			
+			// Aprovadores
+			approval.GET("/my-approver-teams", handler.GetMyApproverTeams)
 		}
 	}
 

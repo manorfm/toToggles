@@ -5,6 +5,7 @@ import (
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/infrastructure/database"
+	"github.com/manorfm/totoogle/internal/app/middleware"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 	"gorm.io/gorm"
 )
@@ -17,6 +18,8 @@ var (
 	userManagementHandler *UserManagementHandler
 	teamHandler           *TeamHandler
 	secretKeyHandler      *SecretKeyHandler
+	approvalHandler       *ApprovalHandler
+	globalApprovalUseCase *usecase.ApprovalUseCase
 )
 
 // InitHandlers inicializa os handlers
@@ -27,6 +30,9 @@ func InitHandlers(db *gorm.DB) {
 	userRepo := database.NewUserRepository(db)
 	teamRepo := database.NewTeamRepository(db)
 	secretKeyRepo := database.NewSecretKeyRepository(db)
+	approvalRequestRepo := database.NewApprovalRequestRepository(db)
+	approvalSettingsRepo := database.NewApprovalSettingsRepository(db)
+	teamApproverRepo := database.NewTeamApproverRepository(db)
 
 	// Inicializa sistema de autenticação
 	authManager := auth.NewAuthManager()
@@ -34,12 +40,26 @@ func InitHandlers(db *gorm.DB) {
 	authManager.RegisterStrategy("local", localStrategy)
 
 	// Inicializa use cases
-	appUseCase := usecase.NewApplicationUseCase(appRepo)
+	appUseCase := usecase.NewApplicationUseCase(appRepo, toggleRepo)
 	toggleUseCase := usecase.NewToggleUseCase(toggleRepo, appRepo)
 	authUseCase := usecase.NewAuthUseCase(userRepo, authManager)
 	userUseCase := usecase.NewUserUseCase(userRepo)
 	teamUseCase := usecase.NewTeamUseCase(teamRepo, userRepo, appRepo)
 	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)
+	approvalUseCase := usecase.NewApprovalUseCase(
+		approvalRequestRepo,
+		approvalSettingsRepo,
+		teamApproverRepo,
+		userRepo,
+		teamRepo,
+		appRepo,
+		toggleRepo,
+		teamUseCase,
+		toggleUseCase,
+		appUseCase,
+		secretKeyUseCase,
+	)
+	globalApprovalUseCase = approvalUseCase
 
 	// Inicializar usuário root padrão
 	authUseCase.InitializeRootUser()
@@ -52,6 +72,7 @@ func InitHandlers(db *gorm.DB) {
 	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase)
 	teamHandler = NewTeamHandler(teamUseCase)
 	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase, appUseCase)
+	approvalHandler = NewApprovalHandler(approvalUseCase)
 }
 
 // Funções globais para as rotas
@@ -237,4 +258,90 @@ func GetTeamApplications(c *gin.Context) {
 
 func GetUserTeams(c *gin.Context) {
 	teamHandler.GetUserTeams(c)
+}
+
+// Funções de aprovação
+func GetApprovalSettings(c *gin.Context) {
+	approvalHandler.GetApprovalSettings(c)
+}
+
+func UpdateApprovalSettings(c *gin.Context) {
+	approvalHandler.UpdateApprovalSettings(c)
+}
+
+func CreateApprovalRequest(c *gin.Context) {
+	approvalHandler.CreateApprovalRequest(c)
+}
+
+func GetApprovalRequest(c *gin.Context) {
+	approvalHandler.GetApprovalRequest(c)
+}
+
+func GetAllApprovalRequests(c *gin.Context) {
+	approvalHandler.GetAllApprovalRequests(c)
+}
+
+func GetPendingApprovalRequests(c *gin.Context) {
+	approvalHandler.GetPendingApprovalRequests(c)
+}
+
+func GetApprovalRequestsByTeam(c *gin.Context) {
+	approvalHandler.GetApprovalRequestsByTeam(c)
+}
+
+func GetMyApprovalRequests(c *gin.Context) {
+	approvalHandler.GetMyApprovalRequests(c)
+}
+
+func GetApprovableRequests(c *gin.Context) {
+	approvalHandler.GetApprovableRequests(c)
+}
+
+func ApproveRequest(c *gin.Context) {
+	approvalHandler.ApproveRequest(c)
+}
+
+func RejectRequest(c *gin.Context) {
+	approvalHandler.RejectRequest(c)
+}
+
+func SetTeamApprover(c *gin.Context) {
+	approvalHandler.SetTeamApprover(c)
+}
+
+func GetTeamApprovers(c *gin.Context) {
+	approvalHandler.GetTeamApprovers(c)
+}
+
+func GetMyApproverTeams(c *gin.Context) {
+	approvalHandler.GetMyApproverTeams(c)
+}
+
+func GetApprovalStats(c *gin.Context) {
+	approvalHandler.GetApprovalStats(c)
+}
+
+func GetApprovalStatsByTeam(c *gin.Context) {
+	approvalHandler.GetApprovalStatsByTeam(c)
+}
+
+func CheckApprovalRequired(c *gin.Context) {
+	approvalHandler.CheckApprovalRequired(c)
+}
+
+func IsApprovalEnabled(c *gin.Context) {
+	approvalHandler.IsApprovalEnabled(c)
+}
+
+func MarkExpiredRequests(c *gin.Context) {
+	approvalHandler.MarkExpiredRequests(c)
+}
+
+func ExecuteApprovedAction(c *gin.Context) {
+	approvalHandler.ExecuteApprovedAction(c)
+}
+
+// RequireApprovalAware cria um middleware que verifica aprovação antes de aplicar restrições de role
+func RequireApprovalAware(requiredRole entity.UserRole) gin.HandlerFunc {
+	return middleware.ApprovalAware(globalApprovalUseCase, requiredRole)
 }

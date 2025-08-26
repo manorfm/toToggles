@@ -962,7 +962,7 @@ func TestToggleUseCase_UpdateToggleWithRule(t *testing.T) {
 			}
 
 			// Execute the method
-			err := useCase.UpdateToggleWithRule(toggleID, tt.enabled, tt.hasActivationRule, tt.activationRule, appID)
+			_, err := useCase.UpdateToggleWithRule(toggleID, tt.enabled, tt.hasActivationRule, tt.activationRule, appID)
 
 			// Check error expectations
 			if tt.expectError {
@@ -1025,7 +1025,7 @@ func TestToggleUseCase_UpdateToggleWithRule_EdgeCases(t *testing.T) {
 	useCase := NewToggleUseCase(toggleMock, appMock)
 
 	t.Run("empty_toggle_id", func(t *testing.T) {
-		err := useCase.UpdateToggleWithRule("", true, false, nil, "app123")
+		_, err := useCase.UpdateToggleWithRule("", true, false, nil, "app123")
 		if err == nil {
 			t.Errorf("Expected error for empty toggle ID")
 		}
@@ -1037,7 +1037,7 @@ func TestToggleUseCase_UpdateToggleWithRule_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("empty_app_id", func(t *testing.T) {
-		err := useCase.UpdateToggleWithRule("toggle123", true, false, nil, "")
+		_, err := useCase.UpdateToggleWithRule("toggle123", true, false, nil, "")
 		if err == nil {
 			t.Errorf("Expected error for empty app ID")
 		}
@@ -1062,7 +1062,7 @@ func TestToggleUseCase_UpdateToggleWithRule_EdgeCases(t *testing.T) {
 		}
 		toggleMock.Toggles[toggleID] = toggle
 
-		err := useCase.UpdateToggleWithRule(toggleID, true, true, nil, appID)
+		_, err := useCase.UpdateToggleWithRule(toggleID, true, true, nil, appID)
 		if err != nil {
 			t.Errorf("Expected no error when hasActivationRule is true but rule is nil, got: %v", err)
 		}

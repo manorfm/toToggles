@@ -269,8 +269,12 @@ func TestToggleHandler_UpdateToggle(t *testing.T) {
 			} else {
 				var response map[string]interface{}
 				json.Unmarshal(w.Body.Bytes(), &response)
-				if response["message"] != "toggle updated successfully" {
-					t.Error("Expected success message")
+				// Check if toggle data is returned (successful update)
+				if response["id"] == nil {
+					t.Errorf("Expected toggle data in response, got: %v", response)
+				}
+				if response["path"] != "test.feature" {
+					t.Errorf("Expected path 'test.feature', got: %v", response["path"])
 				}
 			}
 		})
@@ -546,8 +550,13 @@ func TestToggleHandler_UpdateEnabled(t *testing.T) {
 			} else {
 				var response map[string]interface{}
 				json.Unmarshal(w.Body.Bytes(), &response)
-				if response["message"] != "toggle enabled updated successfully" {
-					t.Error("Expected success message")
+				// Check if toggle data is returned (successful update)
+				if response["id"] == nil {
+					t.Errorf("Expected toggle data in response, got: %v", response)
+				}
+				// Check if the toggle has expected properties
+				if response["app_id"] != "app123" {
+					t.Errorf("Expected app_id 'app123', got: %v", response["app_id"])
 				}
 			}
 		})

@@ -372,18 +372,18 @@ func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
 }
 
 // UpdateToggleWithRule atualiza um toggle incluindo regras de ativação
-func (uc *ToggleUseCase) UpdateToggleWithRule(toggleID string, enabled bool, hasActivationRule bool, activationRule *entity.ActivationRule, appID string) error {
+func (uc *ToggleUseCase) UpdateToggleWithRule(toggleID string, enabled bool, hasActivationRule bool, activationRule *entity.ActivationRule, appID string) (*entity.Toggle, error) {
 	if toggleID == "" || appID == "" {
-		return entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
 	}
 	
 	toggle, err := uc.toggleRepo.GetByID(toggleID)
 	if err != nil {
-		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+		return nil, entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
 	}
 	
 	if toggle.AppID != appID {
-		return entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
 	}
 	
 	// Atualizar campos básicos
@@ -394,7 +394,7 @@ func (uc *ToggleUseCase) UpdateToggleWithRule(toggleID string, enabled bool, has
 	if hasActivationRule && activationRule != nil {
 		err := toggle.SetActivationRule(activationRule)
 		if err != nil {
-			return entity.NewAppError(entity.ErrCodeValidation, err.Error())
+			return nil, entity.NewAppError(entity.ErrCodeValidation, err.Error())
 		}
 	} else {
 		toggle.ClearActivationRule()
@@ -402,8 +402,8 @@ func (uc *ToggleUseCase) UpdateToggleWithRule(toggleID string, enabled bool, has
 	
 	// Salvar no banco
 	if err := uc.toggleRepo.Update(toggle); err != nil {
-		return entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
+		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
 	}
 	
-	return nil
+	return toggle, nil
 }

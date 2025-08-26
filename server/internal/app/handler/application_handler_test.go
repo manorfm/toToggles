@@ -65,7 +65,7 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 			// Setup
 			router := setupTestRouter()
 			mockRepo := usecase.NewMockApplicationRepository()
-			useCase := usecase.NewApplicationUseCase(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo, usecase.NewMockToggleRepository())
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
 			teamMock := usecase.NewMockTeamRepository()
@@ -155,7 +155,7 @@ func TestApplicationHandler_GetApplication(t *testing.T) {
 			router := setupTestRouter()
 			mockRepo := usecase.NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
-			useCase := usecase.NewApplicationUseCase(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo, usecase.NewMockToggleRepository())
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
 			teamMock := usecase.NewMockTeamRepository()
@@ -202,7 +202,7 @@ func TestApplicationHandler_GetAllApplications(t *testing.T) {
 		"app1": {ID: "app1", Name: "App 1"},
 		"app2": {ID: "app2", Name: "App 2"},
 	}
-	useCase := usecase.NewApplicationUseCase(mockRepo)
+	useCase := usecase.NewApplicationUseCase(mockRepo, usecase.NewMockToggleRepository())
 	toggleMock := usecase.NewMockToggleRepository()
 	toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
 	teamMock := usecase.NewMockTeamRepository()
@@ -295,7 +295,7 @@ func TestApplicationHandler_UpdateApplication(t *testing.T) {
 			router := setupTestRouter()
 			mockRepo := usecase.NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
-			useCase := usecase.NewApplicationUseCase(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo, usecase.NewMockToggleRepository())
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
 			teamMock := usecase.NewMockTeamRepository()
@@ -372,7 +372,7 @@ func TestApplicationHandler_DeleteApplication(t *testing.T) {
 			router := setupTestRouter()
 			mockRepo := usecase.NewMockApplicationRepository()
 			tt.setupMock(mockRepo)
-			useCase := usecase.NewApplicationUseCase(mockRepo)
+			useCase := usecase.NewApplicationUseCase(mockRepo, usecase.NewMockToggleRepository())
 			toggleMock := usecase.NewMockToggleRepository()
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, mockRepo)
 			teamMock := usecase.NewMockTeamRepository()
