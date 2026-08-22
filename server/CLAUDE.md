@@ -258,6 +258,11 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 
 ## Frontend
 
+> ⚠️ **Em reescrita completa.** Este frontend (HTML/CSS/JS monolítico abaixo) está sendo
+> substituído do zero a partir de um design system reformulado. Antes de tocar em qualquer tela,
+> veja o harness em `../CLAUDE.md` e siga a skill `design-graph-frontend` (consultar o MCP
+> `design-graph` como fonte de verdade do novo design).
+
 ### Stack Frontend
 - **HTML5**: Estrutura semântica moderna
 - **CSS3**: Estilos responsivos com custom properties
