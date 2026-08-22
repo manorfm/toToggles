@@ -428,3 +428,116 @@ input[type="checkbox"] {
   color: var(--danger);
   background: var(--danger-soft);
 }
+
+/* --- Badges, icon buttons, section headers --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border: 1px solid var(--border);
+}
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  transition: background 0.12s, color 0.12s;
+}
+.icon-btn:hover {
+  background: var(--surface-hi);
+  color: var(--ink);
+}
+.section-h {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-4);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* --- Modal --- */
+@keyframes fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modalin {
+  to {
+    transform: none;
+  }
+}
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: oklch(0 0 0 / 0.55);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  animation: fade 0.18s forwards;
+}
+.modal {
+  width: min(480px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(10px) scale(0.99);
+  animation: modalin 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 22px var(--pad) 0;
+}
+.modal-glyph {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.modal-sub {
+  font-size: 13px;
+  color: var(--ink-4);
+  margin-top: 2px;
+}
+.modal-x {
+  margin-left: auto;
+}
+.modal-body {
+  padding: 20px var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal-foot {
+  padding: 14px var(--pad);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}

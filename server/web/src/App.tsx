@@ -5,6 +5,7 @@ import { ApplicationsScreen } from "./screens/ApplicationsScreen";
 import { ForcedPasswordChangeScreen } from "./screens/ForcedPasswordChangeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { NotMigratedScreen } from "./screens/NotMigratedScreen";
+import { TeamsScreen } from "./screens/TeamsScreen";
 
 // Go serve este mesmo bundle (server/static/app/index.html) para todas as rotas
 // não-API — o roteamento de fato acontece aqui no client. AppShell é a única
@@ -19,7 +20,7 @@ export function App() {
         <Route element={<AppShell />}>
           <Route path="/" element={<ApplicationsScreen />} />
           <Route path="/account/security" element={<AccountSecurityScreen />} />
-          <Route path="/teams" element={<NotMigratedScreen title="Teams & people" />} />
+          <Route path="/teams" element={<TeamsScreen />} />
           <Route path="/approvals" element={<NotMigratedScreen title="Approvals" />} />
           <Route path="/history" element={<NotMigratedScreen title="History" />} />
         </Route>

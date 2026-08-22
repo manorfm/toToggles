@@ -280,6 +280,11 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 - Testes com **Vitest + Testing Library** (`npm run test` ou `make web-test`) — unitários para
   `api/*.ts` (mock de `fetch`) e de componente para as telas. TDD (red/green/refactor) é o fluxo
   esperado: escreva o teste antes da implementação da próxima tela.
+- **Cuidado com slices nil no Go**: `GET /teams` vazio retorna `{"success":true}` **sem a chave
+  "teams"** (slice nil não serializa como `[]`), diferente de `GET /applications` (sempre `[]`).
+  Verificado contra o servidor real, não assumido pela doc. Trate toda lista opcional no client
+  (`body.teams ?? []`) e confirme contra o servidor de verdade antes de assumir `[]` — inconsistente
+  endpoint a endpoint.
 
 ### Estado da migração (tela por tela)
 - ✅ **Login** (`server/web/src/screens/LoginScreen.tsx`) — único caminho real de entrada
@@ -296,9 +301,14 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   primeiro acesso não tem sessão real, só o `password_change_token`) e `AccountSecurityScreen`
   (`/account/security`, dentro do AppShell — troca voluntária via menu do usuário). Endpoints
   diferentes (`/auth/change-password-first-time` vs `/profile/change-password`), mesma UI.
-- ⏳ **Teams & people** (`/teams`), **Approvals** (`/approvals`), **History** (`/history`) — ainda
-  `NotMigratedScreen`, todas dentro do shell. Migrar do design-graph tela por tela, apagando o
-  placeholder correspondente.
+- ✅ **Teams & people** (`/teams`, `screens/TeamsScreen.tsx`) — lista via `GET /teams` +
+  `CreateTeamModal` (root only; o item de nav some pra quem não é root, já que `/teams` inteiro exige
+  `RequireRoot()`). `Modal` virou componente genérico (`components/Modal.tsx`), reaproveitável pelas
+  próximas criações (aplicações, etc.). Membership por membro (`MemberRow`, add/remove, aprovador)
+  ficou de fora — `GET /teams` só traz contagens, não a lista de membros.
+- ⏳ **Approvals** (`/approvals`), **History** (`/history`) — ainda `NotMigratedScreen`, dentro do
+  shell. **Criar aplicação** (`AppModal`) e **detalhe de toggles** por aplicação — ainda não
+  existem; agora que times podem ser criados, essa é a próxima peça que destrava o uso real do app.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`

@@ -45,6 +45,20 @@ describe("AppShell", () => {
     expect(screen.getByText("root")).toBeInTheDocument();
   });
 
+  it("hides 'Teams & people' for non-root users (the API is RequireRoot())", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "2", username: "alice", role: "admin", must_change_password: false } })
+      )
+    );
+
+    renderShell();
+
+    expect(await screen.findByText("Applications content")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /teams/i })).not.toBeInTheDocument();
+  });
+
   it("redirects to /login when there is no valid session", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: "Authorization token required" })));
 

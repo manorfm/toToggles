@@ -7,11 +7,12 @@ import { UserMenu } from "./UserMenu";
 
 // Destinos confirmados em get_component_spec("App").textos: "Applications",
 // "Teams & people", "Approvals", "History". Cada um aponta para uma rota real —
-// as ainda não migradas (Teams/Approvals/History) renderizam NotMigratedScreen,
-// nunca um item de menu sem destino.
-const NAV_ITEMS: { to: string; label: string; end?: boolean }[] = [
+// as ainda não migradas (Approvals/History) renderizam NotMigratedScreen, nunca
+// um item de menu sem destino. "Teams & people" some para quem não é root: toda
+// a API /teams exige RequireRoot(), mostrar o item pra outros só levaria a 403.
+const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean }[] = [
   { to: "/", label: "Applications", end: true },
-  { to: "/teams", label: "Teams & people" },
+  { to: "/teams", label: "Teams & people", rootOnly: true },
   { to: "/approvals", label: "Approvals" },
   { to: "/history", label: "History" },
 ];
@@ -51,7 +52,7 @@ export function AppShell() {
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => !item.rootOnly || user.role === "root").map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}>
               {item.label}
             </NavLink>
@@ -77,7 +78,7 @@ export function AppShell() {
       </div>
 
       <main className="main">
-        <Outlet />
+        <Outlet context={{ user }} />
       </main>
     </div>
   );
