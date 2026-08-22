@@ -69,42 +69,40 @@ export function LoginScreen() {
             <label className="field-label" htmlFor="username">
               Usuário
             </label>
-            <div className="select">
-              <input
-                ref={usernameRef}
-                id="username"
-                name="username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    passwordRef.current?.focus();
-                  }
-                }}
-                placeholder="seu.usuario"
-              />
-            </div>
+            <input
+              className="input"
+              ref={usernameRef}
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  passwordRef.current?.focus();
+                }
+              }}
+              placeholder="seu.usuario"
+            />
           </div>
 
           <div className="field">
             <label className="field-label" htmlFor="password">
               Senha
             </label>
-            <div className="select">
-              <input
-                ref={passwordRef}
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
+            <input
+              className="input"
+              ref={passwordRef}
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
           </div>
 
           {error && <div className="auth-error">{error}</div>}

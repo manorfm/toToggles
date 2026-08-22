@@ -106,8 +106,9 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-/* Bordered form-control chrome (mesmo tratamento visual do .select do
-   protótipo) — envolve um <input> "nu" para dar borda/fundo/foco. */
+/* .input vai direto no <input> (className="input", confirmado em get_full_jsx("Field"));
+   .select é a mesma regra para outros controles bordados (dropdowns). */
+.input,
 .select {
   height: 40px;
   padding: 0 13px;
@@ -117,15 +118,16 @@ input[type="checkbox"] {
   color: var(--ink);
   font-size: 14px;
   width: 100%;
-  display: flex;
-  align-items: center;
   transition: border-color 0.14s, background 0.14s;
 }
-.select:focus,
-.select:focus-within {
+.input:focus,
+.select:focus {
   outline: none;
   border-color: var(--accent-line);
   background: var(--surface);
+}
+.input::placeholder {
+  color: var(--ink-4);
 }
 
 .field {

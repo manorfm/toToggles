@@ -14,6 +14,7 @@ function renderShell(initialPath = "/") {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<div>Applications content</div>} />
+          <Route path="/account/security" element={<div>Account security content</div>} />
         </Route>
         <Route path="/login" element={<div>Login screen</div>} />
       </Routes>
@@ -70,5 +71,23 @@ describe("AppShell", () => {
 
     expect(await screen.findByText("Login screen")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/auth/logout", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("navigates to /account/security when 'Change password' is used", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+      )
+    );
+    const user = userEvent.setup();
+
+    renderShell();
+    await screen.findByText("Applications content");
+
+    await user.click(screen.getByRole("button", { name: /root/i }));
+    await user.click(screen.getByRole("button", { name: /change password/i }));
+
+    expect(await screen.findByText("Account security content")).toBeInTheDocument();
   });
 });

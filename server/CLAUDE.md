@@ -291,10 +291,14 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 - ✅ **Applications** (`/`, `screens/ApplicationsScreen.tsx`) — lista real via `GET /applications`.
   "New application" e o clique no card ficaram de fora de propósito: dependem de `AppModal` e da
   view de detalhe de toggles, que ainda não existem — um botão sem ação real seria código morto.
-- ⏳ **Teams & people** (`/teams`), **Approvals** (`/approvals`), **History** (`/history`) e
-  **troca de senha** (`/change-password`) — ainda `NotMigratedScreen` (dentro do shell as três
-  primeiras; standalone/`fullScreen` a última, porque troca de senha forçada não tem sessão real
-  ainda). Migrar do design-graph tela por tela, apagando o placeholder correspondente.
+- ✅ **Troca de senha** — `ChangePasswordForm` (componente puro, validação + UI) reaproveitado por
+  duas telas finas: `ForcedPasswordChangeScreen` (`/change-password`, standalone fora do AppShell —
+  primeiro acesso não tem sessão real, só o `password_change_token`) e `AccountSecurityScreen`
+  (`/account/security`, dentro do AppShell — troca voluntária via menu do usuário). Endpoints
+  diferentes (`/auth/change-password-first-time` vs `/profile/change-password`), mesma UI.
+- ⏳ **Teams & people** (`/teams`), **Approvals** (`/approvals`), **History** (`/history`) — ainda
+  `NotMigratedScreen`, todas dentro do shell. Migrar do design-graph tela por tela, apagando o
+  placeholder correspondente.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`

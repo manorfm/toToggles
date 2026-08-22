@@ -68,7 +68,7 @@ export function AppShell() {
               onClose={() => setMenuOpen(false)}
               onChangePassword={() => {
                 setMenuOpen(false);
-                navigate("/change-password");
+                navigate("/account/security");
               }}
               onLogout={handleLogout}
             />

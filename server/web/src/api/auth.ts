@@ -22,6 +22,27 @@ export async function login(username: string, password: string): Promise<LoginRe
   return { kind: "authenticated", user: body.user! };
 }
 
+export interface ChangePasswordFirstTimeInput {
+  userId: string;
+  username: string;
+  currentPassword: string;
+  newPassword: string;
+}
+
+// POST /auth/change-password-first-time — troca forçada de senha no primeiro
+// acesso. Não usa sessão (o usuário ainda não tem auth_token nesse momento).
+export async function changePasswordFirstTime(input: ChangePasswordFirstTimeInput): Promise<void> {
+  await apiFetch<{ success: boolean; message: string }>("/auth/change-password-first-time", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: input.userId,
+      username: input.username,
+      current_password: input.currentPassword,
+      new_password: input.newPassword,
+    }),
+  });
+}
+
 export async function checkFirstAccess(): Promise<boolean> {
   try {
     const body = await apiFetch<{ first_access: boolean }>("/auth/check-first-access");

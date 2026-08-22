@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkFirstAccess, login } from "./auth";
+import { changePasswordFirstTime, checkFirstAccess, login } from "./auth";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -69,5 +69,34 @@ describe("checkFirstAccess", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network error")));
 
     await expect(checkFirstAccess()).resolves.toBe(false);
+  });
+});
+
+describe("changePasswordFirstTime", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts user_id/username plus the passwords to /auth/change-password-first-time", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, message: "Password changed successfully" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await changePasswordFirstTime({ userId: "01ABC", username: "root", currentPassword: "temp", newPassword: "NovaSenha123" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/auth/change-password-first-time",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ user_id: "01ABC", username: "root", current_password: "temp", new_password: "NovaSenha123" }),
+      })
+    );
+  });
+
+  it("propagates ApiError when the current password is wrong", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { success: false, error: "Invalid current password" })));
+
+    await expect(
+      changePasswordFirstTime({ userId: "01ABC", username: "root", currentPassword: "wrong", newPassword: "NovaSenha123" })
+    ).rejects.toMatchObject({ status: 401, message: "Invalid current password" });
   });
 });
