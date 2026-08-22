@@ -2,6 +2,13 @@
   Tokens do design system, extraídos 1:1 de docs/toToggle.html (:root do protótipo)
   via MCP design-graph. Não redefina valores soltos em componentes — adicione o
   token aqui se faltar algum.
+
+  O protótipo tem dois temas (`:root, [data-theme="dark"]` e `[data-theme="light"]`
+  como override). O `:root` puro do protótipo — sem nenhum data-theme setado, ou
+  seja, a aparência real por padrão — é o tema ESCURO. Um bug anterior aqui tinha
+  misturado bg/surface/ink/border/shadow do tema claro com o accent do tema escuro
+  (uma mistura que não existe no protótipo). Fixamos em um único tema (escuro,
+  o default real) — sem toggle de tema, que não foi pedido.
 */
 :root {
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -18,20 +25,20 @@
   --danger: oklch(0.68 0.2 22);
   --danger-soft: oklch(0.68 0.2 22 / 0.14);
 
-  --bg: oklch(0.985 0.003 95);
-  --bg-grid: oklch(0.93 0.004 95);
-  --surface: oklch(1 0 0);
-  --surface-2: oklch(0.975 0.003 95);
-  --surface-hi: oklch(0.955 0.004 95);
-  --border: oklch(0.2 0.02 264 / 0.1);
-  --border-hi: oklch(0.2 0.02 264 / 0.18);
-  --ink: oklch(0.22 0.01 264);
-  --ink-2: oklch(0.38 0.01 264);
-  --ink-3: oklch(0.52 0.01 264);
-  --ink-4: oklch(0.64 0.01 264);
+  --bg: oklch(0.17 0.006 264);
+  --bg-grid: oklch(0.21 0.007 264);
+  --surface: oklch(0.205 0.007 264);
+  --surface-2: oklch(0.235 0.008 264);
+  --surface-hi: oklch(0.27 0.009 264);
+  --border: oklch(1 0 0 / 0.08);
+  --border-hi: oklch(1 0 0 / 0.14);
+  --ink: oklch(0.96 0.004 264);
+  --ink-2: oklch(0.78 0.006 264);
+  --ink-3: oklch(0.62 0.008 264);
+  --ink-4: oklch(0.5 0.008 264);
 
-  --shadow: 0 1px 2px oklch(0.2 0.02 264 / 0.08), 0 10px 28px -14px oklch(0.2 0.02 264 / 0.22);
-  --shadow-lg: 0 28px 64px -20px oklch(0.2 0.02 264 / 0.28);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
+  --shadow-lg: 0 24px 64px -16px oklch(0 0 0 / 0.7);
 
   --row-h: 46px;
   --gap: 20px;

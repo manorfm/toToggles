@@ -144,10 +144,6 @@ input[type="checkbox"] {
   font-size: 12px;
   color: var(--ink-4);
 }
-.field-error {
-  font-size: 12px;
-  color: var(--danger);
-}
 
 /* --- Avatar --- */
 .avatar {
@@ -318,6 +314,10 @@ input[type="checkbox"] {
   align-items: flex-start;
   gap: 18px;
   margin-bottom: 26px;
+}
+.page-head .h {
+  flex: 1;
+  min-width: 0;
 }
 .page-title {
   font-size: 25px;

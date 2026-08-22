@@ -285,6 +285,11 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   Verificado contra o servidor real, não assumido pela doc. Trate toda lista opcional no client
   (`body.teams ?? []`) e confirme contra o servidor de verdade antes de assumir `[]` — inconsistente
   endpoint a endpoint.
+- **Bug real de tokens corrigido**: `docs/toToggle.html` define `bg`/`surface`/`ink`/`border`/
+  `shadow` em DOIS temas — `:root, [data-theme="dark"]` (o default real, sem nenhum data-theme
+  setado) e `[data-theme="light"]` (override). `tokens.css` tinha misturado os dois: superfícies do
+  tema claro com accent do tema escuro — uma combinação que não existe no protótipo. Corrigido para
+  um único tema consistente (escuro, o default real). Não há toggle de tema — não foi pedido.
 
 ### Estado da migração (tela por tela)
 - ✅ **Login** (`server/web/src/screens/LoginScreen.tsx`) — único caminho real de entrada
