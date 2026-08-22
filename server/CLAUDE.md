@@ -258,25 +258,47 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 
 ## Frontend
 
-> ⚠️ **Em reescrita completa.** Este frontend (HTML/CSS/JS monolítico abaixo) está sendo
-> substituído do zero a partir de um design system reformulado. Antes de tocar em qualquer tela,
-> veja o harness em `../CLAUDE.md` e siga a skill `design-graph-frontend` (consultar o MCP
-> `design-graph` como fonte de verdade do novo design).
+> ⚠️ **Em reescrita completa.** O frontend antigo (HTML/CSS/JS monolítico vanilla, sem framework)
+> foi **removido por completo** — não existe mais em `static/`. Está sendo reconstruído do zero em
+> `server/web/` (React + Vite + TypeScript) a partir do design system reformulado. Antes de tocar em
+> qualquer tela, veja o harness em `../CLAUDE.md` e siga a skill `design-graph-frontend` (consultar
+> o MCP `design-graph` como fonte de verdade do novo design — nunca reaproveitar padrões do frontend
+> antigo, que não existe mais nem deveria servir de referência).
 
 ### Stack Frontend
-- **HTML5**: Estrutura semântica moderna
-- **CSS3**: Estilos responsivos com custom properties
-- **JavaScript Vanilla**: Sem frameworks, foco em performance
-- **Fonts**: Inter (Google Fonts)
-- **Icons**: SVG inline
+- **React + TypeScript + Vite**, código-fonte em `server/web/`.
+- Build gera assets estáticos direto em `static/app/` (`vite.config.ts`: `base`/`outDir`) — o Go
+  continua servindo tudo na mesma porta (`router.Static("/static", "./static")`), sem processo Node
+  em produção. Rodar `npm run build` dentro de `server/web/` sempre que mudar o frontend.
+- Roteamento client-side com `react-router-dom`; Go serve `static/app/index.html` para `/`, `/login`
+  e `/change-password` (ver `internal/app/handler/static_handler.go` — o middleware `ServeStatic`
+  serve essa mesma casca para qualquer rota não-API, é o fallback de SPA).
+- Tokens de design em `server/web/src/styles/tokens.css`, classes utilitárias reaproveitáveis
+  (`.btn`, `.field`, `.select`, `.auth-*`, `.avatar`...) em `server/web/src/styles/global.css` —
+  ambos extraídos 1:1 do protótipo via design-graph. Não crie CSS solto por componente; estenda
+  esses dois arquivos.
+- Testes com **Vitest + Testing Library** (`npm run test` ou `make web-test`) — unitários para
+  `api/*.ts` (mock de `fetch`) e de componente para as telas. TDD (red/green/refactor) é o fluxo
+  esperado: escreva o teste antes da implementação da próxima tela.
 
-### Páginas Principais
-- `index.html` - Interface principal da aplicação
-- `login.html` - Página de autenticação
-- `change-password.html` - Alteração de senha
-- `script.js` - Lógica da aplicação
-- `login.js` - Lógica de autenticação
-- `styles.css` - Estilos globais
+### Estado da migração (tela por tela)
+- ✅ **Login** (`server/web/src/screens/LoginScreen.tsx`) — único caminho real de entrada
+  (usuário/senha via `POST /auth/login`); o protótipo só tinha um seletor de perfis demo, então o
+  formulário foi montado à mão reaproveitando as classes/tokens reais do protótipo.
+- ✅ **AppShell** (`components/AppShell.tsx`) — casca autenticada (sidebar + nav + user menu).
+  Guarda de sessão **client-side** via `useCurrentUser`/`GET /profile` (ver nota de segurança
+  abaixo) — redireciona pra `/login` sozinho se não autenticado.
+- ✅ **Applications** (`/`, `screens/ApplicationsScreen.tsx`) — lista real via `GET /applications`.
+  "New application" e o clique no card ficaram de fora de propósito: dependem de `AppModal` e da
+  view de detalhe de toggles, que ainda não existem — um botão sem ação real seria código morto.
+- ⏳ **Teams & people** (`/teams`), **Approvals** (`/approvals`), **History** (`/history`) e
+  **troca de senha** (`/change-password`) — ainda `NotMigratedScreen` (dentro do shell as três
+  primeiras; standalone/`fullScreen` a última, porque troca de senha forçada não tem sessão real
+  ainda). Migrar do design-graph tela por tela, apagando o placeholder correspondente.
+- Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
+  client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
+  `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`
+  (`GET /profile`) é quem faz esse gate de verdade hoje.
 
 ## Principais Funcionalidades
 

@@ -110,32 +110,3 @@ func TestIsAPIRoute(t *testing.T) {
 		}
 	}
 }
-
-func TestServeStaticFiles(t *testing.T) {
-	// Configura o modo de teste do Gin
-	gin.SetMode(gin.TestMode)
-
-	// Cria um router de teste
-	router := gin.New()
-	router.GET("/*filepath", ServeStaticFiles)
-
-	// Testa rota de arquivo inexistente
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/nonexistent.html", nil)
-	router.ServeHTTP(w, req)
-
-	// Deve retornar 404
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Expected status 404 for non-existent file, got %d", w.Code)
-	}
-
-	// Testa rota raiz (deve servir index.html)
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequest("GET", "/", nil)
-	router.ServeHTTP(w, req)
-
-	// Deve retornar 200 se o arquivo index.html existir
-	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
-		t.Errorf("Expected status 200 or 404 for root path, got %d", w.Code)
-	}
-}

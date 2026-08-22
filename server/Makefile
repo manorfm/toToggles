@@ -3,7 +3,7 @@ DB_PATH = ./db/toggles.db
 MIGRATIONS_DIR = ./db/migrations
 GOOSE = goose
 
-.PHONY: help run build test clean migrate-up migrate-down migrate-status docker-build docker-run
+.PHONY: help run build test clean migrate-up migrate-down migrate-status docker-build docker-run web-install web-build web-dev web-test
 
 help: ## Mostra esta ajuda
 	@echo "Comandos disponíveis:"
@@ -36,4 +36,16 @@ docker-build: ## Constrói a imagem Docker
 docker-run: ## Roda o container Docker
 	docker run -p 3056:3056 -v $(PWD)/db:/root/db $(APP_NAME)
 
-dev: migrate-up run ## Roda em modo desenvolvimento (migrate + run) 
+dev: migrate-up run ## Roda em modo desenvolvimento (migrate + run)
+
+web-install: ## Instala dependências do frontend (server/web)
+	cd web && npm install
+
+web-build: ## Builda o frontend, gerando static/app (mesma porta do Go)
+	cd web && npm run build
+
+web-dev: ## Sobe o Vite dev server (proxy para :3056) — use junto com `make run` em outro terminal
+	cd web && npm run dev
+
+web-test: ## Executa os testes do frontend (vitest)
+	cd web && npm run test

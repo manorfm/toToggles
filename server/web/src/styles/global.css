@@ -1,0 +1,428 @@
+/*
+  Classes utilitárias globais, extraídas 1:1 de docs/toToggle.html via design-graph
+  (get_full_jsx + inspeção do <style> do protótipo). Reaproveite estas classes em vez
+  de estilo inline — é assim que o protótipo evita CSS por-arquivo gigante.
+*/
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* --- Buttons (.btn) --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  transition: background 0.14s, border-color 0.14s, transform 0.06s, box-shadow 0.14s;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+  box-shadow: 0 6px 16px -8px var(--accent-line);
+}
+.btn-ghost {
+  border-color: transparent;
+  color: var(--ink-2);
+}
+.btn-soft {
+  background: var(--surface-2);
+}
+.btn-danger {
+  color: var(--danger);
+  border-color: transparent;
+}
+.btn-danger-fill {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px -6px oklch(0.68 0.2 22 / 0.55);
+}
+.btn-icon {
+  width: 38px;
+  padding: 0;
+}
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+.btn:disabled {
+  box-shadow: none;
+}
+
+/* --- Form controls --- */
+input {
+  border: none;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  width: 100%;
+}
+input:focus {
+  outline: none;
+}
+input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Bordered form-control chrome (mesmo tratamento visual do .select do
+   protótipo) — envolve um <input> "nu" para dar borda/fundo/foco. */
+.select {
+  height: 40px;
+  padding: 0 13px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  font-size: 14px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  transition: border-color 0.14s, background 0.14s;
+}
+.select:focus,
+.select:focus-within {
+  outline: none;
+  border-color: var(--accent-line);
+  background: var(--surface);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.field-error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* --- Avatar --- */
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface-hi);
+  color: var(--ink-2);
+}
+
+/* --- Auth screens (login) --- */
+.auth-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(900px 500px at 50% -10%, var(--accent-soft), transparent 60%), var(--bg);
+}
+.auth-card {
+  width: min(404px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  padding: 34px 32px 28px;
+}
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+.auth-brand .brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+.auth-title {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  text-align: center;
+}
+.auth-sub {
+  font-size: 13.5px;
+  color: var(--ink-4);
+  margin-top: 4px;
+  text-align: center;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.auth-form .btn-primary {
+  width: 100%;
+  height: 44px;
+  margin-top: 4px;
+}
+.auth-foot {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-4);
+  margin-top: 20px;
+}
+.auth-hint {
+  font-size: 12px;
+  color: var(--ink-4);
+  text-align: center;
+  margin-top: 14px;
+  padding: 9px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.auth-error {
+  font-size: 12.5px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  text-align: center;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(150deg, var(--accent), var(--accent-strong));
+  color: var(--accent-ink);
+  box-shadow: 0 6px 18px -6px var(--accent-line);
+  flex-shrink: 0;
+}
+
+/* --- App shell (authenticated) --- */
+.app {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  height: 100vh;
+  background: radial-gradient(1200px 600px at 80% -10%, var(--accent-soft), transparent 60%), var(--bg);
+}
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 55%, transparent);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  gap: 6px;
+}
+.sidebar-foot {
+  margin-top: auto;
+}
+.main {
+  overflow-y: auto;
+  height: 100vh;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 6px 8px 18px;
+}
+.brand-name {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  transition: background 0.14s, color 0.14s;
+}
+.nav-item:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* --- Page content --- */
+.page {
+  padding: 26px var(--pad) 60px;
+  max-width: 1080px;
+}
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+.page-title {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.page-desc {
+  color: var(--ink-3);
+  font-size: 14px;
+  margin-top: 5px;
+  max-width: 56ch;
+}
+.grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.empty {
+  text-align: center;
+  padding: 70px 20px;
+  color: var(--ink-4);
+}
+
+/* --- Cards (applications, ...) --- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--pad);
+  transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s, background 0.16s;
+  position: relative;
+}
+.app-card-top {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+.app-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.app-glyph {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 17px;
+}
+.app-stats {
+  display: flex;
+  gap: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.app-stat .v {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+}
+.app-stat .v.accent {
+  color: var(--accent);
+}
+.app-stat .k {
+  font-size: 11px;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* --- User menu --- */
+.user-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: var(--surface-hi);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 6px;
+}
+.user-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.user-menu button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.user-menu button.danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}

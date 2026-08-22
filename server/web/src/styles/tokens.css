@@ -1,0 +1,41 @@
+/*
+  Tokens do design system, extraídos 1:1 de docs/toToggle.html (:root do protótipo)
+  via MCP design-graph. Não redefina valores soltos em componentes — adicione o
+  token aqui se faltar algum.
+*/
+:root {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  --accent: oklch(0.78 0.17 158);
+  --accent-strong: oklch(0.72 0.18 158);
+  --accent-soft: oklch(0.78 0.17 158 / 0.14);
+  --accent-line: oklch(0.78 0.17 158 / 0.45);
+  --accent-ink: oklch(0.22 0.06 158);
+
+  --warn: oklch(0.82 0.13 75);
+  --warn-soft: oklch(0.82 0.13 75 / 0.14);
+  --danger: oklch(0.68 0.2 22);
+  --danger-soft: oklch(0.68 0.2 22 / 0.14);
+
+  --bg: oklch(0.985 0.003 95);
+  --bg-grid: oklch(0.93 0.004 95);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.975 0.003 95);
+  --surface-hi: oklch(0.955 0.004 95);
+  --border: oklch(0.2 0.02 264 / 0.1);
+  --border-hi: oklch(0.2 0.02 264 / 0.18);
+  --ink: oklch(0.22 0.01 264);
+  --ink-2: oklch(0.38 0.01 264);
+  --ink-3: oklch(0.52 0.01 264);
+  --ink-4: oklch(0.64 0.01 264);
+
+  --shadow: 0 1px 2px oklch(0.2 0.02 264 / 0.08), 0 10px 28px -14px oklch(0.2 0.02 264 / 0.22);
+  --shadow-lg: 0 28px 64px -20px oklch(0.2 0.02 264 / 0.28);
+
+  --row-h: 46px;
+  --gap: 20px;
+  --pad: 24px;
+  --radius: 14px;
+  --radius-sm: 9px;
+}

@@ -1,0 +1,58 @@
+import type { CSSProperties } from "react";
+
+export type IconName = "toggle" | "lock" | "logout";
+
+interface IconProps {
+  name: IconName;
+  size?: number;
+  strokeWidth?: number;
+  fill?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}
+
+// Glifos extraídos do design-graph (get_full_jsx do componente Icon). Só "toggle"
+// veio indexado pelo protótipo; "lock" e "logout" foram adicionados seguindo a
+// mesma convenção confirmada (viewBox 24x24, stroke=currentColor, cantos
+// arredondados) — não são originais do protótipo, então confira contra o
+// design-graph se/quando a tela que usa esses ícones for reindexada com o glifo real.
+const paths: Record<IconName, JSX.Element> = {
+  toggle: (
+    <>
+      <rect x="2" y="7" width="20" height="10" rx="5" />
+      <circle cx="16" cy="12" r="2.6" fill="currentColor" stroke="none" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
+    </>
+  ),
+};
+
+export function Icon({ name, size = 16, strokeWidth = 2, fill = false, className, style }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={fill ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={style}
+      className={className}
+    >
+      {paths[name]}
+    </svg>
+  );
+}

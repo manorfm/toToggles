@@ -83,26 +83,27 @@ func createTestHTMLFiles(t *testing.T) (string, func()) {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
 	
-	// Cria diretório static
+	// Cria diretório static/app (destino do build do frontend novo, server/web)
 	staticDir := filepath.Join(tempDir, "static")
-	err = os.MkdirAll(staticDir, 0755)
+	appDir := filepath.Join(staticDir, "app")
+	err = os.MkdirAll(appDir, 0755)
 	if err != nil {
-		t.Fatalf("Failed to create static directory: %v", err)
+		t.Fatalf("Failed to create static/app directory: %v", err)
 	}
-	
-	// Cria arquivo index.html
+
+	// Cria arquivo index.html (casca SPA — o roteamento de tela real acontece no client)
 	indexContent := `<!DOCTYPE html>
 <html>
-<head><title>ToToogle</title></head>
+<head><title>toToggle</title></head>
 <body>
-	<div id="applications-section">Main App</div>
-	<script src="/static/script.js"></script>
+	<div id="root"></div>
+	<script type="module" src="/static/app/assets/index.js"></script>
 </body>
 </html>`
-	
-	err = os.WriteFile(filepath.Join(staticDir, "index.html"), []byte(indexContent), 0644)
+
+	err = os.WriteFile(filepath.Join(appDir, "index.html"), []byte(indexContent), 0644)
 	if err != nil {
-		t.Fatalf("Failed to create index.html: %v", err)
+		t.Fatalf("Failed to create static/app/index.html: %v", err)
 	}
 	
 	// Cria arquivo login.html
@@ -307,8 +308,8 @@ func TestStaticMiddlewareServesMainPageForNonAPIRoutes(t *testing.T) {
 			}
 			
 			body := w.Body.String()
-			if !strings.Contains(body, "applications-section") {
-				t.Errorf("Response for %s should contain index.html content", path)
+			if !strings.Contains(body, `id="root"`) {
+				t.Errorf("Response for %s should contain the SPA shell (static/app/index.html)", path)
 			}
 		})
 	}

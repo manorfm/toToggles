@@ -23,9 +23,9 @@ func ServeStatic(c *gin.Context) {
 		c.Next()
 		return
 	}
-	// Se a rota não for para uma API, serve o index.html
+	// Se a rota não for para uma API, serve a casca do frontend (React, server/web)
 	if !isAPIRoute(c.Request.URL.Path) {
-		c.File("static/index.html")
+		c.File("static/app/index.html")
 		return
 	}
 	// Para rotas de API, continua com o handler normal
@@ -105,10 +105,4 @@ func isAPIRoute(path string) bool {
 	}
 	
 	return false
-}
-
-// ServeStaticFiles serve arquivos estáticos específicos
-func ServeStaticFiles(c *gin.Context) {
-	filePath := c.Param("filepath")
-	c.File("static/" + filePath)
 }
