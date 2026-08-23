@@ -3,6 +3,7 @@ import { listTeams } from "../api/teams";
 import { ApiError } from "../api/client";
 import { CreateTeamModal } from "../components/CreateTeamModal";
 import { Icon } from "../components/Icon";
+import { TeamMembersSection } from "../components/TeamMembersSection";
 import { TeamRow } from "../components/TeamRow";
 import { useAppUser } from "../hooks/useAppUser";
 import type { TeamWithCounts } from "../types/team";
@@ -12,8 +13,8 @@ type LoadState =
   | { status: "loaded"; teams: TeamWithCounts[] }
   | { status: "error"; message: string };
 
-// Adaptado de get_full_jsx("TeamsView"). Membership/aprovadores por membro
-// (MemberRow) ficam de fora nesta fatia — ver nota em TeamRow.
+// Adaptado de get_full_jsx("TeamsView"). Aprovadores por membro ficam de fora nesta
+// fatia (ver TeamMembersSection sobre troca de role ser global, não por time).
 export function TeamsScreen() {
   const user = useAppUser();
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -55,7 +56,12 @@ export function TeamsScreen() {
       {state.status === "error" && <div className="empty">{state.message}</div>}
       {state.status === "loaded" && state.teams.length === 0 && <div className="empty">Nenhum time ainda.</div>}
       {state.status === "loaded" &&
-        state.teams.map((team) => <TeamRow key={team.id} team={team} />)}
+        state.teams.map((team) => (
+          <div key={team.id} style={{ marginBottom: 26 }}>
+            <TeamRow team={team} />
+            <TeamMembersSection teamId={team.id} teamName={team.name} />
+          </div>
+        ))}
 
       {creating && (
         <CreateTeamModal

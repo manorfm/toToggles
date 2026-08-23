@@ -312,8 +312,13 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 - ✅ **Teams & people** (`/teams`, `screens/TeamsScreen.tsx`) — lista via `GET /teams` +
   `CreateTeamModal` (root only; o item de nav some pra quem não é root, já que `/teams` inteiro exige
   `RequireRoot()`). `Modal` virou componente genérico (`components/Modal.tsx`), já reaproveitado
-  por `CreateApplicationModal`. Membership por membro (`MemberRow`, add/remove, aprovador) ficou de
-  fora — `GET /teams` só traz contagens, não a lista de membros.
+  por `CreateApplicationModal`. `TeamMembersSection` (por time) lista/adiciona/remove membros —
+  `AddMemberModal` adapta `MemberModal` do protótipo pra API real: o protótipo "convida por nome"
+  (cria pessoa nova ali), mas a API só associa um usuário **já existente**
+  (`POST /teams/:id/users {user_id}`), então virou um `<select>` sobre `GET /users` (root only).
+  Trocar a role de um membro ficou de fora — role é global no usuário
+  (`entity.User.Role`), não por time; mudar isso merece sua própria tela (User Management),
+  que ainda não existe.
 - ✅ **Detalhe de aplicação** (`/applications/:id`, `screens/ApplicationDetailScreen.tsx`) — árvore
   de toggles via `GET .../toggles?hierarchy=true` (`ToggleTree`, recursivo), criação via
   `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o endpoint

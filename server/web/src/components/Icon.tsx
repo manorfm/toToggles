@@ -1,6 +1,19 @@
 import type { CSSProperties } from "react";
 
-export type IconName = "toggle" | "lock" | "logout" | "plus" | "close" | "users" | "apps" | "check" | "key" | "copy" | "warn";
+export type IconName =
+  | "toggle"
+  | "lock"
+  | "logout"
+  | "plus"
+  | "close"
+  | "users"
+  | "apps"
+  | "check"
+  | "key"
+  | "copy"
+  | "warn"
+  | "user"
+  | "trash";
 
 interface IconProps {
   name: IconName;
@@ -85,6 +98,19 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
       <path d="M12 9v4" />
       <path d="M12 17h.01" />
+    </>
+  ),
+  user: (
+    <>
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
     </>
   ),
 };

@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type { Team, TeamWithCounts } from "../types/team";
+import type { User } from "../types/user";
 
 export async function listTeams(): Promise<TeamWithCounts[]> {
   // GET /teams omite "teams" quando não há times (slice nil no Go) em vez de [].
@@ -39,4 +40,20 @@ export interface TeamOption {
 export async function listTeamOptions(isRoot: boolean): Promise<TeamOption[]> {
   const teams = isRoot ? await listTeams() : await listMyTeams();
   return teams.map((t) => ({ id: t.id, name: t.name }));
+}
+
+export async function listTeamMembers(teamId: string): Promise<User[]> {
+  const body = await apiFetch<{ success: boolean; users?: User[] }>(`/teams/${teamId}/users`);
+  return body.users ?? [];
+}
+
+export async function addTeamMember(teamId: string, userId: string): Promise<void> {
+  await apiFetch<{ success: boolean; message: string }>(`/teams/${teamId}/users`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
+export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  await apiFetch<{ success: boolean; message: string }>(`/teams/${teamId}/users/${userId}`, { method: "DELETE" });
 }

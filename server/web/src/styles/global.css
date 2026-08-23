@@ -708,3 +708,17 @@ input[type="checkbox"] {
   flex-shrink: 0;
   cursor: pointer;
 }
+
+/* --- Team members --- */
+.member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px var(--pad);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.member + .member {
+  margin-top: 10px;
+}

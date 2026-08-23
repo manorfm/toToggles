@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTeam, listMyTeams, listTeamOptions, listTeams } from "./teams";
+import { addTeamMember, createTeam, listMyTeams, listTeamMembers, listTeamOptions, listTeams, removeTeamMember } from "./teams";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -110,5 +110,67 @@ describe("listTeamOptions", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/profile/teams", expect.anything());
     expect(options).toEqual([{ id: "2", name: "B" }]);
+  });
+});
+
+describe("listTeamMembers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unwraps GET /teams/:id/users's {success,users} envelope", async () => {
+    const users = [{ id: "1", username: "alice", role: "admin", must_change_password: false, created_at: "", updated_at: "" }];
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listTeamMembers("team1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/users", expect.anything());
+    expect(result).toEqual(users);
+  });
+
+  it("returns an empty array when 'users' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true })));
+
+    await expect(listTeamMembers("team1")).resolves.toEqual([]);
+  });
+});
+
+describe("addTeamMember", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts user_id to /teams/:id/users", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, message: "User added to team successfully" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await addTeamMember("team1", "user1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/teams/team1/users",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ user_id: "user1" }) })
+    );
+  });
+
+  it("propagates ApiError when the user is already a member", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(400, { success: false, error: "user already a member" })));
+
+    await expect(addTeamMember("team1", "user1")).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("removeTeamMember", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends DELETE to /teams/:id/users/:userId", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, message: "User removed from team successfully" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await removeTeamMember("team1", "user1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/users/user1", expect.objectContaining({ method: "DELETE" }));
   });
 });
