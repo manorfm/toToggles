@@ -324,8 +324,19 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o endpoint
   **recursivo** `PUT .../toggle/:id` (singular — desliga o nó inteiro e a subárvore de uma vez).
   Inclui `SecretKeySection` (gerar/regerar/apagar a service key; `GeneratedKeyModal` mostra a chave
-  em texto plano **uma única vez** — só fecha depois de marcar "copiei e guardei"). Regra de
-  ativação e exclusão de toggle individual ficaram de fora — próxima fatia.
+  em texto plano **uma única vez** — só fecha depois de marcar "copiei e guardei"). **Regra de
+  ativação** (`EditToggleDrawer`, botão "Configure" por nó — `ToggleTree` ganhou a prop
+  `onConfigure`): liga/desliga status, ativa uma regra dentre os 7 tipos de
+  `entity.GetRuleTypeOptions()` (`lib/activationRuleTypes.ts`) e salva via `PUT
+  .../toggles/:id` (plural, não-recursivo — diferente do liga/desliga da árvore). Bug real
+  encontrado testando ao vivo contra o servidor: `GET/PUT .../toggles/:id` devolve
+  `activation_rule: {type:"", value:""}` (objeto truthy, **nunca `null`**) sempre que
+  `has_activation_rule` é `false` — ler isso com `activation_rule?.type ?? null` resolvia pra
+  `""` (um `ActivationRuleType` inválido) em vez de `null`. Corrigido extraindo a derivação pra
+  uma função pura testável isoladamente (`deriveInitialRuleState`, em
+  `lib/activationRuleTypes.ts`) que trata `has_activation_rule` como o único sinal confiável —
+  nunca confia na forma/truthiness de `activation_rule` sozinho. Exclusão de toggle individual
+  ficou de fora — próxima fatia.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — root vê `GET
   /approval/requests/pending` (tudo); outras roles veem `GET /approval/requests/approvable` (só o
   que podem aprovar, já filtrado no servidor). "Approve" no client encadeia `POST .../approve` +

@@ -4,6 +4,7 @@ import { getApplication } from "../api/applications";
 import { getToggleHierarchy, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
 import { CreateToggleModal } from "../components/CreateToggleModal";
+import { EditToggleDrawer } from "../components/EditToggleDrawer";
 import { Icon } from "../components/Icon";
 import { SecretKeySection } from "../components/SecretKeySection";
 import { ToggleTree } from "../components/ToggleTree";
@@ -17,14 +18,16 @@ type LoadState =
 
 // Tela de detalhe de uma aplicação: árvore de toggles (GET .../toggles?hierarchy=true) +
 // criação (CreateToggleModal) + liga/desliga recursivo (PUT .../toggle/:id, singular) +
-// gerenciamento da service key (SecretKeySection). Edição de regra de ativação e
-// exclusão de toggle individual ficam para uma próxima fatia.
+// edição de regra de ativação (EditToggleDrawer, PUT .../toggles/:id não-recursivo) +
+// gerenciamento da service key (SecretKeySection). Exclusão de toggle individual fica
+// para uma próxima fatia.
 export function ApplicationDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const applicationId = id!;
   const user = useAppUser();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [creating, setCreating] = useState(false);
+  const [configuring, setConfiguring] = useState<{ toggleId: string; childrenCount: number } | null>(null);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
 
@@ -84,7 +87,12 @@ export function ApplicationDetailScreen() {
       {state.status === "error" && <div className="empty">{state.message}</div>}
       {state.status === "loaded" && state.toggles.length === 0 && <div className="empty">Nenhum toggle ainda.</div>}
       {state.status === "loaded" && state.toggles.length > 0 && (
-        <ToggleTree nodes={state.toggles} onToggle={handleToggle} disabled={!canEdit || mutating} />
+        <ToggleTree
+          nodes={state.toggles}
+          onToggle={handleToggle}
+          onConfigure={canEdit ? (toggleId, childrenCount) => setConfiguring({ toggleId, childrenCount }) : undefined}
+          disabled={!canEdit || mutating}
+        />
       )}
 
       {state.status === "loaded" && (
@@ -103,6 +111,22 @@ export function ApplicationDetailScreen() {
           }}
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de criar o toggle.");
+          }}
+        />
+      )}
+
+      {configuring && (
+        <EditToggleDrawer
+          applicationId={applicationId}
+          toggleId={configuring.toggleId}
+          childrenCount={configuring.childrenCount}
+          onClose={() => setConfiguring(null)}
+          onSaved={() => {
+            setPendingNotice(null);
+            load();
+          }}
+          onPendingApproval={() => {
+            setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
           }}
         />
       )}

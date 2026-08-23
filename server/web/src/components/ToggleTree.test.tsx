@@ -50,4 +50,20 @@ describe("ToggleTree", () => {
       expect(el).toBeDisabled();
     }
   });
+
+  it("calls onConfigure with the node id and its children count when the configure button is clicked", async () => {
+    const onConfigure = vi.fn();
+    const user = userEvent.setup();
+    render(<ToggleTree nodes={nodes} onToggle={vi.fn()} onConfigure={onConfigure} />);
+
+    await user.click(screen.getAllByRole("button", { name: /configure/i })[0]); // "user", has 1 child
+
+    expect(onConfigure).toHaveBeenCalledWith("1", 1);
+  });
+
+  it("does not render configure buttons when onConfigure is not provided", () => {
+    render(<ToggleTree nodes={nodes} onToggle={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /configure/i })).not.toBeInTheDocument();
+  });
 });

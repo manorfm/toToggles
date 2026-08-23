@@ -1,5 +1,13 @@
 import { apiFetch } from "./client";
-import type { CreateToggleResult, SetToggleEnabledResult, ToggleHierarchy, ToggleNode } from "../types/toggle";
+import type {
+  CreateToggleResult,
+  SetToggleEnabledResult,
+  ToggleDetail,
+  ToggleHierarchy,
+  ToggleNode,
+  UpdateToggleInput,
+  UpdateToggleResult,
+} from "../types/toggle";
 
 interface ApprovalRequiredBody {
   approval_required: true;
@@ -43,4 +51,29 @@ export async function setToggleEnabled(
     return { kind: "pending_approval", actionType: body.action_type };
   }
   return { kind: "updated" };
+}
+
+export async function getToggle(applicationId: string, toggleId: string): Promise<ToggleDetail> {
+  return apiFetch<ToggleDetail>(`/applications/${applicationId}/toggles/${toggleId}`);
+}
+
+// PUT /applications/:id/toggles/:toggleId (plural — NÃO recursivo, diferente de
+// setToggleEnabled): substitui enabled + regra de ativação só deste nó.
+export async function updateToggleRule(
+  applicationId: string,
+  toggleId: string,
+  input: UpdateToggleInput
+): Promise<UpdateToggleResult> {
+  const body = await apiFetch<ToggleDetail | ApprovalRequiredBody>(`/applications/${applicationId}/toggles/${toggleId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      enabled: input.enabled,
+      has_activation_rule: input.hasActivationRule,
+      ...(input.hasActivationRule ? { activation_rule: input.activationRule } : {}),
+    }),
+  });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "updated", toggle: body };
 }

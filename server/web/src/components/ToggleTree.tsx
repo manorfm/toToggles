@@ -1,8 +1,10 @@
+import { Icon } from "./Icon";
 import type { ToggleNode } from "../types/toggle";
 
 interface ToggleTreeProps {
   nodes: ToggleNode[];
   onToggle: (id: string, enabled: boolean) => void;
+  onConfigure?: (id: string, childrenCount: number) => void;
   disabled?: boolean;
   level?: number;
 }
@@ -11,7 +13,7 @@ interface ToggleTreeProps {
 // vem resolvido: own AND parent — não recalculamos herança aqui). Usa as classes
 // .node-row/.node-seg/.indent, confirmadas no CSS do protótipo mas sem o
 // componente de origem indexado no design-graph (ver global.css).
-export function ToggleTree({ nodes, onToggle, disabled = false, level = 0 }: ToggleTreeProps) {
+export function ToggleTree({ nodes, onToggle, onConfigure, disabled = false, level = 0 }: ToggleTreeProps) {
   return (
     <div>
       {nodes.map((node) => (
@@ -19,6 +21,16 @@ export function ToggleTree({ nodes, onToggle, disabled = false, level = 0 }: Tog
           <div className="node-row">
             <span className="indent" style={{ width: level * 20 }} />
             <span className="node-seg">{node.value}</span>
+            {onConfigure && (
+              <button
+                className="icon-btn"
+                title="Configure"
+                aria-label="Configure"
+                onClick={() => onConfigure(node.id, node.toggles?.length ?? 0)}
+              >
+                <Icon name="edit" size={14} />
+              </button>
+            )}
             <button
               role="switch"
               aria-checked={node.enabled}
@@ -29,7 +41,7 @@ export function ToggleTree({ nodes, onToggle, disabled = false, level = 0 }: Tog
             />
           </div>
           {node.toggles && node.toggles.length > 0 && (
-            <ToggleTree nodes={node.toggles} onToggle={onToggle} disabled={disabled} level={level + 1} />
+            <ToggleTree nodes={node.toggles} onToggle={onToggle} onConfigure={onConfigure} disabled={disabled} level={level + 1} />
           )}
         </div>
       ))}

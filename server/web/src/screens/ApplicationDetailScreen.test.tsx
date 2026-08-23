@@ -110,4 +110,61 @@ describe("ApplicationDetailScreen", () => {
 
     expect(await screen.findByText("billing")).toBeInTheDocument();
   });
+
+  it("configures an activation rule via the drawer and refreshes the tree", async () => {
+    let ruleSet = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/applications/app1/toggles/1" && init?.method === "PUT") {
+        ruleSet = true;
+        return Promise.resolve(
+          jsonResponse(200, {
+            id: "1",
+            value: "user",
+            enabled: true,
+            path: "user",
+            level: 0,
+            parent_id: null,
+            app_id: "app1",
+            has_activation_rule: true,
+            activation_rule: { type: "percentage", value: "25" },
+          })
+        );
+      }
+      if (path === "/applications/app1/toggles/1") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            id: "1",
+            value: "user",
+            enabled: true,
+            path: "user",
+            level: 0,
+            parent_id: null,
+            app_id: "app1",
+            has_activation_rule: false,
+            activation_rule: null,
+          })
+        );
+      }
+      if (path.startsWith("/applications/app1/toggles")) {
+        return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [{ id: "1", value: "user", enabled: true }] }));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("user");
+
+    await user.click(screen.getByRole("button", { name: /configure/i }));
+    await screen.findByText("user", { selector: ".drawer-path" });
+
+    await user.click(screen.getByRole("button", { name: /activation rule/i }));
+    await user.click(screen.getByText("Percentage"));
+    await user.type(screen.getByLabelText(/percentage value/i), "25");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await vi.waitFor(() => expect(ruleSet).toBe(true));
+  });
 });
