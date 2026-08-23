@@ -59,8 +59,11 @@ func isAPIRoute(path string) bool {
 		return true
 	}
 	
-	// Rotas do sistema de aprovação
-	if strings.HasPrefix(path, "/approval") {
+	// Rotas do sistema de aprovação. Boundary explícito: "/approvals" (rota SPA,
+	// screens/ApprovalsScreen.tsx) também começa com "/approval" por acidente de string, então
+	// um simples HasPrefix a classificava como API por engano — confirmado ao vivo, um hard
+	// refresh em /approvals devolvia 404 puro em vez da casca do SPA.
+	if path == "/approval" || strings.HasPrefix(path, "/approval/") {
 		return true
 	}
 	

@@ -41,11 +41,12 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: /applications/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /teams/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /approvals/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /approval settings/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /history/i })).toBeInTheDocument();
     expect(screen.getByText("root")).toBeInTheDocument();
   });
 
-  it("hides 'Teams & people' for non-root users (the API is RequireRoot())", async () => {
+  it("hides 'Teams & people' and 'Approval settings' for non-root users (both APIs are RequireRoot())", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -57,6 +58,7 @@ describe("AppShell", () => {
 
     expect(await screen.findByText("Applications content")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /teams/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /approval settings/i })).not.toBeInTheDocument();
   });
 
   it("redirects to /login when there is no valid session", async () => {

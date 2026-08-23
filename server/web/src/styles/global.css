@@ -452,6 +452,11 @@ input[type="checkbox"] {
   color: var(--ink-3);
   border: 1px solid var(--border);
 }
+.badge.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
 .icon-btn {
   width: 28px;
   height: 28px;
@@ -586,6 +591,10 @@ input[type="checkbox"] {
 .switch:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.switch.lg {
+  --w: 46px;
+  --h: 26px;
 }
 
 /* --- Toggle tree (.node-row/.node-seg/.indent — confirmadas no protótipo via CSS,
@@ -770,6 +779,41 @@ input[type="checkbox"] {
 }
 .appr-done.no {
   color: var(--danger);
+}
+
+/* --- Approval settings --- */
+.appr-system-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.appr-action-group {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-4);
+  margin-bottom: 8px;
+}
+.appr-action-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.appr-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+}
+.appr-action-row:hover {
+  background: var(--surface-hi);
 }
 
 /* --- Reject modal --- */

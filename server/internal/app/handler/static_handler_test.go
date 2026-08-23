@@ -93,7 +93,11 @@ func TestIsAPIRoute(t *testing.T) {
 		{"/applications/123/toggle/456", true}, // PUT recursivo (singular) — docs/rest-flow.md §7
 		{"/api/test", true},
 		{"/health", true},
-		
+		{"/approval", true},
+		{"/approval/requests", true},
+		{"/approval/settings", true},
+		{"/approval/enabled", true},
+
 		// Rotas não-API que devem retornar false
 		{"/static/styles.css", false},
 		{"/", false},
@@ -103,6 +107,12 @@ func TestIsAPIRoute(t *testing.T) {
 		{"/auth/logout", false},
 		{"/dashboard", false},
 		{"/some-spa-route", false},
+		// /approvals (rota SPA — screens/ApprovalsScreen.tsx) não pode colidir com o prefixo real
+		// de API "/approval" (sem "s"): "/approvals" também começa com "/approval" por acidente de
+		// string, então um hard refresh nessa tela devolvia 404 puro em vez da casca do SPA
+		// (confirmado ao vivo: curl -i http://localhost:3056/approvals).
+		{"/approvals", false},
+		{"/approvals/settings", false},
 	}
 
 	for _, test := range tests {

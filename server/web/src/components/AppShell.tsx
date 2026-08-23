@@ -9,10 +9,13 @@ import { UserMenu } from "./UserMenu";
 // "Teams & people", "Approvals", "History". Cada um aponta pra uma tela real.
 // "Teams & people" some para quem não é root: toda a API /teams exige
 // RequireRoot(), mostrar o item pra outros só levaria a 403.
+// "Approval settings" (GET/PUT /approval/settings, RequireRoot()) não tem destino no
+// protótipo — adaptado de get_full_jsx("ApprovalSettingsView"), o texto do item de nav é meu.
 const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean }[] = [
   { to: "/", label: "Applications", end: true },
   { to: "/teams", label: "Teams & people", rootOnly: true },
   { to: "/approvals", label: "Approvals" },
+  { to: "/approvals/settings", label: "Approval settings", rootOnly: true },
   { to: "/history", label: "History" },
 ];
 

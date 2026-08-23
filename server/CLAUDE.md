@@ -365,11 +365,47 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   Ordena por `created_at` desc no client. Com isso, **todo item de nav do AppShell aponta pra uma
   tela real** — nenhum `NotMigratedScreen` sobrou, o componente foi removido (não tinha mais
   nenhuma rota apontando pra ele).
-- Configurações do approval workflow (`/approval/settings`, root only) e designação de aprovadores
-  por time (`/teams/:id/approvers/:user_id`) ainda não têm tela — só a fila de solicitações em si.
-  User Management (criar/listar/apagar usuários, trocar role) também não existe como tela.
-  Apagar membro de time individual (o membership em si) e o próprio usuário já existem via API mas
-  sem tela dedicada.
+- ✅ **Approval settings** (`/approvals/settings`, `screens/ApprovalSettingsScreen.tsx`, root
+  only) — adaptado de `get_full_jsx("ApprovalSettingsView")`: switch mestre liga/desliga o
+  workflow inteiro, lista de 10 flags agrupadas (Toggles/Applications/Secret keys, ver
+  `lib/approvalActionTypes.ts`) e campo de dias de expiração. Texto do switch mestre e do aviso
+  de sistema desativado é literal do protótipo (JSX confirmado); labels da lista de ações são
+  meus, lidos direto de `getActionType` (`internal/app/middleware/approval.go`) porque
+  `APPROVAL_ACTIONS` no protótipo não tem os 10 valores reais. **UI deliberadamente honesta**:
+  `getActionType` só infere `toggle_create`/`toggle_update`/`toggle_delete`/
+  `application_create`/`application_delete` de uma rota HTTP de verdade — `toggle_enable`,
+  `toggle_disable`, `toggle_rule`, `secret_key_create`, `secret_key_delete` existem no modelo e
+  podem ser ligadas, mas nunca são checadas (qualquer `PUT .../toggles/:id`, seja habilitar,
+  desabilitar ou mudar regra, sempre vira `toggle_update`). Em vez de deixar o root achar que
+  ligou uma proteção que não existe, essas 5 flags mostram um hint explicando o que realmente as
+  governa. `PUT /approval/settings` substitui `required_actions` por inteiro quando presente
+  (não dá pra mandar só uma chave) — cada switch de ação individual manda o objeto completo com
+  só aquela chave invertida.
+- **Bug real de roteamento encontrado e corrigido**: `isAPIRoute` usava `strings.HasPrefix(path,
+  "/approval")` pra reconhecer a API de aprovação — mas `/approvals` (rota SPA de
+  `screens/ApprovalsScreen.tsx`) também começa com essa string por acidente (`"/approvals"` tem
+  `"/approval"` como prefixo literal). Um hard refresh em `/approvals` batia em `c.Next()` sem
+  handler nenhum registrado pra esse path exato e devolvia `404 page not found` cru em vez da
+  casca do SPA — confirmado ao vivo (`curl -i http://localhost:3056/approvals`). Corrigido
+  exigindo boundary explícito: `path == "/approval" || strings.HasPrefix(path, "/approval/")`.
+  Por isso a nova tela usa `/approvals/settings` (plural) como rota client-side, não
+  `/approval/settings` — esse último É o path real da API (`GET`/`PUT /approval/settings`, root
+  only) e colidiria de propósito com o boundary corrigido.
+- **Achado maior, ainda não corrigido**: durante a verificação ao vivo da correção acima,
+  descobri que `/teams` e `/applications/:id` têm o mesmo problema numa forma mais grave e sem
+  solução por string — o path da tela SPA é **idêntico** ao path da rota de API real (não só um
+  prefixo colidindo). Um hard refresh autenticado em `/teams` devolve `{"success":true}` cru (o
+  JSON de `GET /teams`); em `/applications/{id}` devolve o JSON de `GET /applications/:id` (ou um
+  erro de validação se o id não bate o formato ULID) — nunca a casca do SPA. Isso não é um bug
+  desta fase (é estrutural ao design de `isAPIRoute`, que decide API-vs-SPA só pelo formato da
+  URL) e afeta qualquer tela cujo path client-side reusa literalmente um path de API — sinalizado
+  ao usuário pra decidir o approach (ex.: distinguir por `Sec-Fetch-Dest: document`/`Accept` em
+  vez de heurística de string) antes de mexer nisso, já que é uma mudança na forma como o
+  middleware inteiro decide servir API vs SPA, não um ajuste pontual de rota.
+- Designação de aprovadores por time (`/teams/:id/approvers/:user_id`) ainda não tem tela. User
+  Management (criar/listar/apagar usuários, trocar role) também não existe como tela. Apagar
+  membro de time individual (o membership em si) e o próprio usuário já existem via API mas sem
+  tela dedicada.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`
