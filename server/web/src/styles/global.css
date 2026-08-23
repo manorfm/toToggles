@@ -340,6 +340,21 @@ input[type="checkbox"] {
   padding: 70px 20px;
   color: var(--ink-4);
 }
+.empty svg {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 14px;
+  opacity: 0.5;
+}
+.empty .et {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.empty .ed {
+  font-size: 13px;
+  margin-top: 4px;
+}
 
 /* --- Cards (applications, ...) --- */
 .card {
@@ -814,6 +829,49 @@ input[type="checkbox"] {
 }
 .appr-action-row:hover {
   background: var(--surface-hi);
+}
+.appr-system-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 13.5px;
+}
+.appr-system-banner.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+/* --- Tabs (chips) --- */
+.audit-filter {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.chip {
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 99px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  color: var(--ink-3);
+  background: var(--surface);
+}
+.chip:hover {
+  border-color: var(--border-hi);
+  color: var(--ink);
+}
+.chip.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
 }
 
 /* --- Reject modal --- */

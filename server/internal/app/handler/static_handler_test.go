@@ -18,7 +18,7 @@ func TestServeStatic(t *testing.T) {
 
 	// Testa rota de API (deve passar pelo middleware)
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/applications", nil)
+	req, _ := http.NewRequest("GET", "/api/applications", nil)
 	router.ServeHTTP(w, req)
 
 	// Deve retornar 404 pois não há handler para essa rota
@@ -44,12 +44,14 @@ func TestServeStaticAuthRoutes(t *testing.T) {
 	// Cria um router de teste
 	router := gin.New()
 	router.Use(ServeStatic)
-	
+
 	// Adiciona handler para rotas de auth para simular comportamento real
 	router.GET("/login", func(c *gin.Context) {
 		c.String(http.StatusOK, "login page")
 	})
-	router.POST("/auth/login", func(c *gin.Context) {
+	// /auth/login vive sob /api/auth/login agora — não precisa mais de bypass
+	// dedicado no ServeStatic, só do boundary genérico de isAPIRoute("/api/").
+	router.POST("/api/auth/login", func(c *gin.Context) {
 		c.String(http.StatusOK, "auth endpoint")
 	})
 
@@ -61,58 +63,71 @@ func TestServeStaticAuthRoutes(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200 for /login, got %d", w.Code)
 	}
-	
+
 	if w.Body.String() != "login page" {
 		t.Error("Expected login page content, got index.html instead")
 	}
 
-	// Testa que /auth/login não é interceptado pelo ServeStatic
+	// Testa que /api/auth/login não é interceptado pelo ServeStatic
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest("POST", "/auth/login", nil)
+	req, _ = http.NewRequest("POST", "/api/auth/login", nil)
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200 for /auth/login, got %d", w.Code)
+		t.Errorf("Expected status 200 for /api/auth/login, got %d", w.Code)
 	}
-	
+
 	if w.Body.String() != "auth endpoint" {
 		t.Error("Expected auth endpoint content, got index.html instead")
 	}
 }
 
+// isAPIRoute virou um único boundary de prefixo depois que toda a API (sessão e secret
+// key) passou a viver sob /api (routes.go) — antes era uma lista de heurísticas por path
+// que colidia repetidamente com rotas SPA de nome parecido (achado ao vivo três vezes
+// nesta reescrita: /toggle vs /toggles, /approval vs /approvals, e o pior caso, /teams e
+// /applications/:id sendo o MESMO path da tela E da API, sem solução possível por string).
 func TestIsAPIRoute(t *testing.T) {
 	tests := []struct {
 		path     string
 		expected bool
 	}{
-		// API routes que devem retornar true
-		{"/applications", true},
-		{"/applications/123", true},
-		{"/applications/123/toggles", true},
-		{"/applications/123/toggles/456", true},
-		{"/applications/123/toggle/456", true}, // PUT recursivo (singular) — docs/rest-flow.md §7
-		{"/api/test", true},
-		{"/health", true},
-		{"/approval", true},
-		{"/approval/requests", true},
-		{"/approval/settings", true},
-		{"/approval/enabled", true},
+		// Qualquer coisa sob /api/ é API.
+		{"/api/applications", true},
+		{"/api/applications/123", true},
+		{"/api/applications/123/toggles/456", true},
+		{"/api/applications/123/toggle/456", true}, // PUT recursivo (singular) — docs/rest-flow.md §7
+		{"/api/teams", true},
+		{"/api/teams/123/approvers", true},
+		{"/api/users", true},
+		{"/api/profile", true},
+		{"/api/approval/requests", true},
+		{"/api/approval/settings", true},
+		{"/api/auth/login", true},
+		{"/api/toggles", true}, // API pública por secret key
 
-		// Rotas não-API que devem retornar false
+		// Tudo que não começa com /api/ é SPA — incluindo paths que, antes desta correção,
+		// eram tratados como API por acidente de string (agora não colidem mais, já que a
+		// própria rota real desses recursos mudou pra /api/...).
+		{"/api", false}, // sem a barra final não conta como API (evita casar "/apix" também, e "/api" sozinho não é uma rota real)
 		{"/static/styles.css", false},
 		{"/", false},
 		{"/LICENSE", false},
 		{"/login", false},
-		{"/auth/login", false},
-		{"/auth/logout", false},
+		{"/change-password", false},
+		{"/health", false}, // registrado antes do ServeStatic ser plugado (router.Use), nunca passa por aqui de verdade
 		{"/dashboard", false},
 		{"/some-spa-route", false},
-		// /approvals (rota SPA — screens/ApprovalsScreen.tsx) não pode colidir com o prefixo real
-		// de API "/approval" (sem "s"): "/approvals" também começa com "/approval" por acidente de
-		// string, então um hard refresh nessa tela devolvia 404 puro em vez da casca do SPA
-		// (confirmado ao vivo: curl -i http://localhost:3056/approvals).
+		{"/teams", false},
+		{"/teams/123", false},
+		{"/applications", false},
+		{"/applications/123", false},
+		{"/users", false},
+		{"/approval", false},
+		{"/approval/settings", false},
 		{"/approvals", false},
 		{"/approvals/settings", false},
+		{"/user-management", false},
 	}
 
 	for _, test := range tests {

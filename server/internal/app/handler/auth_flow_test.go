@@ -33,15 +33,15 @@ func setupAuthTestRouter(t *testing.T) *gin.Engine {
 	// Middleware
 	router.Use(ServeStatic)
 	
-	// Rotas públicas de autenticação
-	auth := router.Group("/auth")
+	// Rotas públicas de autenticação — sob /api, espelhando routes.go
+	auth := router.Group("/api/auth")
 	{
 		auth.POST("/login", Login)
 		auth.POST("/logout", Logout)
 	}
 
-	// Rotas protegidas que requerem autenticação
-	protected := router.Group("")
+	// Rotas protegidas que requerem autenticação — sob /api, espelhando routes.go
+	protected := router.Group("/api")
 	protected.Use(ValidateToken())
 	{
 		// Rotas de aplicações
@@ -223,13 +223,13 @@ func TestAPIRoutesRequireAuthentication(t *testing.T) {
 		method string
 		path   string
 	}{
-		{"GET", "/applications"},
-		{"POST", "/applications"},
-		{"GET", "/applications/123"},
-		{"PUT", "/applications/123"},
-		{"DELETE", "/applications/123"},
-		{"GET", "/applications/123/toggles"},
-		{"POST", "/applications/123/toggles"},
+		{"GET", "/api/applications"},
+		{"POST", "/api/applications"},
+		{"GET", "/api/applications/123"},
+		{"PUT", "/api/applications/123"},
+		{"DELETE", "/api/applications/123"},
+		{"GET", "/api/applications/123/toggles"},
+		{"POST", "/api/applications/123/toggles"},
 	}
 	
 	for _, route := range protectedRoutes {
@@ -335,42 +335,6 @@ func TestStaticMiddlewareBypassesStaticFiles(t *testing.T) {
 	}
 }
 
-func TestIsAPIRouteUpdated(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected bool
-	}{
-		// Rotas de API que devem retornar true
-		{"/applications", true},
-		{"/applications/123", true},
-		{"/applications/123/toggles", true},
-		{"/api/test", true},
-		{"/health", true},
-		
-		// Rotas que NÃO são de API
-		{"/", false},
-		{"/login", false},
-		{"/auth/login", false},
-		{"/auth/logout", false},
-		{"/static/styles.css", false},
-		{"/LICENSE", false},
-		{"/dashboard", false},
-		{"/some-spa-route", false},
-		{"/applications/view/123", false},
-		{"/applications/edit/456", false},
-		{"/applications/dashboard", false},
-	}
-	
-	for _, test := range tests {
-		t.Run(test.path, func(t *testing.T) {
-			result := isAPIRoute(test.path)
-			if result != test.expected {
-				t.Errorf("isAPIRoute(%s) = %v, expected %v", test.path, result, test.expected)
-			}
-		})
-	}
-}
-
 // TestAuthenticationFlow testa o fluxo completo de autenticação
 func TestAuthenticationFlow(t *testing.T) {
 	// Configura arquivos de teste
@@ -382,7 +346,7 @@ func TestAuthenticationFlow(t *testing.T) {
 	
 	t.Run("Unauthenticated user gets 401 on protected routes", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/applications", nil)
+		req, _ := http.NewRequest("GET", "/api/applications", nil)
 		router.ServeHTTP(w, req)
 		
 		if w.Code != http.StatusUnauthorized {
@@ -406,9 +370,9 @@ func TestAuthenticationFlow(t *testing.T) {
 	})
 	
 	t.Run("Auth endpoints are accessible", func(t *testing.T) {
-		// Testa POST /auth/login (deve retornar 400 sem dados válidos)
+		// Testa POST /api/auth/login (deve retornar 400 sem dados válidos)
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/auth/login", nil)
+		req, _ := http.NewRequest("POST", "/api/auth/login", nil)
 		router.ServeHTTP(w, req)
 		
 		// Deve aceitar a requisição mas retornar erro de validação

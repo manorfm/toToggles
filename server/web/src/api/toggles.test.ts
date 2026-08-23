@@ -17,7 +17,7 @@ describe("getToggleHierarchy", () => {
 
     const result = await getToggleHierarchy("app1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/applications/app1/toggles?hierarchy=true", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles?hierarchy=true", expect.anything());
     expect(result).toEqual(toggles);
   });
 
@@ -42,7 +42,7 @@ describe("createToggle", () => {
     const result = await createToggle("app1", "payments.card");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications/app1/toggles",
+      "/api/applications/app1/toggles",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ toggle: "payments.card" }) })
     );
     expect(result).toEqual({ kind: "created", path: "payments.card", enabled: true });
@@ -79,7 +79,7 @@ describe("setToggleEnabled", () => {
     const result = await setToggleEnabled("app1", "tgl1", false);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications/app1/toggle/tgl1",
+      "/api/applications/app1/toggle/tgl1",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ enabled: false }) })
     );
     expect(result).toEqual({ kind: "updated" });
@@ -109,7 +109,7 @@ describe("deleteToggle", () => {
 
     const result = await deleteToggle("app1", "tgl1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/applications/app1/toggles/tgl1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles/tgl1", expect.objectContaining({ method: "DELETE" }));
     expect(result).toEqual({ kind: "deleted" });
   });
 
@@ -148,7 +148,7 @@ describe("getToggle", () => {
 
     const result = await getToggle("app1", "tgl1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/applications/app1/toggles/tgl1", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles/tgl1", expect.anything());
     expect(result).toEqual(toggle);
   });
 });
@@ -180,7 +180,7 @@ describe("updateToggleRule", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications/app1/toggles/tgl1",
+      "/api/applications/app1/toggles/tgl1",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -212,7 +212,7 @@ describe("updateToggleRule", () => {
     await updateToggleRule("app1", "tgl1", { enabled: true, hasActivationRule: false });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications/app1/toggles/tgl1",
+      "/api/applications/app1/toggles/tgl1",
       expect.objectContaining({ body: JSON.stringify({ enabled: true, has_activation_rule: false }) })
     );
   });

@@ -84,7 +84,7 @@ describe("changePasswordFirstTime", () => {
     await changePasswordFirstTime({ userId: "01ABC", username: "root", currentPassword: "temp", newPassword: "NovaSenha123" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/auth/change-password-first-time",
+      "/api/auth/change-password-first-time",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ user_id: "01ABC", username: "root", current_password: "temp", new_password: "NovaSenha123" }),

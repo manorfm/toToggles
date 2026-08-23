@@ -28,12 +28,21 @@ describe("apiFetch", () => {
     await apiFetch("/applications");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications",
+      "/api/applications",
       expect.objectContaining({
         credentials: "include",
         headers: expect.objectContaining({ "Content-Type": "application/json" }),
       })
     );
+  });
+
+  it("prefixes every path with /api, so the API never collides with an SPA route of the same path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiFetch("/teams");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/teams", expect.anything());
   });
 
   it("throws ApiError using the legacy {error} shape", async () => {

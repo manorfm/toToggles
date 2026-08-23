@@ -78,7 +78,7 @@ describe("EditToggleDrawer", () => {
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications/app1/toggles/tgl1",
+      "/api/applications/app1/toggles/tgl1",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ enabled: true, has_activation_rule: true, activation_rule: { type: "percentage", value: "25" } }),

@@ -39,7 +39,7 @@ describe("getApprovalSettings", () => {
 
     const result = await getApprovalSettings();
 
-    expect(fetchMock).toHaveBeenCalledWith("/approval/settings", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/settings", expect.anything());
     expect(result).toEqual(settings);
   });
 
@@ -63,7 +63,7 @@ describe("updateApprovalSettings", () => {
     const result = await updateApprovalSettings({ approvalEnabled: true });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/approval/settings",
+      "/api/approval/settings",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ approval_enabled: true }) })
     );
     expect(result).toEqual(updated);
@@ -76,7 +76,7 @@ describe("updateApprovalSettings", () => {
     await updateApprovalSettings({ requiredActions: requiredActions });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/approval/settings",
+      "/api/approval/settings",
       expect.objectContaining({ body: JSON.stringify({ required_actions: requiredActions }) })
     );
   });
@@ -88,7 +88,7 @@ describe("updateApprovalSettings", () => {
     await updateApprovalSettings({ defaultExpirationDays: 14 });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/approval/settings",
+      "/api/approval/settings",
       expect.objectContaining({ body: JSON.stringify({ default_expiration_days: 14 }) })
     );
   });

@@ -44,7 +44,7 @@ describe("logout", () => {
 
     await logout();
 
-    expect(fetchMock).toHaveBeenCalledWith("/auth/logout", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST" }));
   });
 });
 
@@ -60,7 +60,7 @@ describe("changeOwnPassword", () => {
     await changeOwnPassword({ currentPassword: "old", newPassword: "NovaSenha123" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/profile/change-password",
+      "/api/profile/change-password",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ current_password: "old", new_password: "NovaSenha123" }),

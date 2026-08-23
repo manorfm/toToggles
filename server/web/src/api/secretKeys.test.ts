@@ -19,7 +19,7 @@ describe("listSecretKeys", () => {
 
     const result = await listSecretKeys("app1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/applications/app1/secret-keys", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/secret-keys", expect.anything());
     expect(result).toEqual(keys);
   });
 
@@ -50,7 +50,7 @@ describe("generateSecretKey", () => {
 
     const result = await generateSecretKey("app1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/applications/app1/generate-secret", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/generate-secret", expect.objectContaining({ method: "POST" }));
     expect(result).toEqual({ secretKey, plainKey: "sk_abc123", warning: "shown once" });
   });
 });
@@ -66,6 +66,6 @@ describe("deleteSecretKey", () => {
 
     await deleteSecretKey("1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/secret-keys/1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/secret-keys/1", expect.objectContaining({ method: "DELETE" }));
   });
 });

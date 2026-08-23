@@ -312,7 +312,7 @@ func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 		c.Set("user", user)
 		
 		// Verificar se precisa trocar a senha (exceto na própria rota de troca de senha)
-		if user.MustChangePassword && c.Request.URL.Path != "/auth/change-password" && c.Request.URL.Path != "/change-password" {
+		if user.MustChangePassword && c.Request.URL.Path != "/api/auth/change-password" && c.Request.URL.Path != "/change-password" {
 			// Se é uma requisição para a página principal, redirecionar para troca de senha
 			if c.Request.URL.Path == "/" || c.Request.URL.Path == "/dashboard" {
 				c.Redirect(http.StatusTemporaryRedirect, "/change-password")

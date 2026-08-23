@@ -3,7 +3,6 @@ import { AppShell } from "./components/AppShell";
 import { AccountSecurityScreen } from "./screens/AccountSecurityScreen";
 import { ApplicationDetailScreen } from "./screens/ApplicationDetailScreen";
 import { ApplicationsScreen } from "./screens/ApplicationsScreen";
-import { ApprovalSettingsScreen } from "./screens/ApprovalSettingsScreen";
 import { ApprovalsScreen } from "./screens/ApprovalsScreen";
 import { ForcedPasswordChangeScreen } from "./screens/ForcedPasswordChangeScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
@@ -28,10 +27,9 @@ export function App() {
           {/* "/user-management", não "/users": esse último é o prefixo real de API
               (GET/POST /users) e nunca receberia a casca do SPA num hard refresh. */}
           <Route path="/user-management" element={<UserManagementScreen />} />
+          {/* Approvals + Approval Management são a MESMA tela com abas no protótipo
+              (get_screen_full("ApprovalsView")) — "Configurar" só troca de aba, não navega. */}
           <Route path="/approvals" element={<ApprovalsScreen />} />
-          {/* "/approvals/settings" (plural), não "/approval/settings" (singular, prefixo real
-              de API — colidiria com isAPIRoute e nunca receberia a casca do SPA num refresh). */}
-          <Route path="/approvals/settings" element={<ApprovalSettingsScreen />} />
           <Route path="/history" element={<HistoryScreen />} />
         </Route>
       </Routes>

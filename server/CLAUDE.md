@@ -151,46 +151,103 @@ ToToogle é uma plataforma completa de gerenciamento de feature toggles (feature
 
 ## API e Rotas
 
+> ⚠️ **Toda a API vive sob `/api`** (ver "Separação API vs SPA" no final desta seção — mudança
+> estrutural feita para resolver de vez a colisão entre rotas SPA e rotas de API que tinham o
+> mesmo path). As listas abaixo já refletem os paths atuais.
+
 ### Rotas de Autenticação (Públicas)
-- `POST /auth/login` - Login do usuário
-- `POST /auth/logout` - Logout do usuário
-- `POST /auth/change-password` - Alteração de senha
+- `POST /api/auth/login` - Login do usuário
+- `POST /api/auth/logout` - Logout do usuário
+- `POST /api/auth/change-password` - Alteração de senha
 
 ### Rotas de Usuários (Root Only)
-- `POST /users` - Criar usuário
-- `GET /users` - Listar usuários
-- `PUT /users/:id` - Atualizar usuário
-- `DELETE /users/:id` - Remover usuário
+- `POST /api/users` - Criar usuário
+- `GET /api/users` - Listar usuários
+- `PUT /api/users/:id` - Atualizar usuário
+- `DELETE /api/users/:id` - Remover usuário
 
 ### Rotas de Times (Protegidas)
-- `POST /teams` - Criar time
-- `GET /teams` - Listar times
-- `PUT /teams/:id` - Atualizar time
-- `DELETE /teams/:id` - Remover time
-- `POST /teams/:id/users` - Adicionar usuário ao time
-- `DELETE /teams/:id/users/:userId` - Remover usuário do time
+- `POST /api/teams` - Criar time
+- `GET /api/teams` - Listar times
+- `PUT /api/teams/:id` - Atualizar time
+- `DELETE /api/teams/:id` - Remover time
+- `POST /api/teams/:id/users` - Adicionar usuário ao time
+- `DELETE /api/teams/:id/users/:userId` - Remover usuário do time
+- `POST /api/teams/:id/approvers/:userId` - Designar/remover aprovador
+- `GET /api/teams/:id/approvers` - Listar membros com status de aprovador
 
 ### Rotas de Aplicações (Protegidas)
-- `POST /applications` - Criar aplicação
-- `GET /applications` - Listar aplicações
-- `PUT /applications/:id` - Atualizar aplicação
-- `DELETE /applications/:id` - Remover aplicação
+- `POST /api/applications` - Criar aplicação
+- `GET /api/applications` - Listar aplicações
+- `PUT /api/applications/:id` - Atualizar aplicação
+- `DELETE /api/applications/:id` - Remover aplicação
 
 ### Rotas de Toggles (Protegidas)
-- `POST /applications/:id/toggles` - Criar toggle
-- `GET /applications/:id/toggles` - Listar toggles (flat ou hierarchy)
-- `PUT /applications/:id/toggles/:toggleId` - Atualizar toggle
-- `DELETE /applications/:id/toggles/:toggleId` - Remover toggle
-- `PUT /applications/:id/toggle/:toggleId` - Atualizar recursivamente
+- `POST /api/applications/:id/toggles` - Criar toggle
+- `GET /api/applications/:id/toggles` - Listar toggles (flat ou hierarchy)
+- `PUT /api/applications/:id/toggles/:toggleId` - Atualizar toggle
+- `DELETE /api/applications/:id/toggles/:toggleId` - Remover toggle
+- `PUT /api/applications/:id/toggle/:toggleId` - Atualizar recursivamente
 
 ### API Pública (Secret Key)
-- `GET /api/toggles` - Buscar toggles por secret key (Header: X-API-Key)
+- `GET /api/toggles` - Buscar toggles por secret key (Header: X-API-Key) — já vivia sob `/api`
+  antes da reestruturação, serviu de modelo pra ela.
 
 ### Frontend (Protegido)
 - `GET /` - Interface principal
 - `GET /login` - Página de login
 - `GET /change-password` - Página de alteração de senha
 - `GET /static/*` - Assets estáticos
+
+### Separação API vs SPA (`/api` como namespace único)
+
+**Problema histórico**: o frontend novo (`server/web/`) é servido pelo mesmo host/porta que a
+API, e várias telas reusavam o path exato de uma rota de API real — `GET /teams` era, ao mesmo
+tempo, a tela de times E a rota que lista times; `GET /applications/:id` idem para o detalhe de
+aplicação. `isAPIRoute()` (`static_handler.go`) decidia API-vs-SPA só pelo formato da URL, e
+quando os dois paths eram literalmente o mesmo string, não havia heurística que resolvesse — um
+hard refresh (ou link direto, F5, aba nova) nessas telas devolvia o JSON cru da API em vez da
+casca do SPA. Essa classe de bug foi encontrada e corrigida em pontos isolados três vezes ao
+longo da reescrita (`/toggle` vs `/toggles`, `/approval` vs `/approvals`), até o caso sem solução
+por string (`/teams`, `/applications/:id`) forçar uma correção estrutural.
+
+**Solução**: toda a API (sessão E secret key) foi movida pra debaixo de `/api` — inspirado no
+próprio `/api/toggles` público, que já vivia lá desde sempre e nunca teve esse problema.
+`isAPIRoute()` virou um único `strings.HasPrefix(path, "/api/")`; qualquer coisa fora disso é
+SPA, sem exceção. Isso elimina a classe de bug inteira de uma vez — nenhuma rota nova, de API ou
+SPA, pode colidir de novo, porque o namespace nunca se sobrepõe.
+
+**O que isso tocou**:
+- `internal/app/router/routes.go`: `protected`/`auth` viraram subgrupos de `api :=
+  router.Group("/api")`.
+- `internal/app/handler/static_handler.go`: `isAPIRoute()` simplificado; o bypass dedicado pra
+  `/auth/` no `ServeStatic` foi removido (redundante agora — `/api/auth/...` já cai no boundary
+  genérico). Os bypasses de `/login` e `/change-password` continuam existindo (não são sobre
+  API-vs-SPA, são pra garantir que o handler dedicado de cada um — com sua própria validação —
+  realmente rode em vez do fallback genérico do ServeStatic).
+- `internal/app/middleware/security.go`: o cache-control anti-cache de dados autenticados
+  checava só 3 paths exatos (`/applications`, `/applications/`, `/applications/:id/toggles`) —
+  virou `strings.HasPrefix(path, "/api/")`, cobrindo a API inteira (antes `/teams`, `/users` etc.
+  não tinham essa proteção).
+- `internal/app/handler/auth_handler.go`: o gate de troca de senha obrigatória
+  (`ValidateToken()`) exime a própria rota de troca de senha da bloqueio — o literal mudou de
+  `/auth/change-password` pra `/api/auth/change-password`. Verificado ao vivo que a isenção
+  continua funcionando (sem isso, um usuário marcado `must_change_password` ficaria travado sem
+  conseguir nem trocar a senha).
+- `server/web/src/api/client.ts`: `apiFetch()` agora prefixa `/api` automaticamente em toda
+  chamada — ponto único, nenhum dos módulos em `api/*.ts` precisou saber do prefixo.
+- `stress-tests/src/main/kotlin/setup/TestDataSetup.kt`: os 5 endpoints de setup usados antes de
+  rodar carga (login, criar app, gerar secret, criar toggle, listar teams do usuário) atualizados
+  pro novo prefixo. As simulações Gatling em si (`src/gatling/scala/...`) só batem em
+  `/api/toggles`, que não mudou.
+- `docs/rest-flow.md`: todo path documentado foi atualizado; adicionado um aviso no topo do
+  documento explicando o namespace `/api` e o porquê.
+
+**Achado incidental durante a verificação ao vivo**: `docs/rest-flow.md` documentava o status do
+gate de troca de senha obrigatória como `412 Precondition Required` — mas o handler usa
+`http.StatusPreconditionRequired`, que é **428** (RFC 6585), não 412 (que é "Precondition
+Failed", RFC 7232, um código diferente). Confirmado ao vivo contra o servidor real. Corrigido na
+doc.
 
 ## Banco de Dados
 
@@ -319,9 +376,8 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   `AddMemberModal` adapta `MemberModal` do protótipo pra API real: o protótipo "convida por nome"
   (cria pessoa nova ali), mas a API só associa um usuário **já existente**
   (`POST /teams/:id/users {user_id}`), então virou um `<select>` sobre `GET /users` (root only).
-  Trocar a role de um membro ficou de fora — role é global no usuário
-  (`entity.User.Role`), não por time; mudar isso merece sua própria tela (User Management),
-  que ainda não existe.
+  Trocar a role de um membro fica fora desta tela de propósito — role é global no usuário
+  (`entity.User.Role`), não por time; essa ação vive em `screens/UserManagementScreen.tsx`.
 - ✅ **Detalhe de aplicação** (`/applications/:id`, `screens/ApplicationDetailScreen.tsx`) — árvore
   de toggles via `GET .../toggles?hierarchy=true` (`ToggleTree`, recursivo), criação via
   `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o endpoint
@@ -348,15 +404,45 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   pro usuário, o botão fica desabilitado nesse caso, com tooltip explicando. Deletar a folha
   funciona e ainda faz bubble-up: se isso deixa o pai sem filhos, o pai também é removido — testado
   ao vivo (`payments.card` → apagar `card` → `payments` some sozinho também).
-- ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — root vê `GET
-  /approval/requests/pending` (tudo); outras roles veem `GET /approval/requests/approvable` (só o
-  que podem aprovar, já filtrado no servidor). "Approve" no client encadeia `POST .../approve` +
-  `POST .../execute` — a API separa os dois de propósito (aprovar não executa sozinho), então o
-  client decide encadear; se `approve` falhar nada acontece, se `execute` falhar depois de `approve`
-  ter funcionado a linha vira um botão "Retry" isolado (a solicitação já não está mais pendente).
-  `RejectApprovalModal` para rejeição com motivo opcional. Testado ao vivo o ciclo completo:
-  admin sem bypass cria uma aplicação → fica `202 pending` → root vê, aprova, executa → aplicação
-  passa a existir de fato.
+- ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
+  (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
+  reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura
+  real: um banner de status root-only no topo ("Sistema ativo/desativado · N ações configuradas"
+  + botão "Configurar"), uma barra de abas (`.audit-filter`/`.chip`), e o conteúdo trocando entre
+  a lista de solicitações e `ApprovalSettingsView` **inline** — "Configurar" só troca de aba,
+  nunca navega. A antiga tela separada `ApprovalSettingsScreen.tsx` (rota `/approvals/settings`)
+  foi apagada; seu conteúdo virou `components/ApprovalSettingsPanel.tsx`, um componente puro
+  (recebe `settings`+callbacks via props, sem fetch próprio) renderizado como a aba "Settings".
+  - **Pending/Approvable**: root vê `GET /approval/requests/pending` (tudo); outras roles veem
+    `GET /approval/requests/approvable` (só o que podem aprovar, já filtrado no servidor).
+    "Approve" no client encadeia `POST .../approve` + `POST .../execute` — a API separa os dois
+    de propósito (aprovar não executa sozinho); se `execute` falhar depois de `approve` ter
+    funcionado, a linha vira um botão "Retry" isolado. `RejectApprovalModal` para rejeição com
+    motivo opcional. Testado ao vivo o ciclo completo: admin sem bypass cria uma aplicação → fica
+    `202 pending` → root vê, aprova, executa → aplicação passa a existir de fato.
+  - **Mine** (aba nova, `GET /approval/requests/my`): solicitações do próprio usuário. Nunca
+    mostra botões de ação (autoaprovação é proibida — `docs/rest-flow.md` §9.2, "CanBeApprovedBy
+    forbids self-approval") — `ApprovalRow` ganhou uma prop `isOwn` que mostra "Aguardando
+    revisão de um aprovador" (texto literal confirmado no protótipo) em vez de só o chip genérico
+    de status.
+  - **Settings** (root only): switch mestre liga/desliga o workflow inteiro, lista de 10 flags
+    agrupadas (Toggles/Applications/Secret keys, ver `lib/approvalActionTypes.ts`) e campo de
+    dias de expiração. Texto do switch mestre e do aviso de sistema desativado é literal do
+    protótipo; labels da lista de ações são lidos direto de `getActionType`
+    (`internal/app/middleware/approval.go`) porque `APPROVAL_ACTIONS` no protótipo não tem os 10
+    valores reais. **UI deliberadamente honesta**: `getActionType` só infere
+    `toggle_create`/`toggle_update`/`toggle_delete`/`application_create`/`application_delete` de
+    uma rota HTTP de verdade — `toggle_enable`, `toggle_disable`, `toggle_rule`,
+    `secret_key_create`, `secret_key_delete` existem no modelo e podem ser ligadas, mas nunca são
+    checadas. Em vez de deixar o root achar que ligou uma proteção que não existe, essas 5 flags
+    mostram um hint explicando o que realmente as governa. `PUT /api/approval/settings`
+    substitui `required_actions` por inteiro quando presente — cada switch individual manda o
+    objeto completo com só aquela chave invertida.
+  - **Achado incidental**: `.empty` (usado em toda tela vazia do app) tinha um `svg`/`.et`/`.ed`
+    confirmados no protótipo (ícone + título + descrição) que nunca foram extraídos — só texto
+    solto era usado em todo lugar. Adicionado a `global.css`; aplicado aqui na aba
+    Pending/Mine, ainda pendente de aplicar nas outras telas com estado vazio (Applications,
+    Teams, etc. — ver auditoria de CSS em andamento).
 - ✅ **History** (`/history`, `screens/HistoryScreen.tsx`) — o protótipo descreve "um audit trail de
   toda mudança do sistema", mas o backend **não tem** um log de auditoria genérico — a única trilha
   real é `GET /approval/requests` (qualquer status, qualquer role). Reaproveita `ApprovalRow` num
@@ -365,48 +451,32 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   Ordena por `created_at` desc no client. Com isso, **todo item de nav do AppShell aponta pra uma
   tela real** — nenhum `NotMigratedScreen` sobrou, o componente foi removido (não tinha mais
   nenhuma rota apontando pra ele).
-- ✅ **Approval settings** (`/approvals/settings`, `screens/ApprovalSettingsScreen.tsx`, root
-  only) — adaptado de `get_full_jsx("ApprovalSettingsView")`: switch mestre liga/desliga o
-  workflow inteiro, lista de 10 flags agrupadas (Toggles/Applications/Secret keys, ver
-  `lib/approvalActionTypes.ts`) e campo de dias de expiração. Texto do switch mestre e do aviso
-  de sistema desativado é literal do protótipo (JSX confirmado); labels da lista de ações são
-  meus, lidos direto de `getActionType` (`internal/app/middleware/approval.go`) porque
-  `APPROVAL_ACTIONS` no protótipo não tem os 10 valores reais. **UI deliberadamente honesta**:
-  `getActionType` só infere `toggle_create`/`toggle_update`/`toggle_delete`/
-  `application_create`/`application_delete` de uma rota HTTP de verdade — `toggle_enable`,
-  `toggle_disable`, `toggle_rule`, `secret_key_create`, `secret_key_delete` existem no modelo e
-  podem ser ligadas, mas nunca são checadas (qualquer `PUT .../toggles/:id`, seja habilitar,
-  desabilitar ou mudar regra, sempre vira `toggle_update`). Em vez de deixar o root achar que
-  ligou uma proteção que não existe, essas 5 flags mostram um hint explicando o que realmente as
-  governa. `PUT /approval/settings` substitui `required_actions` por inteiro quando presente
-  (não dá pra mandar só uma chave) — cada switch de ação individual manda o objeto completo com
-  só aquela chave invertida.
-- **Bug real de roteamento encontrado e corrigido**: `isAPIRoute` usava `strings.HasPrefix(path,
-  "/approval")` pra reconhecer a API de aprovação — mas `/approvals` (rota SPA de
-  `screens/ApprovalsScreen.tsx`) também começa com essa string por acidente (`"/approvals"` tem
-  `"/approval"` como prefixo literal). Um hard refresh em `/approvals` batia em `c.Next()` sem
-  handler nenhum registrado pra esse path exato e devolvia `404 page not found` cru em vez da
-  casca do SPA — confirmado ao vivo (`curl -i http://localhost:3056/approvals`). Corrigido
-  exigindo boundary explícito: `path == "/approval" || strings.HasPrefix(path, "/approval/")`.
-  Por isso a nova tela usa `/approvals/settings` (plural) como rota client-side, não
-  `/approval/settings` — esse último É o path real da API (`GET`/`PUT /approval/settings`, root
-  only) e colidiria de propósito com o boundary corrigido.
-- **Achado maior, ainda não corrigido**: durante a verificação ao vivo da correção acima,
-  descobri que `/teams` e `/applications/:id` têm o mesmo problema numa forma mais grave e sem
-  solução por string — o path da tela SPA é **idêntico** ao path da rota de API real (não só um
-  prefixo colidindo). Um hard refresh autenticado em `/teams` devolve `{"success":true}` cru (o
-  JSON de `GET /teams`); em `/applications/{id}` devolve o JSON de `GET /applications/:id` (ou um
-  erro de validação se o id não bate o formato ULID) — nunca a casca do SPA. Isso não é um bug
-  desta fase (é estrutural ao design de `isAPIRoute`, que decide API-vs-SPA só pelo formato da
-  URL) e afeta qualquer tela cujo path client-side reusa literalmente um path de API — sinalizado
-  ao usuário pra decidir o approach (ex.: distinguir por `Sec-Fetch-Dest: document`/`Accept` em
-  vez de heurística de string) antes de mexer nisso, já que é uma mudança na forma como o
-  middleware inteiro decide servir API vs SPA, não um ajuste pontual de rota.
+- **Bug real de roteamento encontrado e corrigido (histórico)**: `isAPIRoute` usava
+  `strings.HasPrefix(path, "/approval")` pra reconhecer a API de aprovação — mas `/approvals`
+  (rota SPA de `screens/ApprovalsScreen.tsx`) também começa com essa string por acidente
+  (`"/approvals"` tem `"/approval"` como prefixo literal). Um hard refresh em `/approvals` batia
+  em `c.Next()` sem handler nenhum registrado pra esse path exato e devolvia `404 page not found`
+  cru em vez da casca do SPA — confirmado ao vivo. Corrigido na hora exigindo um boundary
+  explícito só pro prefixo `/approval`, mas isso era um remendo local — ver a correção estrutural
+  definitiva abaixo. (Uma fase posterior chegou a usar `/approvals/settings` como rota
+  client-side pra uma tela separada de configurações — essa rota não existe mais desde que
+  Approvals e Approval Management viraram abas de uma única tela, ver bullet "Approvals" acima.)
+- **Achado maior, corrigido numa fase posterior**: a verificação ao vivo da correção acima expôs
+  que `/teams` e `/applications/:id` tinham o mesmo problema numa forma sem solução por string —
+  o path da tela SPA era **idêntico** ao path da rota de API real (não só um prefixo colidindo).
+  Um hard refresh autenticado em `/teams` devolvia `{"success":true}` cru (o JSON de `GET
+  /teams`) em vez da casca do SPA. Isso era estrutural ao design de `isAPIRoute` (decidia
+  API-vs-SPA só pelo formato da URL) e afetava qualquer tela cujo path client-side reusasse
+  literalmente um path de API. **Resolvido de vez** movendo toda a API pra debaixo de `/api` —
+  ver "Separação API vs SPA" na seção "API e Rotas" acima pro detalhe completo da mudança
+  estrutural (não foi um remendo pontual como o do bullet anterior, e sim uma mudança na forma
+  como o middleware inteiro decide servir API vs SPA).
 - ✅ **User Management** (`/user-management`, `screens/UserManagementScreen.tsx`, root only) —
   sem tela equivalente no protótipo (só a referência em `MemberRow.tsx` sobre role ser global,
-  não por time). Rota client-side é `/user-management`, não `/users`: esse último É o prefixo
-  real de API (`GET`/`POST /users`) — mesmo cuidado de boundary do `/approvals` vs `/approval`,
-  mas aqui pior (path idêntico, não só prefixo colidindo), então nem tentei reaproveitar o nome.
+  não por time). Rota client-side é `/user-management`, não `/users`: esse último é o path real
+  de API hoje (`GET`/`POST /api/users`) — na época em que essa tela foi construída a API ainda
+  era bare `/users` (path idêntico à rota client-side cogitada, sem solução por boundary de
+  string), o que já apontava pra necessidade da correção estrutural que veio depois.
   Criar usuário reaproveita o padrão de reveal-once já usado pela secret key
   (`components/GeneratedPasswordModal.tsx`, mesma estrutura de `GeneratedKeyModal.tsx`): a senha
   gerada pelo servidor só existe na resposta de `POST /users` (docs/rest-flow.md §3), nunca mais
@@ -447,7 +517,6 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   codificavam o comportamento antigo (bugado) como esperado — `TestTeamApproverRepository_
   GetTeamApprovers`/`_Integration` agora afirmam explicitamente que membros não-aprovadores
   continuam na lista, só com `is_approver: false`.
-- Apagar membro de time individual (o membership em si) já existe via API mas sem tela dedicada.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`

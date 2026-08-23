@@ -21,6 +21,13 @@ export async function listApprovableApprovals(): Promise<ApprovalRequest[]> {
   return body.data ?? [];
 }
 
+// GET /approval/requests/my — requested_by = usuário atual, qualquer role. Fonte da aba
+// "Mine" na tela unificada de Approvals (get_screen_full("ApprovalsView")).
+export async function listMyApprovals(): Promise<ApprovalRequest[]> {
+  const body = await apiFetch<{ message: string; data?: ApprovalRequest[] }>("/approval/requests/my");
+  return body.data ?? [];
+}
+
 export async function executeApproval(id: string): Promise<void> {
   await apiFetch<{ message: string }>(`/approval/requests/${id}/execute`, { method: "POST" });
 }

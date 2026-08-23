@@ -47,7 +47,7 @@ describe("RejectApprovalModal", () => {
     await user.click(screen.getByRole("button", { name: /confirmar rejeição/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/approval/requests/1/reject",
+      "/api/approval/requests/1/reject",
       expect.objectContaining({ body: JSON.stringify({ reason: "Toggle still in use" }) })
     );
     await vi.waitFor(() => expect(onRejected).toHaveBeenCalledTimes(1));
@@ -63,7 +63,7 @@ describe("RejectApprovalModal", () => {
     await user.click(screen.getByRole("button", { name: /confirmar rejeição/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/approval/requests/1/reject",
+      "/api/approval/requests/1/reject",
       expect.objectContaining({ body: JSON.stringify({ reason: "" }) })
     );
   });

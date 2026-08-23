@@ -38,7 +38,7 @@ describe("AccountSecurityScreen", () => {
 
     expect(await screen.findByText("Applications content")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/profile/change-password",
+      "/api/profile/change-password",
       expect.objectContaining({ body: JSON.stringify({ current_password: "old-pass", new_password: "NovaSenha123" }) })
     );
   });

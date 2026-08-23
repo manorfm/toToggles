@@ -27,7 +27,7 @@ describe("CreateUserModal", () => {
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/users",
+      "/api/users",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ username: "bob", role: "admin" }) })
     );
     expect(onCreated).toHaveBeenCalledWith({ user: user2, password: "Xk9$mQ2pLw#T" });

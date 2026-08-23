@@ -14,7 +14,7 @@ describe("CreateApplicationModal", () => {
 
   it("loads team options and lets the user pick one before creating", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
-      if (path === "/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
       return Promise.resolve(jsonResponse(201, { id: "9", name: "Checkout Web", created_at: "", updated_at: "" }));
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -44,7 +44,7 @@ describe("CreateApplicationModal", () => {
 
   it("calls onPendingApproval (not onCreated) when the API responds 202", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
-      if (path === "/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
       return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "application_create" }));
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -64,7 +64,7 @@ describe("CreateApplicationModal", () => {
 
   it("shows the server's error message without closing on a duplicate name", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
       if (init?.method === "POST") return Promise.resolve(jsonResponse(409, { code: "T0003", message: "application already exists" }));
       return Promise.resolve(jsonResponse(200, { success: true, teams: [] }));
     });

@@ -82,8 +82,8 @@ describe("ApplicationsScreen", () => {
 
   it("adds the created application to the list without a full reload", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
-      if (path === "/applications" && init?.method === "POST") {
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
+      if (path === "/api/applications" && init?.method === "POST") {
         return Promise.resolve(jsonResponse(201, { id: "9", name: "Checkout Web", created_at: "", updated_at: "" }));
       }
       return Promise.resolve(jsonResponse(200, []));
@@ -103,8 +103,8 @@ describe("ApplicationsScreen", () => {
 
   it("shows a pending-approval notice instead of adding a phantom application", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
-      if (path === "/applications" && init?.method === "POST") {
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
+      if (path === "/api/applications" && init?.method === "POST") {
         return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "application_create" }));
       }
       return Promise.resolve(jsonResponse(200, []));

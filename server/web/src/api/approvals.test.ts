@@ -4,6 +4,7 @@ import {
   executeApproval,
   listAllApprovals,
   listApprovableApprovals,
+  listMyApprovals,
   listPendingApprovals,
   rejectApproval,
 } from "./approvals";
@@ -37,7 +38,7 @@ describe("listPendingApprovals", () => {
 
     const result = await listPendingApprovals();
 
-    expect(fetchMock).toHaveBeenCalledWith("/approval/requests/pending", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/pending", expect.anything());
     expect(result).toEqual([request]);
   });
 
@@ -59,7 +60,7 @@ describe("listAllApprovals", () => {
 
     const result = await listAllApprovals();
 
-    expect(fetchMock).toHaveBeenCalledWith("/approval/requests", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests", expect.anything());
     expect(result).toEqual([request]);
   });
 
@@ -81,8 +82,30 @@ describe("listApprovableApprovals", () => {
 
     const result = await listApprovableApprovals();
 
-    expect(fetchMock).toHaveBeenCalledWith("/approval/requests/approvable", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/approvable", expect.anything());
     expect(result).toEqual([request]);
+  });
+});
+
+describe("listMyApprovals", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /approval/requests/my (requested_by = current user, any role)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: [request] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listMyApprovals();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/my", expect.anything());
+    expect(result).toEqual([request]);
+  });
+
+  it("returns an empty array when 'data' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" })));
+
+    await expect(listMyApprovals()).resolves.toEqual([]);
   });
 });
 
@@ -101,7 +124,7 @@ describe("approveAndExecuteApproval", () => {
 
     await approveAndExecuteApproval("1");
 
-    expect(calls).toEqual(["/approval/requests/1/approve", "/approval/requests/1/execute"]);
+    expect(calls).toEqual(["/api/approval/requests/1/approve", "/api/approval/requests/1/execute"]);
   });
 
   it("propagates ApiError from approve without calling execute", async () => {
@@ -127,7 +150,7 @@ describe("executeApproval", () => {
 
     await executeApproval("1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/approval/requests/1/execute", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/1/execute", expect.objectContaining({ method: "POST" }));
   });
 });
 
@@ -143,7 +166,7 @@ describe("rejectApproval", () => {
     await rejectApproval("1", "Toggle still in use");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/approval/requests/1/reject",
+      "/api/approval/requests/1/reject",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ reason: "Toggle still in use" }) })
     );
   });

@@ -8,6 +8,10 @@ interface ApprovalRowProps {
   busy?: boolean;
   /** Usado em HistoryScreen: sempre mostra o chip de status, nunca os botões de ação. */
   readOnly?: boolean;
+  /** É uma solicitação do próprio usuário logado (aba "Mine") — mostra um aviso extra
+   * quando pendente, já que autoaprovação é proibida (docs/rest-flow.md §9.2:
+   * "CanBeApprovedBy forbids self-approval"), então nunca há botões de ação pra ela. */
+  isOwn?: boolean;
 }
 
 const ACTION_LABELS: Record<ApprovalActionType, string> = {
@@ -26,7 +30,7 @@ const ACTION_LABELS: Record<ApprovalActionType, string> = {
 // Adaptado de get_full_jsx("ApprovalRow"). "canAct" do protótipo já é garantido por
 // qual endpoint trouxe a lista (pending pra root, approvable pra quem mais) — ver
 // ApprovalsScreen — então aqui basta checar status === "pending".
-export function ApprovalRow({ request, onApprove, onReject, busy = false, readOnly = false }: ApprovalRowProps) {
+export function ApprovalRow({ request, onApprove, onReject, busy = false, readOnly = false, isOwn = false }: ApprovalRowProps) {
   const when = new Date(request.created_at).toLocaleDateString();
 
   return (
@@ -47,6 +51,11 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
             <span>
               <b>Motivo:</b> {request.rejection_reason}
             </span>
+          </div>
+        )}
+        {request.status === "pending" && isOwn && (
+          <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}>
+            <Icon name="clock" size={12} /> Aguardando revisão de um aprovador
           </div>
         )}
       </div>

@@ -23,7 +23,7 @@ describe("TeamMembersSection", () => {
   it("lists members and adds a new one via the modal", async () => {
     let added = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/users") return Promise.resolve(jsonResponse(200, { success: true, users: [{ id: "2", username: "bob", role: "user", must_change_password: false, created_at: "", updated_at: "" }] }));
+      if (path === "/api/users") return Promise.resolve(jsonResponse(200, { success: true, users: [{ id: "2", username: "bob", role: "user", must_change_password: false, created_at: "", updated_at: "" }] }));
       if (init?.method === "POST") {
         added = true;
         return Promise.resolve(jsonResponse(200, { success: true, message: "ok" }));
@@ -76,7 +76,7 @@ describe("TeamMembersSection", () => {
   it("toggles a member's approver status", async () => {
     let isApprover = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams/team1/approvers/1" && init?.method === "POST") {
+      if (path === "/api/teams/team1/approvers/1" && init?.method === "POST") {
         isApprover = true;
         return Promise.resolve(jsonResponse(200, { data: [{ team_id: "team1", user_id: "1", is_approver: true, username: "alice", role: "admin" }] }));
       }
@@ -93,7 +93,7 @@ describe("TeamMembersSection", () => {
     await user.click(screen.getByRole("switch"));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/teams/team1/approvers/1",
+      "/api/teams/team1/approvers/1",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ is_approver: true }) })
     );
     await vi.waitFor(() => expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true"));
@@ -101,7 +101,7 @@ describe("TeamMembersSection", () => {
 
   it("shows the server's error message when the approval workflow isn't enabled", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams/team1/approvers/1" && init?.method === "POST") {
+      if (path === "/api/teams/team1/approvers/1" && init?.method === "POST") {
         return Promise.resolve(jsonResponse(403, { code: "T0001", message: "approval system must be enabled" }));
       }
       return Promise.resolve(

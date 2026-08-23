@@ -1,24 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { useCurrentUser } from "../hooks/useCurrentUser";
+import { listApprovableApprovals, listPendingApprovals } from "../api/approvals";
 import { logout } from "../api/profile";
 import { Icon } from "./Icon";
 import { UserMenu } from "./UserMenu";
 
 // Destinos confirmados em get_component_spec("App").textos: "Applications",
-// "Teams & people", "Approvals", "History". Cada um aponta pra uma tela real.
-// "Teams & people" some para quem não é root: toda a API /teams exige
-// RequireRoot(), mostrar o item pra outros só levaria a 403.
-// "Approval settings" (GET/PUT /approval/settings, RequireRoot()) não tem destino no
-// protótipo — adaptado de get_full_jsx("ApprovalSettingsView"), o texto do item de nav é meu.
+// "Teams & people", "Approvals" (com badge de {pendingApprovals}), "History". "Teams & people"
+// some para quem não é root: a API por trás (/teams) exige RequireRoot(), mostrar o item pra
+// outros só levaria a 403.
+//
+// "Approval Management" NÃO é um segundo item de nav — get_screen_full("ApprovalsView") revela
+// que "Configurar" só troca de aba (pending/mine/settings) dentro da MESMA tela de Approvals,
+// nunca navega pra outro lugar. A aba "Settings" já é escondida internamente pra quem não é
+// root (screens/ApprovalsScreen.tsx), então um único item "Approvals" cobre os dois destinos.
+//
+// "Users" (User Management) FOI um item de nav aqui numa fase anterior, mas nenhum texto
+// confirmado de App menciona isso — removido da sidebar (a tela continua existindo, só não
+// é mais destino de navegação principal — ver App.tsx, rota /user-management).
 const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean }[] = [
   { to: "/", label: "Applications", end: true },
   { to: "/teams", label: "Teams & people", rootOnly: true },
   { to: "/approvals", label: "Approvals" },
-  { to: "/approvals/settings", label: "Approval settings", rootOnly: true },
-  // "/user-management", não "/users": esse último é o prefixo real de API (GET/POST
-  // /users) — ver o mesmo cuidado em App.tsx e no CLAUDE.md sobre isAPIRoute.
-  { to: "/user-management", label: "Users", rootOnly: true },
   { to: "/history", label: "History" },
 ];
 
@@ -28,6 +32,26 @@ export function AppShell() {
   const currentUser = useCurrentUser();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const authenticatedUserId = currentUser.status === "authenticated" ? currentUser.user.id : null;
+  const authenticatedUserIsRoot = currentUser.status === "authenticated" && currentUser.user.role === "root";
+
+  useEffect(() => {
+    if (!authenticatedUserId) return;
+    let cancelled = false;
+    const fetcher = authenticatedUserIsRoot ? listPendingApprovals : listApprovableApprovals;
+    fetcher()
+      .then((requests) => {
+        if (!cancelled) setPendingCount(requests.length);
+      })
+      .catch(() => {
+        // Contagem do badge é informativa, não crítica — falhar aqui não deve travar o shell.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticatedUserId, authenticatedUserIsRoot]);
 
   if (currentUser.status === "loading") {
     return <div className="empty">Carregando…</div>;
@@ -60,6 +84,11 @@ export function AppShell() {
           {NAV_ITEMS.filter((item) => !item.rootOnly || user.role === "root").map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => "nav-item" + (isActive ? " active" : "")}>
               {item.label}
+              {item.to === "/approvals" && pendingCount > 0 && (
+                <span className="badge on" style={{ marginLeft: "auto" }}>
+                  {pendingCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

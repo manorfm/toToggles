@@ -83,7 +83,7 @@ describe("TeamsScreen", () => {
 
   it("adds the newly created team to the list without a full reload", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams" && init?.method === "POST") {
+      if (path === "/api/teams" && init?.method === "POST") {
         return Promise.resolve(
           jsonResponse(201, { success: true, team: { id: "9", name: "Data Platform", description: "", created_at: "", updated_at: "" } })
         );
@@ -106,7 +106,7 @@ describe("TeamsScreen", () => {
   it("deletes a team via the confirm modal and removes it from the list", async () => {
     let deleted = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/teams/1" && init?.method === "DELETE") {
+      if (path === "/api/teams/1" && init?.method === "DELETE") {
         deleted = true;
         return Promise.resolve(jsonResponse(200, { success: true, message: "Team deleted successfully" }));
       }

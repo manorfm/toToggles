@@ -65,7 +65,7 @@ describe("createTeam", () => {
     const result = await createTeam({ name: "Data Platform" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/teams",
+      "/api/teams",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Data Platform", description: "" }) })
     );
     expect(result).toEqual(team);
@@ -89,7 +89,7 @@ describe("deleteTeam", () => {
 
     await deleteTeam("team1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/teams/team1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/teams/team1", expect.objectContaining({ method: "DELETE" }));
   });
 
   it("propagates ApiError when the caller isn't root", async () => {
@@ -129,7 +129,7 @@ describe("listTeamOptions", () => {
 
     const options = await listTeamOptions(true);
 
-    expect(fetchMock).toHaveBeenCalledWith("/teams", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/teams", expect.anything());
     expect(options).toEqual([{ id: "1", name: "A" }]);
   });
 
@@ -139,7 +139,7 @@ describe("listTeamOptions", () => {
 
     const options = await listTeamOptions(false);
 
-    expect(fetchMock).toHaveBeenCalledWith("/profile/teams", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/profile/teams", expect.anything());
     expect(options).toEqual([{ id: "2", name: "B" }]);
   });
 });
@@ -156,7 +156,7 @@ describe("addTeamMember", () => {
     await addTeamMember("team1", "user1");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/teams/team1/users",
+      "/api/teams/team1/users",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ user_id: "user1" }) })
     );
   });
@@ -179,7 +179,7 @@ describe("removeTeamMember", () => {
 
     await removeTeamMember("team1", "user1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/users/user1", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/teams/team1/users/user1", expect.objectContaining({ method: "DELETE" }));
   });
 });
 
@@ -198,7 +198,7 @@ describe("listTeamApprovers", () => {
 
     const result = await listTeamApprovers("team1");
 
-    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/approvers", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/teams/team1/approvers", expect.anything());
     expect(result).toEqual(approvers);
   });
 
@@ -222,7 +222,7 @@ describe("setTeamApprover", () => {
     const result = await setTeamApprover("team1", "1", true);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/teams/team1/approvers/1",
+      "/api/teams/team1/approvers/1",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ is_approver: true }) })
     );
     expect(result).toEqual(approvers);

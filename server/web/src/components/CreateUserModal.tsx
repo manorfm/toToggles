@@ -10,9 +10,9 @@ interface CreateUserModalProps {
   onCreated: (result: CreateUserResult) => void;
 }
 
-// Sem tela equivalente no protótipo (User Management não existe lá — ver
-// screens/ApprovalSettingsScreen.tsx e MemberRow.tsx sobre role ser global). Estilo/campos
-// seguem o mesmo padrão de CreateTeamModal/CreateApplicationModal. "root" não é uma opção
+// Sem tela equivalente no protótipo (User Management não existe lá — ver MemberRow.tsx
+// sobre role ser global, não por time). Estilo/campos seguem o mesmo padrão de
+// CreateTeamModal/CreateApplicationModal. "root" não é uma opção
 // aqui: POST /users rejeita com 400 (docs/rest-flow.md §3) — só existe via troca de role.
 export function CreateUserModal({ onClose, onCreated }: CreateUserModalProps) {
   const [username, setUsername] = useState("");

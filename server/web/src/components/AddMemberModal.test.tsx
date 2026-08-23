@@ -50,7 +50,7 @@ describe("AddMemberModal", () => {
 
     await user.click(screen.getByRole("button", { name: /add member/i }));
 
-    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/users", expect.objectContaining({ method: "POST", body: JSON.stringify({ user_id: "2" }) }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/teams/team1/users", expect.objectContaining({ method: "POST", body: JSON.stringify({ user_id: "2" }) }));
     await vi.waitFor(() => expect(onAdded).toHaveBeenCalledWith(users[1]));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

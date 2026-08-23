@@ -47,7 +47,7 @@ describe("ForcedPasswordChangeScreen", () => {
 
     expect(await screen.findByText("Login screen")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/auth/change-password-first-time",
+      "/api/auth/change-password-first-time",
       expect.objectContaining({
         body: JSON.stringify({ user_id: "01ABC", username: "root", current_password: "temp-pass", new_password: "NovaSenha123" }),
       })

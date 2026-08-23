@@ -27,7 +27,7 @@ describe("listApplications", () => {
 
     const result = await listApplications();
 
-    expect(fetchMock).toHaveBeenCalledWith("/applications", expect.objectContaining({ credentials: "include" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications", expect.objectContaining({ credentials: "include" }));
     expect(result).toEqual(apps);
   });
 
@@ -56,7 +56,7 @@ describe("createApplication", () => {
     const result = await createApplication({ name: "Checkout Web", teamId: "01TEAM01" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications",
+      "/api/applications",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Checkout Web", team_id: "01TEAM01" }) })
     );
     expect(result).toEqual({ kind: "created", application: app });
@@ -98,7 +98,7 @@ describe("deleteApplication", () => {
     const result = await deleteApplication("01APP0000000000000000001");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/applications/01APP0000000000000000001",
+      "/api/applications/01APP0000000000000000001",
       expect.objectContaining({ method: "DELETE" })
     );
     expect(result).toEqual({ kind: "deleted" });

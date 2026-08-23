@@ -84,4 +84,23 @@ describe("ApprovalRow", () => {
 
     expect(screen.getByText(/expired/i)).toBeInTheDocument();
   });
+
+  it("shows an 'awaiting review' hint for your own pending request, on top of the status chip", () => {
+    render(<ApprovalRow request={pending} onApprove={vi.fn()} onReject={vi.fn()} readOnly isOwn />);
+
+    expect(screen.getByText(/aguardando revisão de um aprovador/i)).toBeInTheDocument();
+    expect(screen.getByText(/^pending$/i)).toBeInTheDocument();
+  });
+
+  it("does not show the 'awaiting review' hint for someone else's request", () => {
+    render(<ApprovalRow request={pending} onApprove={vi.fn()} onReject={vi.fn()} readOnly />);
+
+    expect(screen.queryByText(/aguardando revisão de um aprovador/i)).not.toBeInTheDocument();
+  });
+
+  it("does not show the 'awaiting review' hint once your own request is resolved", () => {
+    render(<ApprovalRow request={{ ...pending, status: "approved" }} onApprove={vi.fn()} onReject={vi.fn()} readOnly isOwn />);
+
+    expect(screen.queryByText(/aguardando revisão de um aprovador/i)).not.toBeInTheDocument();
+  });
 });

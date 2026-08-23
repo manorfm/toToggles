@@ -63,7 +63,7 @@ describe("UserManagementScreen", () => {
   it("creates a user, shows the one-time password modal, and adds them to the list", async () => {
     let created = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/users" && init?.method === "POST") {
+      if (path === "/api/users" && init?.method === "POST") {
         created = true;
         return Promise.resolve(
           jsonResponse(201, {
@@ -97,7 +97,7 @@ describe("UserManagementScreen", () => {
   it("changes a user's role", async () => {
     let bobRole: "user" | "admin" = "user";
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/users/2" && init?.method === "PUT") {
+      if (path === "/api/users/2" && init?.method === "PUT") {
         bobRole = "admin";
         return Promise.resolve(
           jsonResponse(200, {
@@ -125,14 +125,14 @@ describe("UserManagementScreen", () => {
 
     await user.selectOptions(screen.getByLabelText(/role for bob/i), "admin");
 
-    expect(fetchMock).toHaveBeenCalledWith("/users/2", expect.objectContaining({ method: "PUT", body: JSON.stringify({ role: "admin" }) }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/users/2", expect.objectContaining({ method: "PUT", body: JSON.stringify({ role: "admin" }) }));
     await vi.waitFor(() => expect(screen.getByLabelText(/role for bob/i)).toHaveValue("admin"));
   });
 
   it("deletes a user via the confirm modal and removes them from the list", async () => {
     let deleted = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/users/2" && init?.method === "DELETE") {
+      if (path === "/api/users/2" && init?.method === "DELETE") {
         deleted = true;
         return Promise.resolve(jsonResponse(200, { success: true, message: "User deleted successfully" }));
       }

@@ -18,8 +18,9 @@ func ServeStatic(c *gin.Context) {
 		c.Next()
 		return
 	}
-	// NÃO intercepta rotas de autenticação e páginas especiais
-	if strings.HasPrefix(c.Request.URL.Path, "/auth/") || c.Request.URL.Path == "/login" || c.Request.URL.Path == "/change-password" {
+	// NÃO intercepta páginas especiais do SPA que precisam do handler dedicado delas
+	// rodar (ex.: /change-password valida um token específico antes de servir a casca).
+	if c.Request.URL.Path == "/login" || c.Request.URL.Path == "/change-password" {
 		c.Next()
 		return
 	}
@@ -32,81 +33,12 @@ func ServeStatic(c *gin.Context) {
 	c.Next()
 }
 
-// isAPIRoute verifica se a rota é uma rota de API
+// isAPIRoute verifica se a rota é uma rota de API. Toda a API (sessão ou secret key)
+// vive sob /api (routes.go) — isso substitui uma lista antiga de heurísticas por path
+// que colidia repetidamente com rotas SPA de nome parecido (ex.: GET /teams sendo tanto
+// a tela quanto a rota de API, /applications/:id idem — nenhuma heurística de string
+// resolve isso quando os dois paths são literalmente o mesmo; só um namespace dedicado
+// resolve de vez).
 func isAPIRoute(path string) bool {
-	// Rotas básicas de API
-	if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/health") {
-		return true
-	}
-	
-	// Rotas específicas de secret keys
-	if strings.HasPrefix(path, "/secret-keys") {
-		return true
-	}
-	
-	// Rotas de gerenciamento de usuários
-	if strings.HasPrefix(path, "/users") {
-		return true
-	}
-	
-	// Rotas de perfil do usuário
-	if strings.HasPrefix(path, "/profile") {
-		return true
-	}
-	
-	// Rotas de gerenciamento de times
-	if strings.HasPrefix(path, "/teams") {
-		return true
-	}
-	
-	// Rotas do sistema de aprovação. Boundary explícito: "/approvals" (rota SPA,
-	// screens/ApprovalsScreen.tsx) também começa com "/approval" por acidente de string, então
-	// um simples HasPrefix a classificava como API por engano — confirmado ao vivo, um hard
-	// refresh em /approvals devolvia 404 puro em vez da casca do SPA.
-	if path == "/approval" || strings.HasPrefix(path, "/approval/") {
-		return true
-	}
-	
-	// Rota base de applications
-	if path == "/applications" {
-		return true
-	}
-	
-	// Verifica rotas de /applications/
-	if strings.HasPrefix(path, "/applications/") {
-		// Secret key routes - sempre API
-		if strings.Contains(path, "/generate-secret") || strings.Contains(path, "/secret-keys") {
-			return true
-		}
-		
-		// Remove o prefixo /applications/
-		remaining := strings.TrimPrefix(path, "/applications/")
-		parts := strings.Split(remaining, "/")
-		
-		if len(parts) >= 1 && parts[0] != "" {
-			// Lista de palavras reservadas que indicam SPA routes, não API
-			spaKeywords := []string{"view", "edit", "dashboard", "settings", "create", "list"}
-			
-			// Se a primeira parte é uma palavra reservada, é SPA route
-			for _, keyword := range spaKeywords {
-				if parts[0] == keyword {
-					return false
-				}
-			}
-			
-			// Se tem apenas o ID: /applications/{id} (assumindo que IDs não são palavras reservadas)
-			if len(parts) == 1 {
-				return true
-			}
-			// Se tem ID e "toggles"/"toggle": /applications/{id}/toggles(/:toggleId)
-			// ou /applications/{id}/toggle/:toggleId (singular — PUT recursivo, docs/rest-flow.md §7)
-			if len(parts) >= 2 && (parts[1] == "toggles" || parts[1] == "toggle") {
-				return true
-			}
-		}
-		// Caso contrário, assumir que é SPA route
-		return false
-	}
-	
-	return false
+	return strings.HasPrefix(path, "/api/")
 }

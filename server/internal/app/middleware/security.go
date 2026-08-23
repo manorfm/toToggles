@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/oklog/ulid/v2"
 )
@@ -26,10 +28,11 @@ func SecurityHeaders() gin.HandlerFunc {
 		// Permissions Policy - controla recursos do navegador
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
 
-		// Cache Control para APIs
-		if c.Request.URL.Path == "/applications" ||
-			c.Request.URL.Path == "/applications/" ||
-			c.Request.URL.Path == "/applications/:id/toggles" {
+		// Cache Control para toda a API (sob /api — ver routes.go/static_handler.go):
+		// antes checava só 3 paths exatos ("/applications", "/applications/",
+		// "/applications/:id/toggles"), deixando /teams, /users, /approval etc. sem essa
+		// proteção contra cache de dados autenticados. Agora cobre a API inteira.
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 			c.Header("Pragma", "no-cache")
 			c.Header("Expires", "0")

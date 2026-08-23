@@ -17,7 +17,7 @@ describe("listUsers", () => {
 
     const result = await listUsers();
 
-    expect(fetchMock).toHaveBeenCalledWith("/users", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/users", expect.anything());
     expect(result).toEqual(users);
   });
 
@@ -47,7 +47,7 @@ describe("createUser", () => {
     const result = await createUser({ username: "bob", role: "admin" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/users",
+      "/api/users",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ username: "bob", role: "admin" }) })
     );
     expect(result).toEqual({ user, password: "Xk9$mQ2pLw#T" });
@@ -71,7 +71,7 @@ describe("deleteUser", () => {
 
     await deleteUser("2");
 
-    expect(fetchMock).toHaveBeenCalledWith("/users/2", expect.objectContaining({ method: "DELETE" }));
+    expect(fetchMock).toHaveBeenCalledWith("/api/users/2", expect.objectContaining({ method: "DELETE" }));
   });
 
   it("propagates ApiError when trying to delete a root user", async () => {
@@ -94,7 +94,7 @@ describe("updateUserRole", () => {
     const result = await updateUserRole("2", "user");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/users/2",
+      "/api/users/2",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ role: "user" }) })
     );
     expect(result).toEqual(user);

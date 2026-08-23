@@ -25,18 +25,28 @@ func TestSecurityHeaders(t *testing.T) {
 		},
 		{
 			name:     "should set security headers and cache control on applications route",
-			path:     "/applications",
+			path:     "/api/applications",
 			wantCacheControl: true,
 		},
 		{
 			name:     "should set security headers and cache control on applications/ route",
-			path:     "/applications/",
+			path:     "/api/applications/",
 			wantCacheControl: true,
 		},
 		{
 			name:     "should set security headers and cache control on toggles route",
-			path:     "/applications/:id/toggles",
+			path:     "/api/applications/:id/toggles",
 			wantCacheControl: true,
+		},
+		{
+			name:     "should set cache control on any other API route too (not just applications)",
+			path:     "/api/teams",
+			wantCacheControl: true,
+		},
+		{
+			name:     "should not set cache control on a non-API (SPA) route",
+			path:     "/applications",
+			wantCacheControl: false,
 		},
 	}
 

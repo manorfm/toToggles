@@ -28,8 +28,8 @@ function renderScreen(user: AuthenticatedUser = { id: "1", username: "root", rol
 
 function fetchMockFor(hierarchy: unknown) {
   return vi.fn().mockImplementation((path: string) => {
-    if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
-    if (path.startsWith("/applications/app1/toggles")) return Promise.resolve(jsonResponse(200, { application: "app1", toggles: hierarchy }));
+    if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+    if (path.startsWith("/api/applications/app1/toggles")) return Promise.resolve(jsonResponse(200, { application: "app1", toggles: hierarchy }));
     return Promise.resolve(jsonResponse(200, {}));
   });
 }
@@ -60,12 +60,12 @@ describe("ApplicationDetailScreen", () => {
   it("flips a toggle and refreshes the tree on success", async () => {
     let flipped = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
       if (init?.method === "PUT") {
         flipped = true;
         return Promise.resolve(jsonResponse(200, { id: "1", enabled: false }));
       }
-      if (path.startsWith("/applications/app1/toggles")) {
+      if (path.startsWith("/api/applications/app1/toggles")) {
         return Promise.resolve(
           jsonResponse(200, { application: "app1", toggles: [{ id: "1", value: "user", enabled: !flipped }] })
         );
@@ -87,12 +87,12 @@ describe("ApplicationDetailScreen", () => {
   it("creates a toggle via the modal and shows it in the tree", async () => {
     let created = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
       if (init?.method === "POST") {
         created = true;
         return Promise.resolve(jsonResponse(201, { message: "toggle created successfully", path: "billing", enabled: true }));
       }
-      if (path.startsWith("/applications/app1/toggles")) {
+      if (path.startsWith("/api/applications/app1/toggles")) {
         return Promise.resolve(
           jsonResponse(200, { application: "app1", toggles: created ? [{ id: "9", value: "billing", enabled: true }] : [] })
         );
@@ -115,8 +115,8 @@ describe("ApplicationDetailScreen", () => {
   it("configures an activation rule via the drawer and refreshes the tree", async () => {
     let ruleSet = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
-      if (path === "/applications/app1/toggles/1" && init?.method === "PUT") {
+      if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/api/applications/app1/toggles/1" && init?.method === "PUT") {
         ruleSet = true;
         return Promise.resolve(
           jsonResponse(200, {
@@ -132,7 +132,7 @@ describe("ApplicationDetailScreen", () => {
           })
         );
       }
-      if (path === "/applications/app1/toggles/1") {
+      if (path === "/api/applications/app1/toggles/1") {
         return Promise.resolve(
           jsonResponse(200, {
             id: "1",
@@ -147,7 +147,7 @@ describe("ApplicationDetailScreen", () => {
           })
         );
       }
-      if (path.startsWith("/applications/app1/toggles")) {
+      if (path.startsWith("/api/applications/app1/toggles")) {
         return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [{ id: "1", value: "user", enabled: true }] }));
       }
       return Promise.resolve(jsonResponse(200, {}));
@@ -172,12 +172,12 @@ describe("ApplicationDetailScreen", () => {
   it("deletes a leaf toggle via the confirm modal and refreshes the tree", async () => {
     let deleted = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
-      if (path === "/applications/app1/toggles/3" && init?.method === "DELETE") {
+      if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/api/applications/app1/toggles/3" && init?.method === "DELETE") {
         deleted = true;
         return Promise.resolve(jsonResponse(200, { message: "toggle deleted successfully" }));
       }
-      if (path.startsWith("/applications/app1/toggles")) {
+      if (path.startsWith("/api/applications/app1/toggles")) {
         return Promise.resolve(
           jsonResponse(200, { application: "app1", toggles: deleted ? [] : [{ id: "3", value: "billing", enabled: true }] })
         );
@@ -200,11 +200,11 @@ describe("ApplicationDetailScreen", () => {
 
   it("shows a pending-approval notice instead of removing the toggle when delete is intercepted", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
-      if (path === "/applications/app1/toggles/3" && init?.method === "DELETE") {
+      if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/api/applications/app1/toggles/3" && init?.method === "DELETE") {
         return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "toggle_delete" }));
       }
-      if (path.startsWith("/applications/app1/toggles")) {
+      if (path.startsWith("/api/applications/app1/toggles")) {
         return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [{ id: "3", value: "billing", enabled: true }] }));
       }
       return Promise.resolve(jsonResponse(200, {}));
@@ -226,12 +226,12 @@ describe("ApplicationDetailScreen", () => {
   it("shows a 'Delete application' action for root, deletes it and navigates back to the applications list", async () => {
     let deleted = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/applications/app1" && init?.method === "DELETE") {
+      if (path === "/api/applications/app1" && init?.method === "DELETE") {
         deleted = true;
         return Promise.resolve(jsonResponse(200, { message: "application deleted successfully" }));
       }
-      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
-      if (path.startsWith("/applications/app1/toggles")) return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [] }));
+      if (path === "/api/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path.startsWith("/api/applications/app1/toggles")) return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [] }));
       return Promise.resolve(jsonResponse(200, {}));
     });
     vi.stubGlobal("fetch", fetchMock);
