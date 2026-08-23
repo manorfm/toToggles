@@ -23,6 +23,12 @@ go.work.sum
 # go.mod
 # go.sum
 
+# Node.js (server/web and any other JS/TS sub-project) — catches a stray node_modules/
+# anywhere in the tree even without cd'ing into the right sub-project first.
+node_modules/
+npm-debug.log*
+.npm/
+
 # IDE/editor files
 .vscode/
 .idea/

@@ -1,0 +1,16 @@
+# Build context is server/ (docker-compose.yml: build: .) — this file needs to live
+# here to take effect; a .dockerignore at the repo root does nothing for this build.
+
+.git
+db/toggles.db
+*.db
+*.log
+
+# Frontend: never ship node_modules or a stale local build into the build context —
+# the Dockerfile's frontend-builder stage does npm ci + npm run build from source.
+web/node_modules/
+web/dist/
+static/app/
+
+.claude/
+*.md

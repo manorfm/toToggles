@@ -100,12 +100,18 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    go mod tidy
    ```
 
-3. **Run the application**
+3. **Build the frontend** (required once — `server/static/app/` is build output, not
+   committed to git; skip this only if you already have a build on disk)
+   ```bash
+   make web-install web-build
+   ```
+
+4. **Run the application**
    ```bash
    make dev
    ```
 
-4. **Access the application**
+5. **Access the application**
    - Web UI: http://localhost:8081 (requires login)
    - Login Page: http://localhost:8081/login
    - API: http://localhost:8081/applications (requires authentication)
@@ -118,12 +124,17 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    go mod download
    ```
 
-2. **Run database migrations**
+2. **Build the frontend** (required once, see note above)
+   ```bash
+   make web-install web-build
+   ```
+
+3. **Run database migrations**
    ```bash
    make migrate-up
    ```
 
-3. **Start the server**
+4. **Start the server**
    ```bash
    make run
    ```

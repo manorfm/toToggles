@@ -179,7 +179,7 @@ object TestDataSetup {
             
             // Get user teams first to get a team_id
             val teamsRequest = Request.Builder()
-                .url("$baseUrl/profile/teams")
+                .url("$baseUrl/api/profile/teams")
                 .build()
                 
             val teamId = client.newCall(teamsRequest).execute().use { teamsResponse ->
@@ -206,7 +206,7 @@ object TestDataSetup {
                 "team_id" to teamId
             )
             val createAppRequest = Request.Builder()
-                .url("$baseUrl/applications")
+                .url("$baseUrl/api/applications")
                 .post(objectMapper.writeValueAsString(createAppBody).toRequestBody(mediaType))
                 .build()
                 
@@ -224,7 +224,7 @@ object TestDataSetup {
                 
                 // Generate secret key for the application
                 val generateSecretRequest = Request.Builder()
-                    .url("$baseUrl/applications/$appId/generate-secret")
+                    .url("$baseUrl/api/applications/$appId/generate-secret")
                     .post("{}".toRequestBody(mediaType))
                     .build()
                     
@@ -261,7 +261,7 @@ object TestDataSetup {
             )
             
             val request = Request.Builder()
-                .url("$baseUrl/auth/login")
+                .url("$baseUrl/api/auth/login")
                 .post(objectMapper.writeValueAsString(credentials).toRequestBody(mediaType))
                 .build()
                 
@@ -295,7 +295,7 @@ object TestDataSetup {
             try {
                 val toggleBody = mapOf("toggle" to togglePath)
                 val request = Request.Builder()
-                    .url("$baseUrl/applications/$appId/toggles")
+                    .url("$baseUrl/api/applications/$appId/toggles")
                     .post(objectMapper.writeValueAsString(toggleBody).toRequestBody(mediaType))
                     .build()
                     

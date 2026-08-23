@@ -29,6 +29,26 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
 RUN ls -la totoogle && file totoogle
 
 # =============================================================================
+# Frontend Build Stage - Compilação do frontend (server/web) para static/app
+# =============================================================================
+# server/static/app/* NÃO fica commitado no git (é build output regenerável, ver
+# .gitignore) — antes disso o Dockerfile dependia de alguém ter rodado `npm run build`
+# manualmente e commitado o resultado. Agora o build acontece aqui, sempre a partir do
+# código-fonte real (server/web/src), nunca de um bundle stale ou ausente.
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /web
+
+# Copiar arquivos de dependências primeiro (para aproveitar cache do Docker)
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+# Copiar o restante do código do frontend e buildar (vite.config.ts manda o output
+# pra ../static/app, ou seja /static/app relativo a este WORKDIR)
+COPY web/ ./
+RUN npm run build
+
+# =============================================================================
 # Assets Stage - Preparação dos assets estáticos
 # =============================================================================
 FROM alpine:latest AS assets
@@ -38,6 +58,9 @@ WORKDIR /assets
 # Copiar apenas os assets necessários
 COPY static/ ./static/
 COPY db/migrations/ ./db/migrations/
+
+# Sobrescreve com o bundle buildado nesta imagem (nunca do working tree local)
+COPY --from=frontend-builder /static/app ./static/app
 
 # Remover arquivos desnecessários se existirem
 RUN find ./static -name "*.map" -delete 2>/dev/null || true && \

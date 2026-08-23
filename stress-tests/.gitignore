@@ -26,3 +26,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# curl cookie jars — cookies.txt was committed by mistake and held a real (if stale)
+# auth_token session value; removed from tracking, never again.
+cookies.txt
+*.cookies

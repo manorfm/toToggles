@@ -1,1 +1,10 @@
-node_modelues
+# Fixed a typo here that made this file a no-op ("node_modelues") — never actually
+# ignored anything.
+node_modules/
+
+# Frontend build output (server/web/src -> here via `npm run build`, vite.config.ts's
+# outDir). Regenerable, was previously committed by mistake — the Dockerfile now builds
+# it fresh from source (see server/Dockerfile's frontend-builder stage), so committing
+# it is no longer needed for deploys, and a fresh clone must run `make web-build` (or
+# `cd web && npm run build`) once before `make dev`/`make run` for local dev.
+static/app/

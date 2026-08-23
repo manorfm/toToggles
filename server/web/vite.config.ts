@@ -19,14 +19,11 @@ export default defineConfig({
     css: false,
   },
   server: {
+    // Toda a API (sessão e secret key) vive sob /api desde a reestruturação de rotas
+    // (server/CLAUDE.md, "Separação API vs SPA") — um único proxy substitui a lista antiga
+    // de paths bare (/auth, /applications, /teams...), que ficou obsoleta e quebrada com
+    // essa mudança (o dev server via `make web-dev` proxeava pro shape errado).
     proxy: {
-      "/auth": "http://localhost:3056",
-      "/applications": "http://localhost:3056",
-      "/teams": "http://localhost:3056",
-      "/users": "http://localhost:3056",
-      "/profile": "http://localhost:3056",
-      "/secret-keys": "http://localhost:3056",
-      "/approval": "http://localhost:3056",
       "/api": "http://localhost:3056",
       "/health": "http://localhost:3056",
       "/ready": "http://localhost:3056",
