@@ -645,3 +645,66 @@ input[type="checkbox"] {
 .empty-ph {
   color: var(--ink-4);
 }
+
+/* --- Secret key display (GeneratedKeyModal) --- */
+.skey-warn {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in oklab, var(--warn) 28%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: color-mix(in oklab, var(--warn) 82%, var(--ink));
+}
+.skey-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 2px dashed var(--border-hi);
+  border-radius: var(--radius-sm);
+}
+.skey-val {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  word-break: break-all;
+  flex: 1;
+  user-select: all;
+  line-height: 1.65;
+  padding-top: 2px;
+}
+.skey-copied {
+  color: var(--accent) !important;
+  border-color: var(--accent-line) !important;
+  background: var(--accent-soft) !important;
+}
+.skey-ack {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  transition: border-color 0.16s, background 0.16s, color 0.16s;
+}
+.skey-ack:has(input:checked) {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.skey-ack input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}

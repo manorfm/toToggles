@@ -20,7 +20,7 @@ export function Modal({ icon, title, sub, onClose, closeable = true, footer, chi
       className="modal-scrim"
       data-testid="modal-scrim"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (closeable && e.target === e.currentTarget) onClose();
       }}
     >
       <div className="modal">

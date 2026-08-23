@@ -318,7 +318,9 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   de toggles via `GET .../toggles?hierarchy=true` (`ToggleTree`, recursivo), criação via
   `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o endpoint
   **recursivo** `PUT .../toggle/:id` (singular — desliga o nó inteiro e a subárvore de uma vez).
-  Regra de ativação, exclusão de toggle e chave secreta ficaram de fora — próxima fatia.
+  Inclui `SecretKeySection` (gerar/regerar/apagar a service key; `GeneratedKeyModal` mostra a chave
+  em texto plano **uma única vez** — só fecha depois de marcar "copiei e guardei"). Regra de
+  ativação e exclusão de toggle individual ficaram de fora — próxima fatia.
 - ⏳ **Approvals** (`/approvals`), **History** (`/history`) — ainda `NotMigratedScreen`, dentro do
   shell.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no

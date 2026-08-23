@@ -68,4 +68,18 @@ describe("Modal", () => {
 
     expect(screen.getByRole("button", { name: /close/i })).toBeDisabled();
   });
+
+  it("does not call onClose on a scrim click when closeable is false", async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Modal icon="key" title="Service key generated" onClose={onClose} closeable={false}>
+        <div>content</div>
+      </Modal>
+    );
+
+    await user.click(screen.getByTestId("modal-scrim"));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

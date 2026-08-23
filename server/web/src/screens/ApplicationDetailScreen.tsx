@@ -5,6 +5,7 @@ import { getToggleHierarchy, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
 import { CreateToggleModal } from "../components/CreateToggleModal";
 import { Icon } from "../components/Icon";
+import { SecretKeySection } from "../components/SecretKeySection";
 import { ToggleTree } from "../components/ToggleTree";
 import { useAppUser } from "../hooks/useAppUser";
 import type { ToggleNode } from "../types/toggle";
@@ -15,8 +16,9 @@ type LoadState =
   | { status: "error"; message: string };
 
 // Tela de detalhe de uma aplicação: árvore de toggles (GET .../toggles?hierarchy=true) +
-// criação (CreateToggleModal) + liga/desliga recursivo (PUT .../toggle/:id, singular).
-// Edição de regra de ativação, exclusão e chave secreta ficam para uma próxima fatia.
+// criação (CreateToggleModal) + liga/desliga recursivo (PUT .../toggle/:id, singular) +
+// gerenciamento da service key (SecretKeySection). Edição de regra de ativação e
+// exclusão de toggle individual ficam para uma próxima fatia.
 export function ApplicationDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const applicationId = id!;
@@ -83,6 +85,12 @@ export function ApplicationDetailScreen() {
       {state.status === "loaded" && state.toggles.length === 0 && <div className="empty">Nenhum toggle ainda.</div>}
       {state.status === "loaded" && state.toggles.length > 0 && (
         <ToggleTree nodes={state.toggles} onToggle={handleToggle} disabled={!canEdit || mutating} />
+      )}
+
+      {state.status === "loaded" && (
+        <div style={{ marginTop: 32, paddingTop: 22, borderTop: "1px solid var(--border)" }}>
+          <SecretKeySection applicationId={applicationId} canManage={canEdit} />
+        </div>
       )}
 
       {creating && (
