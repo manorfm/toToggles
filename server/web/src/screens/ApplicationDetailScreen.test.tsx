@@ -18,6 +18,7 @@ function renderScreen(user: AuthenticatedUser = { id: "1", username: "root", rol
     <MemoryRouter initialEntries={["/applications/app1"]}>
       <Routes>
         <Route element={<FakeShell user={user} />}>
+          <Route path="/" element={<div>Applications list</div>} />
           <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
         </Route>
       </Routes>
@@ -166,5 +167,93 @@ describe("ApplicationDetailScreen", () => {
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     await vi.waitFor(() => expect(ruleSet).toBe(true));
+  });
+
+  it("deletes a leaf toggle via the confirm modal and refreshes the tree", async () => {
+    let deleted = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/applications/app1/toggles/3" && init?.method === "DELETE") {
+        deleted = true;
+        return Promise.resolve(jsonResponse(200, { message: "toggle deleted successfully" }));
+      }
+      if (path.startsWith("/applications/app1/toggles")) {
+        return Promise.resolve(
+          jsonResponse(200, { application: "app1", toggles: deleted ? [] : [{ id: "3", value: "billing", enabled: true }] })
+        );
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("billing");
+
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+    await screen.findByText(/delete toggle/i);
+    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+
+    await screen.findByText(/nenhum toggle/i);
+    expect(deleted).toBe(true);
+  });
+
+  it("shows a pending-approval notice instead of removing the toggle when delete is intercepted", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path === "/applications/app1/toggles/3" && init?.method === "DELETE") {
+        return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "toggle_delete" }));
+      }
+      if (path.startsWith("/applications/app1/toggles")) {
+        return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [{ id: "3", value: "billing", enabled: true }] }));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("billing");
+
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+    await screen.findByText(/delete toggle/i);
+    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+
+    expect(await screen.findByText(/aguardando aprova/i)).toBeInTheDocument();
+    expect(screen.getByText("billing")).toBeInTheDocument();
+  });
+
+  it("shows a 'Delete application' action for root, deletes it and navigates back to the applications list", async () => {
+    let deleted = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/applications/app1" && init?.method === "DELETE") {
+        deleted = true;
+        return Promise.resolve(jsonResponse(200, { message: "application deleted successfully" }));
+      }
+      if (path === "/applications/app1") return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      if (path.startsWith("/applications/app1/toggles")) return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [] }));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("Checkout Web");
+
+    await user.click(screen.getByRole("button", { name: /delete application/i }));
+    await screen.findByText(/delete application/i, { selector: ".modal-title" });
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    await screen.findByText("Applications list");
+    expect(deleted).toBe(true);
+  });
+
+  it("does not show 'Delete application' for a non-root admin", async () => {
+    vi.stubGlobal("fetch", fetchMockFor([]));
+
+    renderScreen({ id: "2", username: "admin", role: "admin", must_change_password: false });
+    await screen.findByText("Checkout Web");
+
+    expect(screen.queryByRole("button", { name: /delete application/i })).not.toBeInTheDocument();
   });
 });

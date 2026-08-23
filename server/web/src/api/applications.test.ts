@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApplication, getApplication, listApplications } from "./applications";
+import { createApplication, deleteApplication, getApplication, listApplications } from "./applications";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -82,6 +82,37 @@ describe("createApplication", () => {
     await expect(createApplication({ name: "Checkout Web", teamId: "01TEAM01" })).rejects.toMatchObject({
       status: 409,
       message: "application already exists",
+    });
+  });
+});
+
+describe("deleteApplication", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("DELETEs /applications/:id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "application deleted successfully" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await deleteApplication("01APP0000000000000000001");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/applications/01APP0000000000000000001",
+      expect.objectContaining({ method: "DELETE" })
+    );
+    expect(result).toEqual({ kind: "deleted" });
+  });
+
+  it("returns a pending_approval result on 202", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "application_delete" }))
+    );
+
+    await expect(deleteApplication("01APP0000000000000000001")).resolves.toEqual({
+      kind: "pending_approval",
+      actionType: "application_delete",
     });
   });
 });

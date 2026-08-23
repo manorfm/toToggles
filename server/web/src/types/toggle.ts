@@ -59,3 +59,11 @@ export interface UpdateToggleInput {
 export type UpdateToggleResult =
   | { kind: "updated"; toggle: ToggleDetail }
   | { kind: "pending_approval"; actionType: string };
+
+// DELETE /applications/:id/toggles/:toggleId — approval-aware. Nuance real (docs/rest-flow.md
+// §7): um toggle com filhos NÃO é apagado, mas o servidor ainda responde 200 — não há como o
+// client distinguir "apagado" de "sobreviveu por ter filhos" a partir da resposta em si, então a
+// UI evita a chamada quando há filhos em vez de fingir que sempre funciona.
+export type DeleteToggleResult =
+  | { kind: "deleted" }
+  | { kind: "pending_approval"; actionType: string };

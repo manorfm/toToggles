@@ -21,6 +21,12 @@ export async function createTeam(input: CreateTeamInput): Promise<Team> {
   return body.team;
 }
 
+// DELETE /teams/:id — root only, não é approval-aware (não faz parte da lista de
+// action_type do workflow de aprovação, ver docs/rest-flow.md §"Route protection").
+export async function deleteTeam(id: string): Promise<void> {
+  await apiFetch<{ success: boolean; message: string }>(`/teams/${id}`, { method: "DELETE" });
+}
+
 // GET /profile/teams — times do próprio usuário, acessível pra qualquer role
 // (diferente de GET /teams, que é RequireRoot()).
 export async function listMyTeams(): Promise<Team[]> {

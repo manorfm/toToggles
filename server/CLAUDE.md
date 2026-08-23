@@ -311,7 +311,10 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   diferentes (`/auth/change-password-first-time` vs `/profile/change-password`), mesma UI.
 - ✅ **Teams & people** (`/teams`, `screens/TeamsScreen.tsx`) — lista via `GET /teams` +
   `CreateTeamModal` (root only; o item de nav some pra quem não é root, já que `/teams` inteiro exige
-  `RequireRoot()`). `Modal` virou componente genérico (`components/Modal.tsx`), já reaproveitado
+  `RequireRoot()`). Apagar time (`TeamRow`, botão de lixeira + `ConfirmModal`) usa `DELETE
+  /teams/:id` — diferente de apagar toggle/aplicação, **não é approval-aware** (não está na lista de
+  `action_type` do workflow, confirmado em docs/rest-flow.md), então a resposta é sempre
+  definitiva; a lista é atualizada localmente (filter), sem novo `GET /teams`. `Modal` virou componente genérico (`components/Modal.tsx`), já reaproveitado
   por `CreateApplicationModal`. `TeamMembersSection` (por time) lista/adiciona/remove membros —
   `AddMemberModal` adapta `MemberModal` do protótipo pra API real: o protótipo "convida por nome"
   (cria pessoa nova ali), mas a API só associa um usuário **já existente**
@@ -335,8 +338,16 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   `""` (um `ActivationRuleType` inválido) em vez de `null`. Corrigido extraindo a derivação pra
   uma função pura testável isoladamente (`deriveInitialRuleState`, em
   `lib/activationRuleTypes.ts`) que trata `has_activation_rule` como o único sinal confiável —
-  nunca confia na forma/truthiness de `activation_rule` sozinho. Exclusão de toggle individual
-  ficou de fora — próxima fatia.
+  nunca confia na forma/truthiness de `activation_rule` sozinho. **Exclusão** (toggle, aplicação):
+  botão de lixeira por nó em `ToggleTree` (`onDelete`, desabilitado quando o nó tem filhos — ver
+  nuance abaixo) e "Delete application" no cabeçalho (root only), ambos abrindo o novo
+  `components/ConfirmModal.tsx` (adaptado de `get_component_spec("ConfirmModal")`, casca genérica
+  reutilizável sobre `Modal`). Nuance real da API confirmada ao vivo: `DELETE
+  .../toggles/:toggleId` num nó **com filhos** responde `200 OK` normalmente mas **não apaga nada**
+  (o handler não tem como sinalizar isso na resposta) — em vez de chamar a API e mentir "apagado"
+  pro usuário, o botão fica desabilitado nesse caso, com tooltip explicando. Deletar a folha
+  funciona e ainda faz bubble-up: se isso deixa o pai sem filhos, o pai também é removido — testado
+  ao vivo (`payments.card` → apagar `card` → `payments` some sozinho também).
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — root vê `GET
   /approval/requests/pending` (tudo); outras roles veem `GET /approval/requests/approvable` (só o
   que podem aprovar, já filtrado no servidor). "Approve" no client encadeia `POST .../approve` +
@@ -357,6 +368,8 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 - Configurações do approval workflow (`/approval/settings`, root only) e designação de aprovadores
   por time (`/teams/:id/approvers/:user_id`) ainda não têm tela — só a fila de solicitações em si.
   User Management (criar/listar/apagar usuários, trocar role) também não existe como tela.
+  Apagar membro de time individual (o membership em si) e o próprio usuário já existem via API mas
+  sem tela dedicada.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`

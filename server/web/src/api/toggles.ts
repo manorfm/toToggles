@@ -1,6 +1,7 @@
 import { apiFetch } from "./client";
 import type {
   CreateToggleResult,
+  DeleteToggleResult,
   SetToggleEnabledResult,
   ToggleDetail,
   ToggleHierarchy,
@@ -76,4 +77,16 @@ export async function updateToggleRule(
     return { kind: "pending_approval", actionType: body.action_type };
   }
   return { kind: "updated", toggle: body };
+}
+
+// DELETE /applications/:id/toggles/:toggleId (plural — NÃO recursivo). Chamar só quando o
+// toggle não tem filhos (ver DeleteToggleResult) — a UI garante isso antes de chegar aqui.
+export async function deleteToggle(applicationId: string, toggleId: string): Promise<DeleteToggleResult> {
+  const body = await apiFetch<{ message: string } | ApprovalRequiredBody>(`/applications/${applicationId}/toggles/${toggleId}`, {
+    method: "DELETE",
+  });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "deleted" };
 }

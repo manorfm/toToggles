@@ -66,4 +66,38 @@ describe("ToggleTree", () => {
 
     expect(screen.queryByRole("button", { name: /configure/i })).not.toBeInTheDocument();
   });
+
+  it("calls onDelete with the node id and its dotted path when the delete button is clicked on a leaf", async () => {
+    const onDelete = vi.fn();
+    const user = userEvent.setup();
+    render(<ToggleTree nodes={nodes} onToggle={vi.fn()} onDelete={onDelete} />);
+
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[2]); // "billing", a root-level leaf
+
+    expect(onDelete).toHaveBeenCalledWith("3", "billing");
+  });
+
+  it("builds the dotted path from ancestor segments for a nested node", async () => {
+    const onDelete = vi.fn();
+    const user = userEvent.setup();
+    render(<ToggleTree nodes={nodes} onToggle={vi.fn()} onDelete={onDelete} />);
+
+    await user.click(screen.getAllByRole("button", { name: /delete/i })[1]); // "payments", child of "user"
+
+    expect(onDelete).toHaveBeenCalledWith("2", "user.payments");
+  });
+
+  it("disables the delete button for a node that still has children, since the API silently keeps it", () => {
+    render(<ToggleTree nodes={nodes} onToggle={vi.fn()} onDelete={vi.fn()} />);
+
+    const deleteButtons = screen.getAllByRole("button", { name: /delete/i });
+    expect(deleteButtons[0]).toBeDisabled(); // "user", has a child
+    expect(deleteButtons[1]).not.toBeDisabled(); // "billing", a leaf
+  });
+
+  it("does not render delete buttons when onDelete is not provided", () => {
+    render(<ToggleTree nodes={nodes} onToggle={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
+  });
 });

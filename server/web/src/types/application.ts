@@ -25,3 +25,9 @@ export interface ApplicationDetail {
 export type CreateApplicationResult =
   | { kind: "created"; application: Application }
   | { kind: "pending_approval"; actionType: string };
+
+// DELETE /applications/:id é approval-aware, min role root (a mutação mais restrita da API).
+// Cascata: apaga toda a árvore de toggles antes de apagar a aplicação.
+export type DeleteApplicationResult =
+  | { kind: "deleted" }
+  | { kind: "pending_approval"; actionType: string };

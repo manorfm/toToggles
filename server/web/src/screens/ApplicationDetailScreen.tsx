@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getApplication } from "../api/applications";
-import { getToggleHierarchy, setToggleEnabled } from "../api/toggles";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { deleteApplication, getApplication } from "../api/applications";
+import { deleteToggle, getToggleHierarchy, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { CreateToggleModal } from "../components/CreateToggleModal";
 import { EditToggleDrawer } from "../components/EditToggleDrawer";
 import { Icon } from "../components/Icon";
@@ -25,11 +26,15 @@ export function ApplicationDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const applicationId = id!;
   const user = useAppUser();
+  const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [creating, setCreating] = useState(false);
   const [configuring, setConfiguring] = useState<{ toggleId: string; childrenCount: number } | null>(null);
+  const [deletingToggle, setDeletingToggle] = useState<{ toggleId: string; path: string } | null>(null);
+  const [deletingApp, setDeletingApp] = useState(false);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(() => {
     Promise.all([getApplication(applicationId), getToggleHierarchy(applicationId)])
@@ -47,6 +52,43 @@ export function ApplicationDetailScreen() {
   }, [load]);
 
   const canEdit = user.role === "root" || user.role === "admin";
+  const canDeleteApp = user.role === "root";
+
+  async function confirmDeleteToggle() {
+    if (!deletingToggle) return;
+    setDeleting(true);
+    try {
+      const result = await deleteToggle(applicationId, deletingToggle.toggleId);
+      if (result.kind === "pending_approval") {
+        setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar o toggle.");
+      } else {
+        setPendingNotice(null);
+        load();
+      }
+      setDeletingToggle(null);
+    } catch (err) {
+      setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar o toggle.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function confirmDeleteApplication() {
+    setDeleting(true);
+    try {
+      const result = await deleteApplication(applicationId);
+      if (result.kind === "pending_approval") {
+        setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
+        setDeletingApp(false);
+      } else {
+        navigate("/");
+      }
+    } catch (err) {
+      setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar a aplicação.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleToggle(toggleId: string, enabled: boolean) {
     setMutating(true);
@@ -74,10 +116,19 @@ export function ApplicationDetailScreen() {
           </Link>
           <div className="page-title">{state.status === "loaded" ? state.applicationName : "Application"}</div>
         </div>
-        {canEdit && state.status === "loaded" && (
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Icon name="plus" size={16} /> New toggle
-          </button>
+        {state.status === "loaded" && (
+          <div style={{ display: "flex", gap: 8 }}>
+            {canDeleteApp && (
+              <button className="btn btn-danger" onClick={() => setDeletingApp(true)}>
+                <Icon name="trash" size={14} /> Delete application
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn btn-primary" onClick={() => setCreating(true)}>
+                <Icon name="plus" size={16} /> New toggle
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -91,6 +142,7 @@ export function ApplicationDetailScreen() {
           nodes={state.toggles}
           onToggle={handleToggle}
           onConfigure={canEdit ? (toggleId, childrenCount) => setConfiguring({ toggleId, childrenCount }) : undefined}
+          onDelete={canEdit ? (toggleId, path) => setDeletingToggle({ toggleId, path }) : undefined}
           disabled={!canEdit || mutating}
         />
       )}
@@ -128,6 +180,28 @@ export function ApplicationDetailScreen() {
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
           }}
+        />
+      )}
+
+      {deletingToggle && (
+        <ConfirmModal
+          title="Delete toggle"
+          sub={`This will permanently remove "${deletingToggle.path}".`}
+          danger
+          confirmLabel="Delete"
+          onClose={() => !deleting && setDeletingToggle(null)}
+          onConfirm={confirmDeleteToggle}
+        />
+      )}
+
+      {deletingApp && state.status === "loaded" && (
+        <ConfirmModal
+          title="Delete application"
+          sub={`This will permanently remove "${state.applicationName}" and every toggle beneath it.`}
+          danger
+          confirmLabel="Delete"
+          onClose={() => !deleting && setDeletingApp(false)}
+          onConfirm={confirmDeleteApplication}
         />
       )}
     </div>

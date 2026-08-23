@@ -1,5 +1,5 @@
 import { apiFetch } from "./client";
-import type { Application, ApplicationDetail, CreateApplicationResult } from "../types/application";
+import type { Application, ApplicationDetail, CreateApplicationResult, DeleteApplicationResult } from "../types/application";
 
 export async function listApplications(): Promise<Application[]> {
   return apiFetch<Application[]>("/applications");
@@ -28,4 +28,12 @@ export async function createApplication(input: CreateApplicationInput): Promise<
     return { kind: "pending_approval", actionType: body.action_type };
   }
   return { kind: "created", application: body };
+}
+
+export async function deleteApplication(id: string): Promise<DeleteApplicationResult> {
+  const body = await apiFetch<{ message: string } | ApprovalRequiredBody>(`/applications/${id}`, { method: "DELETE" });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "deleted" };
 }

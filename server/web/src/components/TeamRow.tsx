@@ -1,7 +1,9 @@
+import { Icon } from "./Icon";
 import type { TeamWithCounts } from "../types/team";
 
 interface TeamRowProps {
   team: TeamWithCounts;
+  onDelete?: (teamId: string) => void;
 }
 
 function pluralize(count: number, singular: string, plural: string): string {
@@ -11,7 +13,7 @@ function pluralize(count: number, singular: string, plural: string): string {
 // Adaptado de get_full_jsx("TeamsView") — só o cabeçalho do time (nome/descrição/
 // contagens); a lista de membros em si vive em TeamMembersSection, renderizada ao
 // lado desta linha em TeamsScreen (GET /teams não traz membros, só contagens).
-export function TeamRow({ team }: TeamRowProps) {
+export function TeamRow({ team, onDelete }: TeamRowProps) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -22,6 +24,11 @@ export function TeamRow({ team }: TeamRowProps) {
       </div>
       <span className="badge">{pluralize(team.user_count, "member", "members")}</span>
       <span className="badge">{pluralize(team.application_count, "application", "applications")}</span>
+      {onDelete && (
+        <button className="icon-btn" title="Delete team" aria-label="Delete team" onClick={() => onDelete(team.id)}>
+          <Icon name="trash" size={14} />
+        </button>
+      )}
     </div>
   );
 }

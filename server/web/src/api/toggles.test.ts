@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createToggle, getToggle, getToggleHierarchy, setToggleEnabled, updateToggleRule } from "./toggles";
+import { createToggle, deleteToggle, getToggle, getToggleHierarchy, setToggleEnabled, updateToggleRule } from "./toggles";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -94,6 +94,34 @@ describe("setToggleEnabled", () => {
     await expect(setToggleEnabled("app1", "tgl1", false)).resolves.toEqual({
       kind: "pending_approval",
       actionType: "toggle_update",
+    });
+  });
+});
+
+describe("deleteToggle", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("DELETEs the non-recursive (plural) toggle endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "toggle deleted successfully" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await deleteToggle("app1", "tgl1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/applications/app1/toggles/tgl1", expect.objectContaining({ method: "DELETE" }));
+    expect(result).toEqual({ kind: "deleted" });
+  });
+
+  it("returns pending_approval on 202", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "toggle_delete" }))
+    );
+
+    await expect(deleteToggle("app1", "tgl1")).resolves.toEqual({
+      kind: "pending_approval",
+      actionType: "toggle_delete",
     });
   });
 });
