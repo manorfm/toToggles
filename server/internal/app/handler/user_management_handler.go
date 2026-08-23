@@ -122,7 +122,11 @@ func (h *UserManagementHandler) CreateUser(c *gin.Context) {
 	// Salvar no banco de dados
 	err = h.userUseCase.CreateUser(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, CreateUserManagementResponse{
+		status := http.StatusInternalServerError
+		if appErr, ok := err.(*entity.AppError); ok && appErr.Code == entity.ErrCodeAlreadyExists {
+			status = http.StatusConflict
+		}
+		c.JSON(status, CreateUserManagementResponse{
 			Success: false,
 			Error:   "Failed to create user: " + err.Error(),
 		})

@@ -9,6 +9,7 @@ import { ForcedPasswordChangeScreen } from "./screens/ForcedPasswordChangeScreen
 import { HistoryScreen } from "./screens/HistoryScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { TeamsScreen } from "./screens/TeamsScreen";
+import { UserManagementScreen } from "./screens/UserManagementScreen";
 
 // Go serve este mesmo bundle (server/static/app/index.html) para todas as rotas
 // não-API — o roteamento de fato acontece aqui no client. AppShell é a única
@@ -24,6 +25,9 @@ export function App() {
           <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
           <Route path="/account/security" element={<AccountSecurityScreen />} />
           <Route path="/teams" element={<TeamsScreen />} />
+          {/* "/user-management", não "/users": esse último é o prefixo real de API
+              (GET/POST /users) e nunca receberia a casca do SPA num hard refresh. */}
+          <Route path="/user-management" element={<UserManagementScreen />} />
           <Route path="/approvals" element={<ApprovalsScreen />} />
           {/* "/approvals/settings" (plural), não "/approval/settings" (singular, prefixo real
               de API — colidiria com isAPIRoute e nunca receberia a casca do SPA num refresh). */}

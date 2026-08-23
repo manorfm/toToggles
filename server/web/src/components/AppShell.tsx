@@ -16,6 +16,9 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean 
   { to: "/teams", label: "Teams & people", rootOnly: true },
   { to: "/approvals", label: "Approvals" },
   { to: "/approvals/settings", label: "Approval settings", rootOnly: true },
+  // "/user-management", não "/users": esse último é o prefixo real de API (GET/POST
+  // /users) — ver o mesmo cuidado em App.tsx e no CLAUDE.md sobre isAPIRoute.
+  { to: "/user-management", label: "Users", rootOnly: true },
   { to: "/history", label: "History" },
 ];
 

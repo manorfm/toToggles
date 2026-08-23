@@ -145,6 +145,33 @@ func TestCreateUser_CannotCreateRoot(t *testing.T) {
 	}
 }
 
+// Bug real encontrado ao vivo: criar um usuário com username já existente devolvia 500
+// (Internal Server Error) em vez de 409 — o handler não distinguia um conflito esperado
+// (username duplicado) de uma falha de infraestrutura de verdade.
+func TestCreateUser_DuplicateUsername(t *testing.T) {
+	router, _ := setupUserManagementTestRouter()
+
+	requestBody := CreateUserManagementRequest{Username: "bob", Role: "admin"}
+	jsonBody, _ := json.Marshal(requestBody)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup: expected first creation to succeed with 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("expected status 409 for a duplicate username, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestCreateUser_InvalidRole(t *testing.T) {
 	router, _ := setupUserManagementTestRouter()
 

@@ -402,10 +402,30 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   ao usuário pra decidir o approach (ex.: distinguir por `Sec-Fetch-Dest: document`/`Accept` em
   vez de heurística de string) antes de mexer nisso, já que é uma mudança na forma como o
   middleware inteiro decide servir API vs SPA, não um ajuste pontual de rota.
-- Designação de aprovadores por time (`/teams/:id/approvers/:user_id`) ainda não tem tela. User
-  Management (criar/listar/apagar usuários, trocar role) também não existe como tela. Apagar
-  membro de time individual (o membership em si) e o próprio usuário já existem via API mas sem
-  tela dedicada.
+- ✅ **User Management** (`/user-management`, `screens/UserManagementScreen.tsx`, root only) —
+  sem tela equivalente no protótipo (só a referência em `MemberRow.tsx` sobre role ser global,
+  não por time). Rota client-side é `/user-management`, não `/users`: esse último É o prefixo
+  real de API (`GET`/`POST /users`) — mesmo cuidado de boundary do `/approvals` vs `/approval`,
+  mas aqui pior (path idêntico, não só prefixo colidindo), então nem tentei reaproveitar o nome.
+  Criar usuário reaproveita o padrão de reveal-once já usado pela secret key
+  (`components/GeneratedPasswordModal.tsx`, mesma estrutura de `GeneratedKeyModal.tsx`): a senha
+  gerada pelo servidor só existe na resposta de `POST /users` (docs/rest-flow.md §3), nunca mais
+  recuperável. Troca de role usa um `<select>` por linha (`UserRow`) — "Root" só aparece como
+  opção na própria linha do usuário logado (atribuir root pra outra conta sempre dá `403`).
+  Apagar usuário usa `ConfirmModal`; o botão de apagar nem aparece na própria linha (auto-exclusão
+  sempre recusada pela API).
+- **Bug real de status HTTP encontrado e corrigido**: `POST /users` com username duplicado
+  devolvia `500 Internal Server Error` em vez de `409 Conflict` — `UserUseCase.CreateUser`
+  retornava um `errors.New()` genérico em vez do `*entity.AppError{Code: ErrCodeAlreadyExists}`
+  que `application_usecase.go`/`team_usecase.go` já usam (o handler de aplicações já sabe mapear
+  esse código pra 409; o de usuários não tinha esse type-assert). Confirmado ao vivo: criar "bob"
+  duas vezes devolvia 500 na segunda tentativa. Corrigido nos dois lados (usecase retorna o
+  `AppError` certo; `user_management_handler.go#CreateUser` faz o mesmo type-assert que
+  `application_handler.go` já fazia) com TDD (teste de usecase + teste de handler, ambos
+  vermelhos antes da correção). Removido também código morto sem nenhum chamador em lugar nenhum
+  do repositório: `UserUseCase.CreateUserDeprecated`, `GetAllUsersPtr`, `UpdateUserDeprecated`.
+- Designação de aprovadores por time (`/teams/:id/approvers/:user_id`) ainda não tem tela. Apagar
+  membro de time individual (o membership em si) já existe via API mas sem tela dedicada.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`
