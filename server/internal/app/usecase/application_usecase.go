@@ -25,19 +25,14 @@ func (uc *ApplicationUseCase) CreateApplication(name string) (*entity.Applicatio
 		return nil, entity.NewAppError(entity.ErrCodeValidation, "application name is required")
 	}
 
-	app := entity.NewApplication(name)
-
 	// Verifica se já existe uma aplicação com o mesmo nome
-	exists, err := uc.appRepo.Exists(app.ID)
-	if err != nil {
-		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error checking application existence")
-	}
-
-	if exists {
+	existingApp, _ := uc.appRepo.GetByName(name)
+	if existingApp != nil {
 		return nil, entity.NewAppError(entity.ErrCodeAlreadyExists, "application already exists")
 	}
 
-	err = uc.appRepo.Create(app)
+	app := entity.NewApplication(name)
+	err := uc.appRepo.Create(app)
 	if err != nil {
 		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error creating application")
 	}

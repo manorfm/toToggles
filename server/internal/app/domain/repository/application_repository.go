@@ -6,6 +6,7 @@ import "github.com/manorfm/totoogle/internal/app/domain/entity"
 type ApplicationRepository interface {
 	Create(app *entity.Application) error
 	GetByID(id string) (*entity.Application, error)
+	GetByName(name string) (*entity.Application, error)
 	GetAll() ([]*entity.Application, error)
 	GetAllWithToggleCounts() ([]*entity.ApplicationWithCounts, error)
 	Update(app *entity.Application) error

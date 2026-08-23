@@ -38,6 +38,14 @@ func TestApplicationUseCase_CreateApplication(t *testing.T) {
 			},
 			expectedError: "error creating application",
 		},
+		{
+			name:    "duplicate name",
+			appName: "Test App",
+			setupMock: func(mock *MockApplicationRepository) {
+				mock.Applications["existing-id"] = &entity.Application{ID: "existing-id", Name: "Test App"}
+			},
+			expectedError: "application already exists",
+		},
 	}
 
 	for _, tt := range tests {

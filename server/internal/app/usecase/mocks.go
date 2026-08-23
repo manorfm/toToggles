@@ -7,12 +7,13 @@ import (
 )
 
 type MockApplicationRepository struct {
-	Applications map[string]*entity.Application
-	CreateError  error
-	GetByIDError error
-	ExistsError  error
-	UpdateError  error
-	DeleteError  error
+	Applications   map[string]*entity.Application
+	CreateError    error
+	GetByIDError   error
+	GetByNameError error
+	ExistsError    error
+	UpdateError    error
+	DeleteError    error
 }
 
 func NewMockApplicationRepository() *MockApplicationRepository {
@@ -38,6 +39,18 @@ func (m *MockApplicationRepository) GetByID(id string) (*entity.Application, err
 		return nil, errors.New("application not found")
 	}
 	return app, nil
+}
+
+func (m *MockApplicationRepository) GetByName(name string) (*entity.Application, error) {
+	if m.GetByNameError != nil {
+		return nil, m.GetByNameError
+	}
+	for _, app := range m.Applications {
+		if app.Name == name {
+			return app, nil
+		}
+	}
+	return nil, errors.New("application not found")
 }
 
 func (m *MockApplicationRepository) GetAll() ([]*entity.Application, error) {

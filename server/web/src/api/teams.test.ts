@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTeam, listTeams } from "./teams";
+import { createTeam, listMyTeams, listTeamOptions, listTeams } from "./teams";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -65,5 +65,50 @@ describe("createTeam", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(400, { success: false, error: "team name already exists" })));
 
     await expect(createTeam({ name: "Payments Squad" })).rejects.toMatchObject({ status: 400, message: "team name already exists" });
+  });
+});
+
+describe("listMyTeams", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("unwraps GET /profile/teams's {success,teams} envelope (works for any role)", async () => {
+    const teams = [{ id: "01TEAM01", name: "Payments Squad", description: "", created_at: "", updated_at: "" }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams })));
+
+    await expect(listMyTeams()).resolves.toEqual(teams);
+  });
+
+  it("returns an empty array when 'teams' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true })));
+
+    await expect(listMyTeams()).resolves.toEqual([]);
+  });
+});
+
+describe("listTeamOptions", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uses GET /teams (full list) for root", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "1", name: "A" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const options = await listTeamOptions(true);
+
+    expect(fetchMock).toHaveBeenCalledWith("/teams", expect.anything());
+    expect(options).toEqual([{ id: "1", name: "A" }]);
+  });
+
+  it("uses GET /profile/teams (own teams only) for non-root", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "2", name: "B" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const options = await listTeamOptions(false);
+
+    expect(fetchMock).toHaveBeenCalledWith("/profile/teams", expect.anything());
+    expect(options).toEqual([{ id: "2", name: "B" }]);
   });
 });

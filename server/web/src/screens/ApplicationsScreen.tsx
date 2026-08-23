@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { listApplications } from "../api/applications";
 import { ApiError } from "../api/client";
 import { AppCard } from "../components/AppCard";
+import { CreateApplicationModal } from "../components/CreateApplicationModal";
+import { Icon } from "../components/Icon";
+import { useAppUser } from "../hooks/useAppUser";
 import type { Application } from "../types/application";
 
 type LoadState =
@@ -9,10 +12,13 @@ type LoadState =
   | { status: "loaded"; applications: Application[] }
   | { status: "error"; message: string };
 
-// Adaptado de get_full_jsx("AppList") — "New application" fica de fora até o
-// AppModal (criação) ser migrado: um botão sem ação real seria código morto.
+// Adaptado de get_full_jsx("AppList"). Clique no card / edição ficam de fora até
+// a view de detalhe de toggles existir — ver server/CLAUDE.md.
 export function ApplicationsScreen() {
+  const user = useAppUser();
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [creating, setCreating] = useState(false);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +38,8 @@ export function ApplicationsScreen() {
     };
   }, []);
 
+  const canCreate = user.role === "root" || user.role === "admin";
+
   return (
     <div className="page">
       <div className="page-head">
@@ -41,7 +49,14 @@ export function ApplicationsScreen() {
             Each application owns a hierarchy of feature toggles. Pick one to manage its paths, rules and key.
           </div>
         </div>
+        {canCreate && (
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={16} /> New application
+          </button>
+        )}
       </div>
+
+      {pendingNotice && <div className="field-hint" style={{ marginBottom: 16 }}>{pendingNotice}</div>}
 
       {state.status === "loading" && <div className="empty">Carregando aplicações…</div>}
       {state.status === "error" && <div className="empty">{state.message}</div>}
@@ -54,6 +69,24 @@ export function ApplicationsScreen() {
             <AppCard key={application.id} application={application} />
           ))}
         </div>
+      )}
+
+      {creating && (
+        <CreateApplicationModal
+          isRoot={user.role === "root"}
+          onClose={() => setCreating(false)}
+          onCreated={(application) => {
+            setPendingNotice(null);
+            setState((prev) =>
+              prev.status === "loaded"
+                ? { status: "loaded", applications: [...prev.applications, { ...application, toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }] }
+                : prev
+            );
+          }}
+          onPendingApproval={() => {
+            setPendingNotice("Solicitação enviada — aguardando aprovação antes de criar a aplicação.");
+          }}
+        />
       )}
     </div>
   );

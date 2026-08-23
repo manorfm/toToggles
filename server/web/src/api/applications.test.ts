@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listApplications } from "./applications";
+import { createApplication, listApplications } from "./applications";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -35,5 +35,53 @@ describe("listApplications", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: "Invalid token" })));
 
     await expect(listApplications()).rejects.toMatchObject({ status: 401, message: "Invalid token" });
+  });
+});
+
+describe("createApplication", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts name/team_id and returns the created application", async () => {
+    const app = {
+      id: "01APP0000000000000000001",
+      name: "Checkout Web",
+      created_at: "2026-08-19T10:00:00Z",
+      updated_at: "2026-08-19T10:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, app));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createApplication({ name: "Checkout Web", teamId: "01TEAM01" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/applications",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Checkout Web", team_id: "01TEAM01" }) })
+    );
+    expect(result).toEqual({ kind: "created", application: app });
+  });
+
+  it("returns a pending_approval result on 202 (approval workflow intercepted the write)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "application_create" }))
+    );
+
+    const result = await createApplication({ name: "Checkout Web", teamId: "01TEAM01" });
+
+    expect(result).toEqual({ kind: "pending_approval", actionType: "application_create" });
+  });
+
+  it("propagates ApiError on a duplicate name (409)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(409, { code: "T0003", message: "application already exists" }))
+    );
+
+    await expect(createApplication({ name: "Checkout Web", teamId: "01TEAM01" })).rejects.toMatchObject({
+      status: 409,
+      message: "application already exists",
+    });
   });
 });

@@ -33,6 +33,16 @@ func (r *ApplicationRepositoryImpl) GetByID(id string) (*entity.Application, err
 	return &app, nil
 }
 
+// GetByName busca uma aplicação por nome
+func (r *ApplicationRepositoryImpl) GetByName(name string) (*entity.Application, error) {
+	var app entity.Application
+	err := r.db.Where("name = ?", name).First(&app).Error
+	if err != nil {
+		return nil, err
+	}
+	return &app, nil
+}
+
 // GetAll busca todas as aplicações
 func (r *ApplicationRepositoryImpl) GetAll() ([]*entity.Application, error) {
 	var apps []*entity.Application

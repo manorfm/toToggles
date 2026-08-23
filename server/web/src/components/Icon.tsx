@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-export type IconName = "toggle" | "lock" | "logout" | "plus" | "close" | "users";
+export type IconName = "toggle" | "lock" | "logout" | "plus" | "close" | "users" | "apps" | "check";
 
 interface IconProps {
   name: IconName;
@@ -12,10 +12,10 @@ interface IconProps {
 }
 
 // Glifos extraídos do design-graph (get_full_jsx do componente Icon). Só "toggle"
-// veio indexado pelo protótipo; "lock" e "logout" foram adicionados seguindo a
-// mesma convenção confirmada (viewBox 24x24, stroke=currentColor, cantos
-// arredondados) — não são originais do protótipo, então confira contra o
-// design-graph se/quando a tela que usa esses ícones for reindexada com o glifo real.
+// veio indexado pelo protótipo; o resto segue a mesma convenção confirmada
+// (viewBox 24x24, stroke=currentColor, cantos arredondados) mas não são originais
+// do protótipo — confira contra o design-graph se/quando a tela que usa esses
+// ícones for reindexada com o glifo real.
 const paths: Record<IconName, JSX.Element> = {
   toggle: (
     <>
@@ -55,6 +55,17 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </>
+  ),
+  apps: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  check: (
+    <path d="M20 6 9 17l-5-5" />
   ),
 };
 
