@@ -6,10 +6,9 @@ import { Icon } from "./Icon";
 import { UserMenu } from "./UserMenu";
 
 // Destinos confirmados em get_component_spec("App").textos: "Applications",
-// "Teams & people", "Approvals", "History". Cada um aponta para uma rota real —
-// as ainda não migradas (Approvals/History) renderizam NotMigratedScreen, nunca
-// um item de menu sem destino. "Teams & people" some para quem não é root: toda
-// a API /teams exige RequireRoot(), mostrar o item pra outros só levaria a 403.
+// "Teams & people", "Approvals", "History". Cada um aponta pra uma tela real.
+// "Teams & people" some para quem não é root: toda a API /teams exige
+// RequireRoot(), mostrar o item pra outros só levaria a 403.
 const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean }[] = [
   { to: "/", label: "Applications", end: true },
   { to: "/teams", label: "Teams & people", rootOnly: true },

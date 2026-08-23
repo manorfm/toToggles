@@ -70,4 +70,18 @@ describe("ApprovalRow", () => {
     expect(screen.getByRole("button", { name: /approve/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /reject/i })).toBeDisabled();
   });
+
+  it("shows a 'Pending' chip (not 'Expired') for a pending request when readOnly", () => {
+    render(<ApprovalRow request={pending} onApprove={vi.fn()} onReject={vi.fn()} readOnly />);
+
+    expect(screen.getByText(/pending/i)).toBeInTheDocument();
+    expect(screen.queryByText(/expired/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+  });
+
+  it("shows an 'Expired' chip for an actually expired request", () => {
+    render(<ApprovalRow request={{ ...pending, status: "expired" }} onApprove={vi.fn()} onReject={vi.fn()} readOnly />);
+
+    expect(screen.getByText(/expired/i)).toBeInTheDocument();
+  });
 });

@@ -5,14 +5,13 @@ import { ApplicationDetailScreen } from "./screens/ApplicationDetailScreen";
 import { ApplicationsScreen } from "./screens/ApplicationsScreen";
 import { ApprovalsScreen } from "./screens/ApprovalsScreen";
 import { ForcedPasswordChangeScreen } from "./screens/ForcedPasswordChangeScreen";
+import { HistoryScreen } from "./screens/HistoryScreen";
 import { LoginScreen } from "./screens/LoginScreen";
-import { NotMigratedScreen } from "./screens/NotMigratedScreen";
 import { TeamsScreen } from "./screens/TeamsScreen";
 
 // Go serve este mesmo bundle (server/static/app/index.html) para todas as rotas
 // não-API — o roteamento de fato acontece aqui no client. AppShell é a única
-// guarda de sessão real (ver useCurrentUser); cada tela ainda não migrada do
-// protótipo aparece como NotMigratedScreen até sair do design-graph.
+// guarda de sessão real (ver useCurrentUser).
 export function App() {
   return (
     <BrowserRouter>
@@ -25,7 +24,7 @@ export function App() {
           <Route path="/account/security" element={<AccountSecurityScreen />} />
           <Route path="/teams" element={<TeamsScreen />} />
           <Route path="/approvals" element={<ApprovalsScreen />} />
-          <Route path="/history" element={<NotMigratedScreen title="History" />} />
+          <Route path="/history" element={<HistoryScreen />} />
         </Route>
       </Routes>
     </BrowserRouter>

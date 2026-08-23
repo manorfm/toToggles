@@ -1,6 +1,16 @@
 import { apiFetch } from "./client";
 import type { ApprovalRequest } from "../types/approval";
 
+// GET /approval/requests — qualquer status (pending/approved/rejected/expired),
+// acessível pra qualquer role autenticada (sem RequireRoot/RequireAdmin no servidor).
+// Usado pela tela de History como o log de auditoria disponível de verdade — o
+// protótipo mostra "todo evento do sistema", mas o backend só registra o que passou
+// pelo workflow de aprovação.
+export async function listAllApprovals(): Promise<ApprovalRequest[]> {
+  const body = await apiFetch<{ message: string; data?: ApprovalRequest[] }>("/approval/requests");
+  return body.data ?? [];
+}
+
 export async function listPendingApprovals(): Promise<ApprovalRequest[]> {
   const body = await apiFetch<{ message: string; data?: ApprovalRequest[] }>("/approval/requests/pending");
   return body.data ?? [];

@@ -6,6 +6,8 @@ interface ApprovalRowProps {
   onApprove: () => void;
   onReject: () => void;
   busy?: boolean;
+  /** Usado em HistoryScreen: sempre mostra o chip de status, nunca os botões de ação. */
+  readOnly?: boolean;
 }
 
 const ACTION_LABELS: Record<ApprovalActionType, string> = {
@@ -24,7 +26,7 @@ const ACTION_LABELS: Record<ApprovalActionType, string> = {
 // Adaptado de get_full_jsx("ApprovalRow"). "canAct" do protótipo já é garantido por
 // qual endpoint trouxe a lista (pending pra root, approvable pra quem mais) — ver
 // ApprovalsScreen — então aqui basta checar status === "pending".
-export function ApprovalRow({ request, onApprove, onReject, busy = false }: ApprovalRowProps) {
+export function ApprovalRow({ request, onApprove, onReject, busy = false, readOnly = false }: ApprovalRowProps) {
   const when = new Date(request.created_at).toLocaleDateString();
 
   return (
@@ -49,7 +51,7 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false }: Appr
         )}
       </div>
 
-      {request.status === "pending" ? (
+      {!readOnly && request.status === "pending" ? (
         <div className="appr-btns">
           <button className="btn btn-soft btn-sm" onClick={onReject} disabled={busy}>
             <Icon name="close" size={14} /> Reject
@@ -77,6 +79,13 @@ function StatusChip({ status }: { status: ApprovalRequest["status"] }) {
     return (
       <div className="appr-done no">
         <Icon name="close" size={14} /> Rejected
+      </div>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <div className="appr-done" style={{ color: "var(--warn)" }}>
+        <Icon name="clock" size={14} /> Pending
       </div>
     );
   }

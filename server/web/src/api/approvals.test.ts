@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { approveAndExecuteApproval, executeApproval, listApprovableApprovals, listPendingApprovals, rejectApproval } from "./approvals";
+import {
+  approveAndExecuteApproval,
+  executeApproval,
+  listAllApprovals,
+  listApprovableApprovals,
+  listPendingApprovals,
+  rejectApproval,
+} from "./approvals";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -38,6 +45,28 @@ describe("listPendingApprovals", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" })));
 
     await expect(listPendingApprovals()).resolves.toEqual([]);
+  });
+});
+
+describe("listAllApprovals", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /approval/requests (any status, any role)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: [request] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listAllApprovals();
+
+    expect(fetchMock).toHaveBeenCalledWith("/approval/requests", expect.anything());
+    expect(result).toEqual([request]);
+  });
+
+  it("returns an empty array when 'data' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" })));
+
+    await expect(listAllApprovals()).resolves.toEqual([]);
   });
 });
 

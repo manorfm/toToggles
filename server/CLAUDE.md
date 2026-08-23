@@ -335,9 +335,17 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   `RejectApprovalModal` para rejeição com motivo opcional. Testado ao vivo o ciclo completo:
   admin sem bypass cria uma aplicação → fica `202 pending` → root vê, aprova, executa → aplicação
   passa a existir de fato.
-- ⏳ **History** (`/history`) — ainda `NotMigratedScreen`, dentro do shell. Configurações do
-  approval workflow (`/approval/settings`, root only) e designação de aprovadores por time
-  (`/teams/:id/approvers/:user_id`) também não têm tela — só a fila de solicitações em si.
+- ✅ **History** (`/history`, `screens/HistoryScreen.tsx`) — o protótipo descreve "um audit trail de
+  toda mudança do sistema", mas o backend **não tem** um log de auditoria genérico — a única trilha
+  real é `GET /approval/requests` (qualquer status, qualquer role). Reaproveita `ApprovalRow` num
+  modo `readOnly` (chip de status sempre, nunca botão de ação — e ganhou um chip "Pending" que
+  faltava, antes qualquer status que não fosse approved/rejected virava "Expired" por engano).
+  Ordena por `created_at` desc no client. Com isso, **todo item de nav do AppShell aponta pra uma
+  tela real** — nenhum `NotMigratedScreen` sobrou, o componente foi removido (não tinha mais
+  nenhuma rota apontando pra ele).
+- Configurações do approval workflow (`/approval/settings`, root only) e designação de aprovadores
+  por time (`/teams/:id/approvers/:user_id`) ainda não têm tela — só a fila de solicitações em si.
+  User Management (criar/listar/apagar usuários, trocar role) também não existe como tela.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`
