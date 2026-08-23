@@ -1,6 +1,5 @@
 import { apiFetch } from "./client";
-import type { Team, TeamWithCounts } from "../types/team";
-import type { User } from "../types/user";
+import type { Team, TeamApprover, TeamWithCounts } from "../types/team";
 
 export async function listTeams(): Promise<TeamWithCounts[]> {
   // GET /teams omite "teams" quando não há times (slice nil no Go) em vez de [].
@@ -48,11 +47,6 @@ export async function listTeamOptions(isRoot: boolean): Promise<TeamOption[]> {
   return teams.map((t) => ({ id: t.id, name: t.name }));
 }
 
-export async function listTeamMembers(teamId: string): Promise<User[]> {
-  const body = await apiFetch<{ success: boolean; users?: User[] }>(`/teams/${teamId}/users`);
-  return body.users ?? [];
-}
-
 export async function addTeamMember(teamId: string, userId: string): Promise<void> {
   await apiFetch<{ success: boolean; message: string }>(`/teams/${teamId}/users`, {
     method: "POST",
@@ -62,4 +56,24 @@ export async function addTeamMember(teamId: string, userId: string): Promise<voi
 
 export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
   await apiFetch<{ success: boolean; message: string }>(`/teams/${teamId}/users/${userId}`, { method: "DELETE" });
+}
+
+// GET /teams/:id/approvers — todo membro do time, não só os aprovadores atuais
+// (docs/rest-flow.md §9.3); usado como fonte de dados de TeamMembersSection porque já
+// traz is_approver junto (GET /teams/:id/users não traz).
+export async function listTeamApprovers(teamId: string): Promise<TeamApprover[]> {
+  const body = await apiFetch<{ message: string; data?: TeamApprover[] }>(`/teams/${teamId}/approvers`);
+  return body.data ?? [];
+}
+
+// POST /teams/:id/approvers/:userId — root only (checado no usecase, não na rota).
+// Exige o workflow de aprovação habilitado e que o alvo já seja admin/root no time;
+// erros vêm como texto livre do usecase (ex.: "approval system must be enabled"),
+// propagados via ApiError pra UI mostrar a mensagem real do servidor.
+export async function setTeamApprover(teamId: string, userId: string, isApprover: boolean): Promise<TeamApprover[]> {
+  const body = await apiFetch<{ data: TeamApprover[] }>(`/teams/${teamId}/approvers/${userId}`, {
+    method: "POST",
+    body: JSON.stringify({ is_approver: isApprover }),
+  });
+  return body.data;
 }

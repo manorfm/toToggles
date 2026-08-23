@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addTeamMember, createTeam, deleteTeam, listMyTeams, listTeamMembers, listTeamOptions, listTeams, removeTeamMember } from "./teams";
+import {
+  addTeamMember,
+  createTeam,
+  deleteTeam,
+  listMyTeams,
+  listTeamApprovers,
+  listTeamOptions,
+  listTeams,
+  removeTeamMember,
+  setTeamApprover,
+} from "./teams";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -134,29 +144,6 @@ describe("listTeamOptions", () => {
   });
 });
 
-describe("listTeamMembers", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("unwraps GET /teams/:id/users's {success,users} envelope", async () => {
-    const users = [{ id: "1", username: "alice", role: "admin", must_change_password: false, created_at: "", updated_at: "" }];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await listTeamMembers("team1");
-
-    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/users", expect.anything());
-    expect(result).toEqual(users);
-  });
-
-  it("returns an empty array when 'users' is omitted", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true })));
-
-    await expect(listTeamMembers("team1")).resolves.toEqual([]);
-  });
-});
-
 describe("addTeamMember", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -193,5 +180,60 @@ describe("removeTeamMember", () => {
     await removeTeamMember("team1", "user1");
 
     expect(fetchMock).toHaveBeenCalledWith("/teams/team1/users/user1", expect.objectContaining({ method: "DELETE" }));
+  });
+});
+
+describe("listTeamApprovers", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches every team member with their approver status", async () => {
+    const approvers = [
+      { team_id: "team1", user_id: "1", is_approver: true, username: "alice", role: "admin" },
+      { team_id: "team1", user_id: "2", is_approver: false, username: "bob", role: "user" },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: approvers }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listTeamApprovers("team1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/teams/team1/approvers", expect.anything());
+    expect(result).toEqual(approvers);
+  });
+
+  it("returns an empty array when 'data' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" })));
+
+    await expect(listTeamApprovers("team1")).resolves.toEqual([]);
+  });
+});
+
+describe("setTeamApprover", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("POSTs is_approver and returns the refreshed approver list", async () => {
+    const approvers = [{ team_id: "team1", user_id: "1", is_approver: true, username: "alice", role: "admin" }];
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: approvers }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await setTeamApprover("team1", "1", true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/teams/team1/approvers/1",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ is_approver: true }) })
+    );
+    expect(result).toEqual(approvers);
+  });
+
+  it("propagates ApiError when the approval workflow isn't enabled", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(403, { code: "T0001", message: "approval system must be enabled" }))
+    );
+
+    await expect(setTeamApprover("team1", "1", true)).rejects.toMatchObject({ status: 403, message: "approval system must be enabled" });
   });
 });

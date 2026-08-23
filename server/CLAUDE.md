@@ -424,8 +424,30 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   `application_handler.go` já fazia) com TDD (teste de usecase + teste de handler, ambos
   vermelhos antes da correção). Removido também código morto sem nenhum chamador em lugar nenhum
   do repositório: `UserUseCase.CreateUserDeprecated`, `GetAllUsersPtr`, `UpdateUserDeprecated`.
-- Designação de aprovadores por time (`/teams/:id/approvers/:user_id`) ainda não tem tela. Apagar
-  membro de time individual (o membership em si) já existe via API mas sem tela dedicada.
+- ✅ **Designação de aprovadores por time** (`POST /teams/:id/approvers/:user_id`) — integrada
+  direto em `components/MemberRow.tsx`/`TeamMembersSection.tsx`, adaptado de
+  `get_component_spec("MemberRow")` (JSX confirmado com o switch de aprovador de verdade, incluindo
+  o texto literal "Aprovador"/"Designar como aprovador"/"Remover como aprovador"). **Troca de role
+  do protótipo (role-pill) foi deliberadamente deixada de fora**: já existe uma tela dedicada pra
+  isso (`UserManagementScreen`), e role é global no usuário — duplicar a mesma ação aqui criaria
+  duas fontes de verdade pro mesmo estado. O switch só aparece pra membros com role `admin` (a API
+  também aceita `root`, mas o controle é escondido pra qualquer membro root, mesmo padrão de
+  esconder auto-gerenciamento usado em `UserRow`/`ApplicationDetailScreen`). Fonte de dados virou
+  `GET /teams/:id/approvers` (`api/teams.ts#listTeamApprovers`) em vez de `GET /teams/:id/users` —
+  o antigo `listTeamMembers` virou código morto (zero chamadores) e foi apagado.
+- **Bug real de backend encontrado e corrigido**: `docs/rest-flow.md` §9.3 documenta que `GET
+  /teams/:id/approvers` devolve **todo membro do time, não só os aprovadores atuais** — mas a
+  query SQL em `team_approver_repository.go#GetTeamApprovers` tinha um `AND tu.is_approver = true`
+  que filtrava só quem já era aprovador. Confirmado ao vivo: um time com um admin aprovador e um
+  user comum devolvia só o admin — o membro comum sumia da lista inteira (não só do controle de
+  aprovador, do time inteiro, já que essa é a fonte de dados de `TeamMembersSection` agora).
+  Corrigido removendo o filtro da query; `GetTeamApprovers` (usecase e repo) passou a servir tanto
+  `GET /teams/:id/approvers` quanto a resposta "refreshed" de `POST .../approvers/:id`
+  consistentemente com o roster completo. Ajustados os testes existentes do repositório que
+  codificavam o comportamento antigo (bugado) como esperado — `TestTeamApproverRepository_
+  GetTeamApprovers`/`_Integration` agora afirmam explicitamente que membros não-aprovadores
+  continuam na lista, só com `is_approver: false`.
+- Apagar membro de time individual (o membership em si) já existe via API mas sem tela dedicada.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`

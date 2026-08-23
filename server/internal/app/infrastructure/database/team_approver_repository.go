@@ -50,6 +50,10 @@ func (r *teamApproverRepository) IsUserApprover(ctx context.Context, teamID, use
 	return teamUser.IsApprover, nil
 }
 
+// GetTeamApprovers retorna TODOS os membros do team, com is_approver indicando quem é
+// aprovador — não só os aprovadores atuais (docs/rest-flow.md §9.3), já que é a fonte de
+// dados tanto de GET /teams/:id/approvers (uma tela de gerenciamento precisa ver quem não
+// é aprovador pra poder promover) quanto da resposta "refreshed" de POST .../approvers/:id.
 func (r *teamApproverRepository) GetTeamApprovers(ctx context.Context, teamID string) ([]*entity.TeamUserWithApprover, error) {
 	var results []*entity.TeamUserWithApprover
 	
@@ -64,7 +68,7 @@ func (r *teamApproverRepository) GetTeamApprovers(ctx context.Context, teamID st
 			u.role
 		FROM team_users tu
 		INNER JOIN users u ON tu.user_id = u.id
-		WHERE tu.team_id = ? AND tu.is_approver = true
+		WHERE tu.team_id = ?
 		ORDER BY u.username ASC
 	`
 	

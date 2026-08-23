@@ -145,41 +145,48 @@ func TestTeamApproverRepository_GetTeamApprovers(t *testing.T) {
 	user1ID, user2ID, teamID := createTestDataForTeamApprover(t, db)
 	repo := NewTeamApproverRepository(db)
 
-	// Set both users as approvers
+	// Set only user1 as approver — user2 stays a plain (non-approver) member.
 	err := repo.SetUserAsApprover(context.Background(), teamID, user1ID, true)
 	require.NoError(t, err)
-	err = repo.SetUserAsApprover(context.Background(), teamID, user2ID, true)
-	require.NoError(t, err)
 
-	t.Run("should get all team approvers", func(t *testing.T) {
-		approvers, err := repo.GetTeamApprovers(context.Background(), teamID)
+	// Bug real encontrado ao vivo (docs/rest-flow.md §9.3: "GET /teams/:id/approvers... Same
+	// shape as above, for every member of the team (not just current approvers)"): a query SQL
+	// tinha um "AND tu.is_approver = true" que fazia GetTeamApprovers devolver só os aprovadores
+	// atuais, então GET /teams/:id/approvers silenciosamente omitia todo membro não-aprovador —
+	// confirmado ao vivo contra o servidor real (um time com um admin aprovador e um user comum
+	// só devolvia o admin).
+	t.Run("should return every team member, not just current approvers", func(t *testing.T) {
+		members, err := repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
-		assert.Len(t, approvers, 2)
+		require.Len(t, members, 2)
 
-		// Verify approvers have correct data
-		userIDs := make([]string, len(approvers))
-		for i, approver := range approvers {
-			userIDs[i] = approver.UserID
-			assert.NotEmpty(t, approver.Username)
-			assert.NotEmpty(t, approver.Role)
-			assert.True(t, approver.IsApprover)
+		byUserID := map[string]*entity.TeamUserWithApprover{}
+		for _, m := range members {
+			byUserID[m.UserID] = m
+			assert.NotEmpty(t, m.Username)
+			assert.NotEmpty(t, m.Role)
 		}
 
-		assert.Contains(t, userIDs, user1ID)
-		assert.Contains(t, userIDs, user2ID)
+		require.Contains(t, byUserID, user1ID)
+		require.Contains(t, byUserID, user2ID)
+		assert.True(t, byUserID[user1ID].IsApprover)
+		assert.False(t, byUserID[user2ID].IsApprover)
 	})
 
-	t.Run("should return empty list for team with no approvers", func(t *testing.T) {
-		// Create another team
+	t.Run("should return every member even when none of them are approvers", func(t *testing.T) {
+		// Create another team with a member who was never made an approver.
 		newTeam := &entity.Team{
 			ID:   "team-new",
 			Name: "New Team",
 		}
 		require.NoError(t, db.Create(newTeam).Error)
+		require.NoError(t, db.Create(&entity.TeamUser{TeamID: newTeam.ID, UserID: user1ID, IsApprover: false}).Error)
 
-		approvers, err := repo.GetTeamApprovers(context.Background(), newTeam.ID)
+		members, err := repo.GetTeamApprovers(context.Background(), newTeam.ID)
 		assert.NoError(t, err)
-		assert.Len(t, approvers, 0)
+		require.Len(t, members, 1)
+		assert.Equal(t, user1ID, members[0].UserID)
+		assert.False(t, members[0].IsApprover)
 	})
 
 	t.Run("should return empty list for non-existent team", func(t *testing.T) {
@@ -300,10 +307,13 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 		user1ID, user2ID, teamID := createTestDataForTeamApprover(t, db)
 		repo := NewTeamApproverRepository(db)
 		
-		// 1. Initially no users should be approvers
-		approvers, err := repo.GetTeamApprovers(context.Background(), teamID)
+		// 1. GetTeamApprovers lists every team member — initially none are approvers
+		members, err := repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
-		assert.Len(t, approvers, 0)
+		require.Len(t, members, 2)
+		for _, m := range members {
+			assert.False(t, m.IsApprover)
+		}
 
 		// 2. Set user1 as approver
 		err = repo.SetUserAsApprover(context.Background(), teamID, user1ID, true)
@@ -314,11 +324,16 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, isApprover)
 
-		// 4. Get team approvers
-		approvers, err = repo.GetTeamApprovers(context.Background(), teamID)
+		// 4. Get team members — still both, only user1 flagged as approver
+		members, err = repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
-		assert.Len(t, approvers, 1)
-		assert.Equal(t, user1ID, approvers[0].UserID)
+		require.Len(t, members, 2)
+		byUserID := map[string]*entity.TeamUserWithApprover{}
+		for _, m := range members {
+			byUserID[m.UserID] = m
+		}
+		assert.True(t, byUserID[user1ID].IsApprover)
+		assert.False(t, byUserID[user2ID].IsApprover)
 
 		// 5. Get user approver teams
 		teamIDs, err := repo.GetUserTeamsAsApprover(context.Background(), user1ID)
@@ -336,10 +351,13 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 		err = repo.SetUserAsApprover(context.Background(), teamID, user2ID, true)
 		assert.NoError(t, err)
 
-		// 8. Verify both users are approvers
-		approvers, err = repo.GetTeamApprovers(context.Background(), teamID)
+		// 8. Verify both members are now flagged as approvers
+		members, err = repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
-		assert.Len(t, approvers, 2)
+		require.Len(t, members, 2)
+		for _, m := range members {
+			assert.True(t, m.IsApprover)
+		}
 
 		// 9. Get approver count
 		count, err := repo.GetApproverCountByTeam(context.Background(), teamID)
@@ -350,11 +368,16 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 		err = repo.SetUserAsApprover(context.Background(), teamID, user1ID, false)
 		assert.NoError(t, err)
 
-		// 11. Verify only user2 remains as approver
-		approvers, err = repo.GetTeamApprovers(context.Background(), teamID)
+		// 11. Verify both are still listed as members, only user2 flagged as approver
+		members, err = repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
-		assert.Len(t, approvers, 1)
-		assert.Equal(t, user2ID, approvers[0].UserID)
+		require.Len(t, members, 2)
+		byUserID = map[string]*entity.TeamUserWithApprover{}
+		for _, m := range members {
+			byUserID[m.UserID] = m
+		}
+		assert.False(t, byUserID[user1ID].IsApprover)
+		assert.True(t, byUserID[user2ID].IsApprover)
 
 		count, err = repo.GetApproverCountByTeam(context.Background(), teamID)
 		assert.NoError(t, err)
