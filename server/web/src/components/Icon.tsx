@@ -13,7 +13,8 @@ export type IconName =
   | "copy"
   | "warn"
   | "user"
-  | "trash";
+  | "trash"
+  | "clock";
 
 interface IconProps {
   name: IconName;
@@ -111,6 +112,12 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="M3 6h18" />
       <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
     </>
   ),
 };

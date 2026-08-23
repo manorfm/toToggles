@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell";
 import { AccountSecurityScreen } from "./screens/AccountSecurityScreen";
 import { ApplicationDetailScreen } from "./screens/ApplicationDetailScreen";
 import { ApplicationsScreen } from "./screens/ApplicationsScreen";
+import { ApprovalsScreen } from "./screens/ApprovalsScreen";
 import { ForcedPasswordChangeScreen } from "./screens/ForcedPasswordChangeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { NotMigratedScreen } from "./screens/NotMigratedScreen";
@@ -23,7 +24,7 @@ export function App() {
           <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
           <Route path="/account/security" element={<AccountSecurityScreen />} />
           <Route path="/teams" element={<TeamsScreen />} />
-          <Route path="/approvals" element={<NotMigratedScreen title="Approvals" />} />
+          <Route path="/approvals" element={<ApprovalsScreen />} />
           <Route path="/history" element={<NotMigratedScreen title="History" />} />
         </Route>
       </Routes>

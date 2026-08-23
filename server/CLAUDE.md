@@ -326,8 +326,18 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   Inclui `SecretKeySection` (gerar/regerar/apagar a service key; `GeneratedKeyModal` mostra a chave
   em texto plano **uma única vez** — só fecha depois de marcar "copiei e guardei"). Regra de
   ativação e exclusão de toggle individual ficaram de fora — próxima fatia.
-- ⏳ **Approvals** (`/approvals`), **History** (`/history`) — ainda `NotMigratedScreen`, dentro do
-  shell.
+- ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — root vê `GET
+  /approval/requests/pending` (tudo); outras roles veem `GET /approval/requests/approvable` (só o
+  que podem aprovar, já filtrado no servidor). "Approve" no client encadeia `POST .../approve` +
+  `POST .../execute` — a API separa os dois de propósito (aprovar não executa sozinho), então o
+  client decide encadear; se `approve` falhar nada acontece, se `execute` falhar depois de `approve`
+  ter funcionado a linha vira um botão "Retry" isolado (a solicitação já não está mais pendente).
+  `RejectApprovalModal` para rejeição com motivo opcional. Testado ao vivo o ciclo completo:
+  admin sem bypass cria uma aplicação → fica `202 pending` → root vê, aprova, executa → aplicação
+  passa a existir de fato.
+- ⏳ **History** (`/history`) — ainda `NotMigratedScreen`, dentro do shell. Configurações do
+  approval workflow (`/approval/settings`, root only) e designação de aprovadores por time
+  (`/teams/:id/approvers/:user_id`) também não têm tela — só a fila de solicitações em si.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`
