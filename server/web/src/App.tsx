@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AccountSecurityScreen } from "./screens/AccountSecurityScreen";
+import { ApplicationDetailScreen } from "./screens/ApplicationDetailScreen";
 import { ApplicationsScreen } from "./screens/ApplicationsScreen";
 import { ForcedPasswordChangeScreen } from "./screens/ForcedPasswordChangeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/change-password" element={<ForcedPasswordChangeScreen />} />
         <Route element={<AppShell />}>
           <Route path="/" element={<ApplicationsScreen />} />
+          <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
           <Route path="/account/security" element={<AccountSecurityScreen />} />
           <Route path="/teams" element={<TeamsScreen />} />
           <Route path="/approvals" element={<NotMigratedScreen title="Approvals" />} />

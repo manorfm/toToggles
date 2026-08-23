@@ -1,8 +1,12 @@
 import { apiFetch } from "./client";
-import type { Application, CreateApplicationResult } from "../types/application";
+import type { Application, ApplicationDetail, CreateApplicationResult } from "../types/application";
 
 export async function listApplications(): Promise<Application[]> {
   return apiFetch<Application[]>("/applications");
+}
+
+export async function getApplication(id: string): Promise<ApplicationDetail> {
+  return apiFetch<ApplicationDetail>(`/applications/${id}`);
 }
 
 export interface CreateApplicationInput {

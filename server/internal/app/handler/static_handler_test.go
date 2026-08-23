@@ -89,6 +89,8 @@ func TestIsAPIRoute(t *testing.T) {
 		{"/applications", true},
 		{"/applications/123", true},
 		{"/applications/123/toggles", true},
+		{"/applications/123/toggles/456", true},
+		{"/applications/123/toggle/456", true}, // PUT recursivo (singular) — docs/rest-flow.md §7
 		{"/api/test", true},
 		{"/health", true},
 		

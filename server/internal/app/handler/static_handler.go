@@ -95,8 +95,9 @@ func isAPIRoute(path string) bool {
 			if len(parts) == 1 {
 				return true
 			}
-			// Se tem ID e "toggles": /applications/{id}/toggles
-			if len(parts) >= 2 && parts[1] == "toggles" {
+			// Se tem ID e "toggles"/"toggle": /applications/{id}/toggles(/:toggleId)
+			// ou /applications/{id}/toggle/:toggleId (singular — PUT recursivo, docs/rest-flow.md §7)
+			if len(parts) >= 2 && (parts[1] == "toggles" || parts[1] == "toggle") {
 				return true
 			}
 		}

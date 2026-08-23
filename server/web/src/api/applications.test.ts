@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApplication, listApplications } from "./applications";
+import { createApplication, getApplication, listApplications } from "./applications";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -83,5 +83,30 @@ describe("createApplication", () => {
       status: 409,
       message: "application already exists",
     });
+  });
+});
+
+describe("getApplication", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /applications/:id and returns the raw entity (with teams)", async () => {
+    const app = {
+      id: "01APP0000000000000000001",
+      name: "Checkout Web",
+      created_at: "",
+      updated_at: "",
+      teams: [{ id: "01TEAM01", name: "Payments Squad" }],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, app)));
+
+    await expect(getApplication("01APP0000000000000000001")).resolves.toEqual(app);
+  });
+
+  it("propagates ApiError (404) for an unknown id", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, { code: "T0002", message: "application not found" })));
+
+    await expect(getApplication("missing")).rejects.toMatchObject({ status: 404 });
   });
 });

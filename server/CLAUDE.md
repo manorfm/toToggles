@@ -303,8 +303,7 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   times com `GET /teams`, outras roles só os próprios com `GET /profile/teams`, já que `POST
   /applications` não valida quem pode usar qual `team_id`). Trata o caso *approval-aware*: se a API
   responde `202 {approval_required:true}` em vez de `201`, mostra aviso de "aguardando aprovação" em
-  vez de inserir uma aplicação fantasma na lista. Clique no card / edição ainda ficam de fora — a
-  view de detalhe de toggles ainda não existe.
+  vez de inserir uma aplicação fantasma na lista. `AppCard` agora é link pra `/applications/:id`.
 - ✅ **Troca de senha** — `ChangePasswordForm` (componente puro, validação + UI) reaproveitado por
   duas telas finas: `ForcedPasswordChangeScreen` (`/change-password`, standalone fora do AppShell —
   primeiro acesso não tem sessão real, só o `password_change_token`) e `AccountSecurityScreen`
@@ -315,9 +314,13 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   `RequireRoot()`). `Modal` virou componente genérico (`components/Modal.tsx`), já reaproveitado
   por `CreateApplicationModal`. Membership por membro (`MemberRow`, add/remove, aprovador) ficou de
   fora — `GET /teams` só traz contagens, não a lista de membros.
+- ✅ **Detalhe de aplicação** (`/applications/:id`, `screens/ApplicationDetailScreen.tsx`) — árvore
+  de toggles via `GET .../toggles?hierarchy=true` (`ToggleTree`, recursivo), criação via
+  `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o endpoint
+  **recursivo** `PUT .../toggle/:id` (singular — desliga o nó inteiro e a subárvore de uma vez).
+  Regra de ativação, exclusão de toggle e chave secreta ficaram de fora — próxima fatia.
 - ⏳ **Approvals** (`/approvals`), **History** (`/history`) — ainda `NotMigratedScreen`, dentro do
-  shell. **Detalhe de toggles** por aplicação (paths hierárquicos, regras de ativação, secret key) —
-  ainda não existe; é a próxima peça que falta pro produto ficar completo de ponta a ponta.
+  shell.
 - Nota de segurança pré-existente (não introduzida por essa reescrita, apenas contornada no
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`

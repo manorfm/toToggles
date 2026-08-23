@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AppCard } from "./AppCard";
 import type { Application } from "../types/application";
@@ -15,12 +16,26 @@ const app: Application = {
 
 describe("AppCard", () => {
   it("shows the application name and toggle counts", () => {
-    render(<AppCard application={app} />);
+    render(
+      <MemoryRouter>
+        <AppCard application={app} />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText("Checkout Web")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("9")).toBeInTheDocument();
     expect(screen.getByText("Toggles")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
+  });
+
+  it("links to the application's detail page", () => {
+    render(
+      <MemoryRouter>
+        <AppCard application={app} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/applications/01APP0000000000000000001");
   });
 });

@@ -10,6 +10,15 @@ export interface Application {
   toggles_disabled: number;
 }
 
+// GET /applications/:id (entity.Application) — id/name/created_at/updated_at + teams associados.
+export interface ApplicationDetail {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  teams?: { id: string; name: string }[];
+}
+
 // POST /applications é approval-aware (docs/rest-flow.md §1 "Route protection"): se o workflow de
 // aprovação estiver ativo pra esse tipo de ação, a API responde 202 com {approval_required:true}
 // em vez de criar de fato — o create só acontece depois, via POST /approval/requests/:id/execute.

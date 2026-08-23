@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { Application } from "../types/application";
 import { applicationAccent } from "../lib/applicationAccent";
 
@@ -12,7 +13,11 @@ export function AppCard({ application }: AppCardProps) {
   const { accent, soft } = applicationAccent(application.id);
 
   return (
-    <div className="card">
+    <Link
+      to={`/applications/${application.id}`}
+      className="card click"
+      style={{ display: "block", color: "inherit", textDecoration: "none" }}
+    >
       <div className="app-card-top">
         <div className="app-glyph" style={{ background: soft, color: accent }}>
           {application.name.charAt(0).toUpperCase()}
@@ -31,6 +36,6 @@ export function AppCard({ application }: AppCardProps) {
           <div className="k">Active</div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
