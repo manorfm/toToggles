@@ -13,13 +13,26 @@ const greenLeaf: ToggleLeaf = {
   enabledOwn: [true, true],
 };
 
-const amberLeaf: ToggleLeaf = {
+// Confirmed against the prototype's real pathStatus()/leafPaths() (decoded from the compressed
+// bundle in docs/toToggle.html — see lib/toggleLeaves.ts's header comment): "red" only means the
+// ROOT of the path is off; anything else that isn't fully green — including just the leaf's own
+// bit being off — is "amber".
+const amberBlockedByAncestor: ToggleLeaf = {
+  leafId: "reader",
+  root: "user",
+  segs: ["user", "payments", "reader"],
+  ids: ["user", "payments", "reader"],
+  rules: [false, false, false],
+  enabledOwn: [true, false, true], // root on, middle ancestor off, leaf's own bit on
+};
+
+const amberOwnBitOff: ToggleLeaf = {
   leafId: "reader",
   root: "payments",
   segs: ["payments", "reader"],
   ids: ["payments", "reader"],
   rules: [false, false],
-  enabledOwn: [false, true], // ancestor off, leaf's own bit on
+  enabledOwn: [true, false], // root/only ancestor on, leaf's own bit off
 };
 
 const redLeaf: ToggleLeaf = {
@@ -28,7 +41,7 @@ const redLeaf: ToggleLeaf = {
   segs: ["billing"],
   ids: ["billing"],
   rules: [false],
-  enabledOwn: [false],
+  enabledOwn: [false], // single segment: it's both the root and the leaf
 };
 
 describe("ToggleCard", () => {
@@ -40,27 +53,40 @@ describe("ToggleCard", () => {
     expect(screen.getByText("card", { selector: ".seg-link" })).toBeInTheDocument();
   });
 
-  it("shows the RULE badge only when the leaf's own toggle has an activation rule", () => {
+  it("shows the RULE badge when ANY segment along the path has an activation rule, not just the leaf's own", () => {
     const { rerender } = render(<ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
-    expect(screen.getByText("RULE")).toBeInTheDocument();
+    expect(screen.getByText("RULE")).toBeInTheDocument(); // "card" (the leaf itself) has the rule here
 
     rerender(<ToggleCard leaf={redLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
     expect(screen.queryByText("RULE")).not.toBeInTheDocument();
+
+    const ancestorHasRule: ToggleLeaf = { ...amberOwnBitOff, rules: [true, false] };
+    rerender(<ToggleCard leaf={ancestorHasRule} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
+    expect(screen.getByText("RULE")).toBeInTheDocument(); // only the ancestor has it, not the leaf
   });
 
   it.each([
     [greenLeaf, "Active"],
-    [amberLeaf, "Blocked by a parent"],
+    [amberBlockedByAncestor, "Blocked by payments"],
+    [amberOwnBitOff, "Blocked by reader"],
     [redLeaf, "Branch disabled"],
   ])("shows the right status footer text for each state", (leaf, footText) => {
     render(<ToggleCard leaf={leaf as ToggleLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
     expect(screen.getByText(footText)).toBeInTheDocument();
   });
 
-  it("dims the path segments from the first disabled ancestor onward", () => {
-    render(<ToggleCard leaf={amberLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
+  it("dims the path segments from the first disabled ancestor onward, leaving segments before it untouched", () => {
+    render(<ToggleCard leaf={amberBlockedByAncestor} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
 
+    expect(screen.getByText("user", { selector: ".seg-link" })).not.toHaveClass("dim");
     expect(screen.getByText("payments", { selector: ".seg-link" })).toHaveClass("dim");
+    expect(screen.getByText("reader", { selector: ".seg-link" })).toHaveClass("dim");
+  });
+
+  it("dims only the leaf's own segment when just the leaf itself is off", () => {
+    render(<ToggleCard leaf={amberOwnBitOff} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
+
+    expect(screen.getByText("payments", { selector: ".seg-link" })).not.toHaveClass("dim");
     expect(screen.getByText("reader", { selector: ".seg-link" })).toHaveClass("dim");
   });
 
@@ -106,12 +132,23 @@ describe("ToggleCard", () => {
   it("disables the switch and blocks onToggle when an ancestor is off", async () => {
     const onToggle = vi.fn();
     const user = userEvent.setup();
-    render(<ToggleCard leaf={amberLeaf} onEdit={vi.fn()} onToggle={onToggle} onDelete={vi.fn()} canEdit />);
+    render(<ToggleCard leaf={amberBlockedByAncestor} onEdit={vi.fn()} onToggle={onToggle} onDelete={vi.fn()} canEdit />);
 
     const sw = screen.getByRole("switch");
     expect(sw).toBeDisabled();
     await user.click(sw);
     expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it("keeps the switch enabled when only the leaf's own bit is off and every ancestor is on", async () => {
+    const onToggle = vi.fn();
+    const user = userEvent.setup();
+    render(<ToggleCard leaf={amberOwnBitOff} onEdit={vi.fn()} onToggle={onToggle} onDelete={vi.fn()} canEdit />);
+
+    const sw = screen.getByRole("switch");
+    expect(sw).not.toBeDisabled();
+    await user.click(sw);
+    expect(onToggle).toHaveBeenCalledWith("reader");
   });
 
   it("renders a disabled, read-only switch when canEdit is false", () => {

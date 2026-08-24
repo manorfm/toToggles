@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApplication, deleteApplication, getApplication, listApplications } from "./applications";
+import { createApplication, deleteApplication, getApplication, listApplications, updateApplication } from "./applications";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -83,6 +83,46 @@ describe("createApplication", () => {
       status: 409,
       message: "application already exists",
     });
+  });
+});
+
+describe("updateApplication", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("puts name (and team_id when given) and returns the updated application", async () => {
+    const app = { id: "01APP0000000000000000001", name: "Checkout Web v2", created_at: "", updated_at: "" };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, app));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await updateApplication("01APP0000000000000000001", { name: "Checkout Web v2", teamId: "01TEAM02" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/applications/01APP0000000000000000001",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ name: "Checkout Web v2", team_id: "01TEAM02" }) })
+    );
+    expect(result).toEqual({ kind: "updated", application: app });
+  });
+
+  it("omits team_id from the body when not given (rename-only, keeps the current team)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { id: "1", name: "Renamed", created_at: "", updated_at: "" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateApplication("1", { name: "Renamed" });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/1", expect.objectContaining({ body: JSON.stringify({ name: "Renamed" }) }));
+  });
+
+  it("returns a pending_approval result on 202", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "application_create" }))
+    );
+
+    const result = await updateApplication("1", { name: "Renamed" });
+
+    expect(result).toEqual({ kind: "pending_approval", actionType: "application_create" });
   });
 });
 

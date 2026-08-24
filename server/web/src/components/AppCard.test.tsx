@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AppCard } from "./AppCard";
 import type { Application } from "../types/application";
 
@@ -37,5 +38,40 @@ describe("AppCard", () => {
     );
 
     expect(screen.getByRole("link")).toHaveAttribute("href", "/applications/01APP0000000000000000001");
+  });
+
+  it("shows a two-letter glyph derived from the name", () => {
+    render(
+      <MemoryRouter>
+        <AppCard application={app} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("CW")).toBeInTheDocument(); // "Checkout Web"
+  });
+
+  it("shows an edit button when canEdit is true, and clicking it calls onEdit without navigating", async () => {
+    const onEdit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppCard application={app} canEdit onEdit={onEdit} />
+      </MemoryRouter>
+    );
+
+    const editButton = screen.getByRole("button", { name: /edit application/i });
+    await user.click(editButton);
+
+    expect(onEdit).toHaveBeenCalledWith(app);
+  });
+
+  it("does not show an edit button when canEdit is false", () => {
+    render(
+      <MemoryRouter>
+        <AppCard application={app} canEdit={false} onEdit={vi.fn()} />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("button", { name: /edit application/i })).not.toBeInTheDocument();
   });
 });

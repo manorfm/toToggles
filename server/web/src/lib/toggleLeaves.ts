@@ -73,19 +73,30 @@ export interface ToggleCardState {
   cut: number;
 }
 
-// green = a folha e todo ancestral estão ligados; red = o próprio bit da folha está desligado
-// (ganha de qualquer ancestral); amber = a folha está ligada mas foi bloqueada por um ancestral
-// desligado. "cut" é o índice do primeiro ancestral desligado no caminho — TogglePaths usa isso
-// pra riscar/apagar visualmente os segmentos daquele ponto em diante (o ramo morto), -1 quando
-// nenhum ancestral bloqueia.
-export function deriveCardState(leaf: Pick<ToggleLeaf, "rules" | "enabledOwn">): ToggleCardState {
-  const lastIndex = leaf.enabledOwn.length - 1;
-  const leafOn = leaf.enabledOwn[lastIndex];
-  const ancestorIdx = leaf.enabledOwn.findIndex((on, i) => i < lastIndex && !on);
-  const ancestorsOn = ancestorIdx === -1;
-  const hasRule = leaf.rules[lastIndex];
-  const status: ToggleStatus = !leafOn ? "red" : !ancestorsOn ? "amber" : "green";
-  const footText = status === "green" ? "Active" : status === "red" ? "Branch disabled" : "Blocked by a parent";
+// Port 1:1 de pathStatus()/leafPaths()/ToggleCard's inline computation no prototype real
+// (decodificado do bundle comprimido embutido em docs/toToggle.html — o manifest
+// "__bundler/manifest" carrega cada arquivo-fonte gzip+base64 por UUID; design-graph nunca
+// indexou isso, só o branch de login de App, daí várias suposições anteriores terem saído
+// erradas). Semântica CONFIRMADA, não inferida:
+// - leafOn = TODO segmento do caminho (raiz→folha) está ligado — equivale a status==="green",
+//   não "o bit próprio da folha" como uma versão anterior assumia.
+// - status: "green" se leafOn; "red" se a RAIZ do caminho (índice 0) está desligada — não a
+//   folha; qualquer outro caso (inclusive só a própria folha desligada, com raiz e demais
+//   ancestrais ligados) é "amber".
+// - cut = índice do primeiro segmento desligado em TODO o array (raiz→folha, folha inclusa) —
+//   usado pra riscar visualmente daquele ponto em diante; pode apontar pra folha (ex.: só ela
+//   está desligada) mesmo sem ancestral nenhum bloqueando.
+// - hasRule = QUALQUER segmento do caminho tem regra, não só a própria folha.
+// - footText do amber é DINÂMICO: "Blocked by {segmento em cut}" — nomeia o segmento
+//   específico, mesmo quando esse segmento é a própria folha.
+export function deriveCardState(leaf: Pick<ToggleLeaf, "segs" | "rules" | "enabledOwn">): ToggleCardState {
+  const { segs, rules, enabledOwn } = leaf;
+  const leafOn = enabledOwn.every(Boolean);
+  const ancestorsOn = enabledOwn.slice(0, -1).every(Boolean);
+  const cut = enabledOwn.findIndex((on) => !on);
+  const hasRule = rules.some(Boolean);
+  const status: ToggleStatus = leafOn ? "green" : !enabledOwn[0] ? "red" : "amber";
+  const footText = status === "green" ? "Active" : status === "red" ? "Branch disabled" : `Blocked by ${segs[cut]}`;
 
-  return { status, leafOn, ancestorsOn, hasRule, footText, cut: ancestorsOn ? -1 : ancestorIdx };
+  return { status, leafOn, ancestorsOn, hasRule, footText, cut };
 }

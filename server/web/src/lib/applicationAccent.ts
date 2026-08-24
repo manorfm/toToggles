@@ -8,6 +8,22 @@ export interface ApplicationAccent {
   soft: string;
 }
 
+// Port do algoritmo real de app.jsx (decodificado do bundle comprimido em docs/toToggle.html —
+// ver o header de lib/toggleLeaves.ts): `name.split(/\s+/).map(w => w[0]).slice(0, 2).join("")
+// .toUpperCase() || "AP"`. Usado tanto na criação (novo glifo) quanto na exibição de apps já
+// existentes, já que a API não persiste um glifo — é sempre derivado do nome atual.
+export function applicationGlyph(name: string): string {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return initials || "AP";
+}
+
 export function applicationAccent(id: string): ApplicationAccent {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {

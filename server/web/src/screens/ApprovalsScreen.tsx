@@ -185,8 +185,12 @@ export function ApprovalsScreen() {
     <div className="page">
       <div className="page-head">
         <div className="h">
-          <div className="page-title">Approvals</div>
-          <div className="page-desc">Revise e aplique as solicitações que exigem aprovação antes de executar.</div>
+          <div className="page-title">Approval Management</div>
+          <div className="page-desc">
+            {isRoot
+              ? "Gerencie o sistema de aprovação, configure ações e decida solicitações pendentes."
+              : "Revise solicitações do seu time e acompanhe as suas próprias requisições."}
+          </div>
         </div>
       </div>
 

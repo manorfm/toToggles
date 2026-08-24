@@ -1,15 +1,21 @@
 import { Link } from "react-router-dom";
 import type { Application } from "../types/application";
-import { applicationAccent } from "../lib/applicationAccent";
+import { applicationAccent, applicationGlyph } from "../lib/applicationAccent";
+import { Icon } from "./Icon";
 
 interface AppCardProps {
   application: Application;
+  canEdit?: boolean;
+  onEdit?: (application: Application) => void;
 }
 
-// Adaptado de get_full_jsx("AppCard") — time/chave de serviço ficam de fora por
-// enquanto: GET /applications não traz essa informação (entity.ApplicationWithCounts),
-// só viria com N chamadas extras por card, o que não vale a pena aqui.
-export function AppCard({ application }: AppCardProps) {
+// Adaptado do AppCard real do protótipo (decodificado do bundle comprimido embutido em
+// docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método). Time (`app.team`) e o
+// terceiro stat "Key" continuam de fora: `GET /applications` (entity.ApplicationWithCounts) não
+// traz nome de time nem indicador de secret key nenhum dos dois — exigiria uma query nova no
+// backend (join com times/secret_keys), não só um ajuste de frontend; registrado como gap
+// conhecido em server/CLAUDE.md.
+export function AppCard({ application, canEdit = false, onEdit }: AppCardProps) {
   const { accent, soft } = applicationAccent(application.id);
 
   return (
@@ -20,11 +26,25 @@ export function AppCard({ application }: AppCardProps) {
     >
       <div className="app-card-top">
         <div className="app-glyph" style={{ background: soft, color: accent }}>
-          {application.name.charAt(0).toUpperCase()}
+          {applicationGlyph(application.name)}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="app-card-title">{application.name}</div>
         </div>
+        {canEdit && onEdit && (
+          <button
+            className="icon-btn"
+            title="Edit application"
+            aria-label="Edit application"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdit(application);
+            }}
+          >
+            <Icon name="edit" size={15} />
+          </button>
+        )}
       </div>
       <div className="app-stats">
         <div className="app-stat">

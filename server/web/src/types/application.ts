@@ -26,6 +26,14 @@ export type CreateApplicationResult =
   | { kind: "created"; application: Application }
   | { kind: "pending_approval"; actionType: string };
 
+// PUT /applications/:id (docs/rest-flow.md §6) — mesmo padrão approval-aware. `team_id` é
+// opcional: quando presente, MOVE a aplicação (remove de todo time atual, associa só ao novo).
+// Resposta é o entity.Application cru (mesmo shape de ApplicationDetail, NÃO de Application/
+// ApplicationWithCounts — não traz contagens de toggles).
+export type UpdateApplicationResult =
+  | { kind: "updated"; application: ApplicationDetail }
+  | { kind: "pending_approval"; actionType: string };
+
 // DELETE /applications/:id é approval-aware, min role root (a mutação mais restrita da API).
 // Cascata: apaga toda a árvore de toggles antes de apagar a aplicação.
 export type DeleteApplicationResult =

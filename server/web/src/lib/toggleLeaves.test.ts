@@ -130,36 +130,46 @@ describe("deriveCardState", () => {
     expect(state.cut).toBe(-1);
   });
 
-  it("is red (branch disabled) when the leaf's own bit is off, regardless of ancestors", () => {
-    const state = deriveCardState(byId.reader);
+  it("is red (branch disabled) when the ROOT of the path is off, regardless of the leaf's own bit", () => {
+    // A root-level leaf (segs.length === 1) is its own root, so this also covers "the leaf
+    // itself is off and it has no ancestors" — same case, since root === leaf here.
+    const leaf = { leafId: "x", root: "billing", segs: ["billing"], ids: ["billing"], rules: [false], enabledOwn: [false] };
+
+    const state = deriveCardState(leaf);
 
     expect(state.status).toBe("red");
     expect(state.leafOn).toBe(false);
     expect(state.footText).toBe("Branch disabled");
+    expect(state.cut).toBe(0);
   });
 
-  it("is amber (blocked by a parent) when the leaf is on but an ancestor is off", () => {
-    const leaf = { leafId: "x", root: "a", segs: ["a", "b"], ids: ["a", "b"], rules: [false, false], enabledOwn: [false, true] };
+  it("is amber — not red — when only the leaf itself is off but the root and every ancestor are on", () => {
+    // "reader" leaf: user(on) -> payments(on) -> reader(off). Root is on, so this is NOT red
+    // even though the leaf's own bit is off — confirmed against the prototype's pathStatus(),
+    // which only checks enabled[0] (the root) for red.
+    const state = deriveCardState(byId.reader);
+
+    expect(state.status).toBe("amber");
+    expect(state.leafOn).toBe(false);
+    expect(state.ancestorsOn).toBe(true);
+    expect(state.footText).toBe("Blocked by reader"); // cut points at the leaf's own segment
+    expect(state.cut).toBe(2);
+  });
+
+  it("is amber and names the specific blocking segment when a middle ancestor is off", () => {
+    const leaf = { leafId: "x", root: "a", segs: ["a", "b", "c"], ids: ["a", "b", "c"], rules: [false, false, false], enabledOwn: [true, false, true] };
 
     const state = deriveCardState(leaf);
 
     expect(state.status).toBe("amber");
-    expect(state.leafOn).toBe(true);
     expect(state.ancestorsOn).toBe(false);
-    expect(state.footText).toBe("Blocked by a parent");
-    expect(state.cut).toBe(0);
+    expect(state.footText).toBe("Blocked by b");
+    expect(state.cut).toBe(1);
   });
 
-  it("cuts from the first disabled ancestor, dimming everything from there to the leaf", () => {
-    const leaf = {
-      leafId: "x",
-      root: "a",
-      segs: ["a", "b", "c", "d"],
-      ids: ["a", "b", "c", "d"],
-      rules: [false, false, false, false],
-      enabledOwn: [true, false, true, true],
-    };
+  it("hasRule is true when ANY segment along the path has a rule, not just the leaf's own", () => {
+    const leaf = { leafId: "x", root: "a", segs: ["a", "b"], ids: ["a", "b"], rules: [true, false], enabledOwn: [true, true] };
 
-    expect(deriveCardState(leaf).cut).toBe(1);
+    expect(deriveCardState(leaf).hasRule).toBe(true);
   });
 });

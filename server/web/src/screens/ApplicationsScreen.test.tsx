@@ -56,7 +56,7 @@ describe("ApplicationsScreen", () => {
 
     renderScreen();
 
-    expect(await screen.findByText(/nenhuma aplicação/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no applications yet/i)).toBeInTheDocument();
   });
 
   it("shows the API's error message when the request fails", async () => {
@@ -71,12 +71,12 @@ describe("ApplicationsScreen", () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(200, []))));
 
     const { unmount } = renderScreen(admin);
-    await screen.findByText(/nenhuma aplicação/i);
+    await screen.findByText(/no applications yet/i);
     expect(screen.getByRole("button", { name: /new application/i })).toBeInTheDocument();
     unmount();
 
     renderScreen(readOnlyUser);
-    await screen.findByText(/nenhuma aplicação/i);
+    await screen.findByText(/no applications yet/i);
     expect(screen.queryByRole("button", { name: /new application/i })).not.toBeInTheDocument();
   });
 
@@ -92,7 +92,7 @@ describe("ApplicationsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen();
-    await screen.findByText(/nenhuma aplicação/i);
+    await screen.findByText(/no applications yet/i);
 
     await user.click(screen.getByRole("button", { name: /new application/i }));
     await user.type(screen.getByLabelText(/application name/i), "Checkout Web");
@@ -113,7 +113,7 @@ describe("ApplicationsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen();
-    await screen.findByText(/nenhuma aplicação/i);
+    await screen.findByText(/no applications yet/i);
 
     await user.click(screen.getByRole("button", { name: /new application/i }));
     await user.type(screen.getByLabelText(/application name/i), "Checkout Web");
@@ -121,5 +121,72 @@ describe("ApplicationsScreen", () => {
 
     expect(await screen.findByText(/aguardando aprovação/i)).toBeInTheDocument();
     expect(screen.queryByText("Checkout Web")).not.toBeInTheDocument();
+  });
+
+  it("edits an application's name in place via the card's edit button", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/applications/1" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse(200, { id: "1", name: "Checkout Web v2", created_at: "", updated_at: "" }));
+      }
+      return Promise.resolve(
+        jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 12, toggles_enabled: 9, toggles_disabled: 3 }])
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("Checkout Web");
+
+    await user.click(screen.getByRole("button", { name: /edit application/i }));
+    await user.clear(screen.getByLabelText(/application name/i));
+    await user.type(screen.getByLabelText(/application name/i), "Checkout Web v2");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(await screen.findByText("Checkout Web v2")).toBeInTheDocument();
+    expect(screen.queryByText("Checkout Web", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("deletes an application from the edit modal's delete button, for root", async () => {
+    let deleted = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/applications/1" && init?.method === "DELETE") {
+        deleted = true;
+        return Promise.resolve(jsonResponse(200, { message: "application deleted successfully" }));
+      }
+      return Promise.resolve(
+        jsonResponse(200, deleted ? [] : [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("Checkout Web");
+
+    await user.click(screen.getByRole("button", { name: /edit application/i }));
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+    await screen.findByText(/delete application/i, { selector: ".modal-title" });
+    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[0]);
+
+    await screen.findByText("No applications yet");
+    expect(deleted).toBe(true);
+  });
+
+  it("does not show a delete option in the edit modal for a non-root admin", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+      )
+    );
+    const user = userEvent.setup();
+
+    renderScreen(admin);
+    await screen.findByText("Checkout Web");
+
+    await user.click(screen.getByRole("button", { name: /edit application/i }));
+
+    expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
   });
 });

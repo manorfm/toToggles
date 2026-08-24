@@ -17,7 +17,8 @@ export type IconName =
   | "clock"
   | "settings"
   | "edit"
-  | "search";
+  | "search"
+  | "chevron-down";
 
 interface IconProps {
   name: IconName;
@@ -140,6 +141,7 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="m21 21-4.3-4.3" />
     </>
   ),
+  "chevron-down": <path d="m6 9 6 6 6-6" />,
 };
 
 export function Icon({ name, size = 16, strokeWidth = 2, fill = false, className, style }: IconProps) {

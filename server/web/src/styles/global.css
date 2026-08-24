@@ -281,6 +281,47 @@ input[type="checkbox"] {
   font-size: 16px;
   letter-spacing: -0.02em;
 }
+.brand-sub {
+  font-size: 11px;
+  color: var(--ink-4);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* --- Topbar (faixa fina no topo do conteúdo, com o breadcrumb da seção ativa) --- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px var(--pad);
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+.crumbs .c {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.c.link {
+  color: var(--ink-2);
+}
+.c.now {
+  color: var(--ink);
+  font-weight: 600;
+}
+.sep {
+  color: var(--ink-4);
+}
 .nav-item {
   display: flex;
   align-items: center;
@@ -302,6 +343,45 @@ input[type="checkbox"] {
 .nav-item.active {
   background: var(--accent-soft);
   color: var(--accent);
+}
+.nav-item .count {
+  margin-left: auto;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--ink-4);
+  background: var(--surface-2);
+  padding: 1px 7px;
+  border-radius: 99px;
+}
+.nav-item.active .count {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.nav-label {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 14px 10px 6px;
+  font-weight: 600;
+}
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: var(--radius-sm);
+  width: 100%;
+  border: 1px solid var(--border);
+}
+.nm {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.rl {
+  font-size: 11px;
+  color: var(--ink-4);
 }
 
 /* --- Page content --- */

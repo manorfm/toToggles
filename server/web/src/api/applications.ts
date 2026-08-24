@@ -1,5 +1,11 @@
 import { apiFetch } from "./client";
-import type { Application, ApplicationDetail, CreateApplicationResult, DeleteApplicationResult } from "../types/application";
+import type {
+  Application,
+  ApplicationDetail,
+  CreateApplicationResult,
+  DeleteApplicationResult,
+  UpdateApplicationResult,
+} from "../types/application";
 
 export async function listApplications(): Promise<Application[]> {
   return apiFetch<Application[]>("/applications");
@@ -28,6 +34,22 @@ export async function createApplication(input: CreateApplicationInput): Promise<
     return { kind: "pending_approval", actionType: body.action_type };
   }
   return { kind: "created", application: body };
+}
+
+export interface UpdateApplicationInput {
+  name: string;
+  teamId?: string;
+}
+
+export async function updateApplication(id: string, input: UpdateApplicationInput): Promise<UpdateApplicationResult> {
+  const body = await apiFetch<ApplicationDetail | ApprovalRequiredBody>(`/applications/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input.teamId ? { name: input.name, team_id: input.teamId } : { name: input.name }),
+  });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "updated", application: body };
 }
 
 export async function deleteApplication(id: string): Promise<DeleteApplicationResult> {

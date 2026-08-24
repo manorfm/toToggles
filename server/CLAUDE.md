@@ -322,6 +322,44 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 > o MCP `design-graph` como fonte de verdade do novo design — nunca reaproveitar padrões do frontend
 > antigo, que não existe mais nem deveria servir de referência).
 
+> ⚠️ **design-graph tem um buraco grande e conhecido: a árvore JSX autenticada do componente
+> `App` nunca é indexada.** `get_full_jsx`/`get_component_spec`/`get_screen_full` para `App`
+> sempre devolvem só o branch de login (`<LoginScreen onLogin={login} />`) — o `return` real,
+> depois de `if (!authed) return <LoginScreen .../>`, nunca é capturado. Isso já causou várias
+> reconstruções erradas nesta reescrita (sidebar sem ícone/contador, topbar inexistente, perfil
+> sem avatar/role, e — mais grave — a lógica de status verde/âmbar/vermelho de
+> `lib/toggleLeaves.ts` estava semanticamente errada até ser corrigida). **Existe uma fonte de
+> verdade melhor**: `docs/toToggle.html` não é só HTML/CSS — embute um bundle comprimido com o
+> JSX-fonte REAL, legível, de cada componente. Antes de reconstruir qualquer tela pela lógica
+> "design-graph não achou, então invento a partir do screenshot", tente decodificar o bundle
+> primeiro:
+> ```python
+> import re, json, base64, gzip
+> html = open('docs/toToggle.html', encoding='utf-8').read()
+> manifest = json.loads(re.search(r'<script type="__bundler/manifest">(.*?)</script>', html, re.S).group(1))
+> for uuid, entry in manifest.items():
+>     raw = base64.b64decode(entry['data'])
+>     if entry.get('compressed'): raw = gzip.decompress(raw)
+>     open(f'/tmp/toToggle-proto/{uuid}.{"js" if "javascript" in entry["mime"] else "txt"}', 'w').write(raw.decode('utf-8', 'replace'))
+> ```
+> Isso produz ~21 arquivos; a maioria (`react.js`/`react-dom.js`/Babel standalone) é vendor, ruído
+> — os arquivos-fonte de verdade (grep por `AppCard`/`TeamsView`/`function App(` etc. pra achar
+> os certos) são: `app.jsx` (App inteiro — sidebar/topbar/roteamento/estado/todo handler),
+> `views.jsx` (AppList/AppCard/EditDrawer/KeysView/TeamsView/MemberRow/Approvals*/HistoryView),
+> `paths.jsx` (StatusRing/ToggleCard/TogglePaths), `modals.jsx` (Modal/ConfirmModal/ServiceKeyModal/
+> AppModal/NewToggleModal/MemberModal/TeamModal/ApprovalInterceptModal/RejectModal),
+> `auth.jsx` (LoginScreen/ChangePasswordModal/UserMenu/RoleBadge), `onboarding.jsx`
+> (OnboardingModal, 7 passos), `icons.jsx` (todo o set real de paths SVG — `ICONS`, mais confiável
+> que os glifos "convenção, não originais" já documentados em `components/Icon.tsx`), `data.js`
+> (mock data + `leafPaths`/`pathStatus`/`countTree`/`findNode`/`addPath`, as funções que
+> `lib/toggleLeaves.ts` porta 1:1). Regras de CSS específicas (não confirmáveis por classe solta
+> no `get_tokens`) ainda saem melhor via grep direto no HTML bruto (`.classe {` ou
+> `.classe {\n` — o arquivo NÃO é minificado nos seletores CSS, só o JS é que fica comprimido no
+> manifest), técnica já usada pra extrair `.app`/`.page`/`.topbar`/`.count`/`.user-chip` etc.
+> Screenshots (`server/prototipo.png`/`atual.png`, quando o usuário os fornece) continuam válidos
+> como conferência visual final, mas decodificar o bundle primeiro é estritamente melhor que
+> reconstruir a partir de pixels — dá a lógica exata, não só a aparência.
+
 ### Stack Frontend
 - **React + TypeScript + Vite**, código-fonte em `server/web/`.
 - Build gera assets estáticos direto em `static/app/` (`vite.config.ts`: `base`/`outDir`) — o Go
@@ -352,15 +390,76 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 - ✅ **Login** (`server/web/src/screens/LoginScreen.tsx`) — único caminho real de entrada
   (usuário/senha via `POST /auth/login`); o protótipo só tinha um seletor de perfis demo, então o
   formulário foi montado à mão reaproveitando as classes/tokens reais do protótipo.
-- ✅ **AppShell** (`components/AppShell.tsx`) — casca autenticada (sidebar + nav + user menu).
-  Guarda de sessão **client-side** via `useCurrentUser`/`GET /profile` (ver nota de segurança
-  abaixo) — redireciona pra `/login` sozinho se não autenticado.
+- ✅ **AppShell** (`components/AppShell.tsx`) — casca autenticada (sidebar + topbar/breadcrumb +
+  nav + user menu). Guarda de sessão **client-side** via `useCurrentUser`/`GET /profile` (ver nota
+  de segurança abaixo) — redireciona pra `/login` sozinho se não autenticado.
+  - **Reconstrução em duas passadas, a segunda a partir do JSX real decodificado** (ver o aviso
+    grande no topo desta seção "Frontend" sobre o bundle comprimido em `docs/toToggle.html`). A
+    primeira passada comparou só contra screenshots (`server/prototipo.png`/`atual.png`) e acertou
+    a estrutura geral mas errou detalhes finos que só o JSX real revela — corrigidos na segunda
+    passada, com o `app.jsx` decodificado como fonte:
+    - Nav items: ícone (`apps`/`users`/`check`/`clock`, 17px) + `<span className="count">` (NÃO
+      `.badge` — classe própria, `.nav-item .count`/`.nav-item.active .count` no CSS do
+      protótipo). Applications/Teams mostram a contagem **sempre**, até "0" (`apps.length`/
+      `teams.length` reais, não condicional); só Approvals é condicional (`pendingApprovals > 0`);
+      History nunca tem contador.
+    - Marca: `to<b>Toggle</b>` (dois pesos, não um wordmark plano) + subtítulo `.brand-sub`
+      "feature flags" minúsculo (CSS faz o uppercase).
+    - Rodapé da sidebar: `.user-chip` (classe própria, com borda — não `.nav-item` reaproveitado)
+      contendo `.avatar` + `.nm` (nome) + `.rl` (linha com `RoleBadge`, componente já existente) +
+      chevron (`Icon` ganhou o glifo `"chevron-down"`).
+    - **Topbar é um breadcrumb de verdade** (`.crumbs` > `.c.link` "Applications" sempre clicável
+      + `.sep` "/" + `.c.now` pra seção atual), não um rótulo único — corrigido de uma versão
+      anterior que só mostrava uma string. O protótipo real ainda mostra um 3º nível com o nome
+      da aplicação aberta ("Applications / {app.name} / Toggles") quando dentro de
+      `ApplicationDetailScreen` — **omitido aqui** porque exigiria levantar o nome da app até
+      `AppShell` (ela não busca dados de aplicação individual); gap conhecido, não corrigido.
+    - Confirmado (não no JSX de `App`, mas na página `ApprovalsView` em si): o **título da
+      página**/breadcrumb de Approvals é "Approval Management", não "Approvals" — só o item de
+      nav usa "Approvals". Corrigido em `screens/ApprovalsScreen.tsx` (`page-title` + `page-desc`
+      condicional root/não-root).
+    - `screens/ApplicationsScreen.tsx`: empty state trocado do texto solto em português pela
+      estrutura confirmada `.empty` (ícone + `.et` + `.ed`), igual Approvals/TogglePaths.
+  - **Ainda deliberadamente fora de escopo** (confirmados no JSX real, não construídos): item de
+    nav "Guia de início" (ícone `rocket`, abre `OnboardingModal` de 7 passos — feature inteira
+    ainda não existe, adicionar o link seria clique morto); linha "Light mode" no rodapé (no
+    protótipo é funcional de verdade, mas este app só suporta o tema escuro por decisão já
+    documentada — replicar só visualmente seria UI morta pelo mesmo motivo); a sub-navegação da
+    sidebar quando uma aplicação está aberta (`.nav-label` com o nome da app + itens "Toggles"/
+    "Service key" como abas) — nosso `ApplicationDetailScreen` mostra os dois numa página só, sem
+    tabs; decidir se vale replicar como abas de verdade fica pra uma iteração futura.
 - ✅ **Applications** (`/`, `screens/ApplicationsScreen.tsx`) — lista real via `GET /applications` +
-  `CreateApplicationModal` (root/admin; `<select>` de time via `listTeamOptions` — root vê todos os
-  times com `GET /teams`, outras roles só os próprios com `GET /profile/teams`, já que `POST
-  /applications` não valida quem pode usar qual `team_id`). Trata o caso *approval-aware*: se a API
-  responde `202 {approval_required:true}` em vez de `201`, mostra aviso de "aguardando aprovação" em
-  vez de inserir uma aplicação fantasma na lista. `AppCard` agora é link pra `/applications/:id`.
+  `AppModal` (root/admin; `<select>` de time via `listTeamOptions` — root vê todos os times com
+  `GET /teams`, outras roles só os próprios com `GET /profile/teams`, já que `POST /applications`
+  não valida quem pode usar qual `team_id`). Trata o caso *approval-aware*: se a API responde `202
+  {approval_required:true}` em vez de `201`, mostra aviso de "aguardando aprovação" em vez de
+  inserir uma aplicação fantasma na lista. `AppCard` é link pra `/applications/:id`.
+  - **`AppModal` (antes `CreateApplicationModal`, só criação) agora edita e apaga também** —
+    adaptado do `AppModal` real (decodificado; design-graph nunca indexou este componente, só
+    existe dentro da árvore autenticada de `App`). O botão de editar em `AppCard` (ícone lápis,
+    `canEdit`, `e.preventDefault()+stopPropagation()` pra não navegar pro detalhe) abre o modal em
+    modo edição; o botão "Delete" no rodapé do modal (só quando editando E `canDelete`, que é
+    root — mesma regra de `ApplicationDetailScreen`) abre o `ConfirmModal` já existente e reusa
+    `deleteApplication`. **Divergência deliberada do protótipo real**: lá o `<select>` de time
+    aparece sempre, inclusive editando (modelo demo é 1 app = 1 time fixo em memória) — na API
+    real `GET /applications` não traz o time atual de cada app (pediria N chamadas extras só pra
+    popular esse combo) e `team_id` é **opcional** no `PUT /applications/:id` (omitir = mantém o
+    time atual, confirmado em `docs/rest-flow.md` §6) — então editar aqui só mexe no nome; mover
+    de time fica pra uma tela que já tenha o time atual carregado. `updateApplication`
+    (`api/applications.ts`) é novo; devolve `ApplicationDetail` (o shape cru de
+    `entity.Application`), não `Application`/`ApplicationWithCounts` (que não tem esse endpoint).
+  - **`AppCard` ganhou glifo de duas letras** (`lib/applicationAccent.ts#applicationGlyph`, port
+    1:1 do algoritmo real `name.split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase() ||
+    "AP"`) — antes era só a primeira letra do nome. Nome do time (`app.team`) e o terceiro stat
+    "Key" continuam de fora: `GET /applications` não tem nem um nem outro; fechar esse gap exige
+    uma query nova no backend (join com times/secret_keys), não é um ajuste de frontend.
+  - **Achado, não corrigido**: `PUT /applications/:id` é approval-aware, mas o middleware
+    `getActionType` (`internal/app/middleware/approval.go`) classifica **qualquer** `PUT` em
+    `/applications` como `application_create` — não existe uma constante `application_update`
+    (comentário no próprio Go: "PUT pode ser considerado update, mas não há constante
+    específica"). Efeito prático: a flag de aprovação "Criar aplicação" também intercepta edições
+    de nome. Backend pré-existente, não introduzido por este frontend — mencionado aqui porque
+    afeta o que o modal de edição pode devolver (`onPendingApproval` reusa o mesmo `action_type`).
 - ✅ **Troca de senha** — `ChangePasswordForm` (componente puro, validação + UI) reaproveitado por
   duas telas finas: `ForcedPasswordChangeScreen` (`/change-password`, standalone fora do AppShell —
   primeiro acesso não tem sessão real, só o `password_change_token`) e `AccountSecurityScreen`
@@ -390,17 +489,33 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   #filterLeaves`) + legenda de cores.
   - **Fusão de dois endpoints obrigatória**: `GET .../toggles?hierarchy=true` só dá `id`/`value`/
     `enabled` (este último já cascateado, own AND parent — nunca o bit próprio) e omite `toggles`
-    em folhas; não carrega `has_activation_rule` em lugar nenhum. Pra decidir a cor certa do card
-    (verde = folha e todo ancestral ligados; âmbar = folha ligada mas um ancestral desligado
-    bloqueia; vermelho = o próprio bit da folha está desligado, ganha de qualquer ancestral) e pra
+    em folhas; não carrega `has_activation_rule` em lugar nenhum. Pra decidir a cor certa do card e
     mostrar o badge RULE, é preciso o bit próprio (não cascateado) de cada nó do caminho — que só
     existe no endpoint plano (`GET .../toggles`, sem `hierarchy=true`, `api/toggles.ts
     #getTogglesFlat`, bare array — confirmado lendo `toggle_handler.go:281`, não documentado
     explicitamente em `docs/rest-flow.md`). `lib/toggleLeaves.ts#flattenToLeaves` funde os dois por
     id, andando a árvore e emitindo uma `ToggleLeaf` por folha com arrays paralelos
-    (`segs`/`ids`/`rules`/`enabledOwn`, raiz→folha); `deriveCardState` deriva status/footText/cut
-    (índice do primeiro ancestral desligado, usado pra riscar visualmente o ramo morto) a partir
-    disso, puro e testado isoladamente. `buildChildrenCountMap` resolve o `childrenCount` real de
+    (`segs`/`ids`/`rules`/`enabledOwn`, raiz→folha).
+  - **Lógica de status corrigida depois de decodificar o JSX real** (ver o aviso grande no topo da
+    seção "Frontend" — a primeira versão desta função foi escrita só com o CSS/spec do
+    design-graph, que nunca expõe a lógica de `pathStatus`/`leafPaths`, só o JSX de render; a
+    semântica "óbvia" que pareceu certa por inferência estava sutilmente errada em três pontos).
+    `deriveCardState` agora é um port 1:1 do `pathStatus()`/`leafPaths()`/computação inline de
+    `ToggleCard` reais (`data.js`/`paths.jsx` decodificados):
+    - `leafOn` = **todo** segmento do caminho (raiz→folha) ligado — equivale a `status==="green"`,
+      não "o bit próprio da folha" (o que a primeira versão assumia).
+    - `status`: `"red"` só quando a **RAIZ** do caminho (índice 0) está desligada — não quando a
+      folha está desligada. Se só a própria folha estiver desligada (raiz e demais ancestrais
+      ligados), o status é `"amber"`, não `"red"` — contraintuitivo, mas confirmado no
+      `pathStatus()` real (`if (!enabled[0]) return "red"`).
+    - `cut` = índice do primeiro segmento desligado em **todo** o array (raiz→folha, folha
+      inclusa) — pode apontar pra própria folha, não só pra um ancestral.
+    - `hasRule` = **qualquer** segmento do caminho tem regra (`rules.some`), não só a própria
+      folha (`rules[last]`, o que a primeira versão fazia).
+    - `footText` do âmbar é **dinâmico**: `` `Blocked by ${segs[cut]}` `` — nomeia o segmento
+      específico (mesmo quando esse segmento é a própria folha, o que soa estranho — "Blocked by
+      reader" quando "reader" é a folha — mas é literalmente o que o protótipo faz).
+    `buildChildrenCountMap` resolve o `childrenCount` real de
     QUALQUER nó clicado (não só a folha) pro hint de cascata do `EditToggleDrawer`.
   - Criação via `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o
     endpoint **recursivo** `PUT .../toggle/:id` (singular — desliga o nó inteiro e a subárvore de
@@ -465,9 +580,19 @@ go test -coverprofile=coverage.out ./...  # Com coverage
     objeto completo com só aquela chave invertida.
   - **Achado incidental**: `.empty` (usado em toda tela vazia do app) tinha um `svg`/`.et`/`.ed`
     confirmados no protótipo (ícone + título + descrição) que nunca foram extraídos — só texto
-    solto era usado em todo lugar. Adicionado a `global.css`; aplicado aqui na aba
-    Pending/Mine, ainda pendente de aplicar nas outras telas com estado vazio (Applications,
-    Teams, etc. — ver auditoria de CSS em andamento).
+    solto era usado em todo lugar. Adicionado a `global.css`; aplicado aqui na aba Pending/Mine e,
+    numa fase posterior, em `ApplicationsScreen` também — ainda pendente em Teams e outras telas
+    com estado vazio (auditoria de CSS em andamento).
+  - **Achado depois de decodificar o JSX real, NÃO corrigido ainda** (ver o aviso no topo da
+    seção "Frontend"): a estrutura de abas construída aqui (Pending/Approvable, Mine, Settings —
+    igual pra qualquer role) diverge do `ApprovalsView` real. Lá as abas dependem do role: root
+    vê **Pendentes / Histórico / Configurações** (sem "Mine" — "Histórico" filtra
+    `approvals.filter(a => a.status !== "pending")`, ou seja, só decisões já tomadas dentro do
+    PRÓPRIO sistema de aprovação); não-root vê **Pendentes / Minhas solicitações** (sem
+    "Configurações", que é root-only de qualquer forma). A aba "Mine" desta reescrita hoje
+    aparece pra TODO mundo, inclusive root, o que o protótipo real nunca faz. Registrado como gap
+    confirmado, não corrigido nesta passada — mudar isso é uma alteração de estrutura de abas, não
+    um ajuste de CSS/copy.
 - ✅ **History** (`/history`, `screens/HistoryScreen.tsx`) — o protótipo descreve "um audit trail de
   toda mudança do sistema", mas o backend **não tem** um log de auditoria genérico — a única trilha
   real é `GET /approval/requests` (qualquer status, qualquer role). Reaproveita `ApprovalRow` num
@@ -476,6 +601,16 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   Ordena por `created_at` desc no client. Com isso, **todo item de nav do AppShell aponta pra uma
   tela real** — nenhum `NotMigratedScreen` sobrou, o componente foi removido (não tinha mais
   nenhuma rota apontando pra ele).
+  - **Achado depois de decodificar o JSX real, NÃO corrigido ainda**: o `HistoryView` do protótipo
+    é uma coisa BEM diferente do que foi construído aqui — um audit log rico, categorizado
+    (`AUDIT_CAT`/`AUDIT_ICON`/`AUDIT_DOT` em `data.js`: toggles/keys/access/approvals, cada
+    entrada com ícone+dot colorido próprio, texto HTML inline tipo "Disabled **experiments**
+    branch", timeline com trilho vertical), filtrável por categoria — nada a ver com reaproveitar
+    `ApprovalRow` em modo leitura (que é, na prática, o mesmo dado da aba "Histórico" de
+    Approvals, não um audit log de verdade). Fechar esse gap de verdade exigiria um audit log
+    genérico no backend (o comentário original desta tela já dizia isso — "o backend não tem um
+    log de auditoria genérico" — mas a extensão real do gap só ficou clara depois de ver o
+    `HistoryView` de verdade, que é muito mais rico do que o texto do protótipo sugeria).
 - **Bug real de roteamento encontrado e corrigido (histórico)**: `isAPIRoute` usava
   `strings.HasPrefix(path, "/approval")` pra reconhecer a API de aprovação — mas `/approvals`
   (rota SPA de `screens/ApprovalsScreen.tsx`) também começa com essa string por acidente
