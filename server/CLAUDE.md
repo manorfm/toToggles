@@ -378,32 +378,57 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   (`POST /teams/:id/users {user_id}`), então virou um `<select>` sobre `GET /users` (root only).
   Trocar a role de um membro fica fora desta tela de propósito — role é global no usuário
   (`entity.User.Role`), não por time; essa ação vive em `screens/UserManagementScreen.tsx`.
-- ✅ **Detalhe de aplicação** (`/applications/:id`, `screens/ApplicationDetailScreen.tsx`) — árvore
-  de toggles via `GET .../toggles?hierarchy=true` (`ToggleTree`, recursivo), criação via
-  `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o endpoint
-  **recursivo** `PUT .../toggle/:id` (singular — desliga o nó inteiro e a subárvore de uma vez).
-  Inclui `SecretKeySection` (gerar/regerar/apagar a service key; `GeneratedKeyModal` mostra a chave
-  em texto plano **uma única vez** — só fecha depois de marcar "copiei e guardei"). **Regra de
-  ativação** (`EditToggleDrawer`, botão "Configure" por nó — `ToggleTree` ganhou a prop
-  `onConfigure`): liga/desliga status, ativa uma regra dentre os 7 tipos de
-  `entity.GetRuleTypeOptions()` (`lib/activationRuleTypes.ts`) e salva via `PUT
-  .../toggles/:id` (plural, não-recursivo — diferente do liga/desliga da árvore). Bug real
-  encontrado testando ao vivo contra o servidor: `GET/PUT .../toggles/:id` devolve
-  `activation_rule: {type:"", value:""}` (objeto truthy, **nunca `null`**) sempre que
-  `has_activation_rule` é `false` — ler isso com `activation_rule?.type ?? null` resolvia pra
-  `""` (um `ActivationRuleType` inválido) em vez de `null`. Corrigido extraindo a derivação pra
-  uma função pura testável isoladamente (`deriveInitialRuleState`, em
-  `lib/activationRuleTypes.ts`) que trata `has_activation_rule` como o único sinal confiável —
-  nunca confia na forma/truthiness de `activation_rule` sozinho. **Exclusão** (toggle, aplicação):
-  botão de lixeira por nó em `ToggleTree` (`onDelete`, desabilitado quando o nó tem filhos — ver
-  nuance abaixo) e "Delete application" no cabeçalho (root only), ambos abrindo o novo
-  `components/ConfirmModal.tsx` (adaptado de `get_component_spec("ConfirmModal")`, casca genérica
-  reutilizável sobre `Modal`). Nuance real da API confirmada ao vivo: `DELETE
-  .../toggles/:toggleId` num nó **com filhos** responde `200 OK` normalmente mas **não apaga nada**
-  (o handler não tem como sinalizar isso na resposta) — em vez de chamar a API e mentir "apagado"
-  pro usuário, o botão fica desabilitado nesse caso, com tooltip explicando. Deletar a folha
-  funciona e ainda faz bubble-up: se isso deixa o pai sem filhos, o pai também é removido — testado
-  ao vivo (`payments.card` → apagar `card` → `payments` some sozinho também).
+- ✅ **Detalhe de aplicação** (`/applications/:id`, `screens/ApplicationDetailScreen.tsx`) — grade
+  de cards de toggles (`components/TogglePaths.tsx`+`ToggleCard.tsx`+`StatusRing.tsx`,
+  reconstruídos de `get_component_spec("TogglePaths"/"ToggleCard"/"StatusRing")`), **um card por
+  nó-FOLHA, nunca por nó intermediário** — substituiu um `ToggleTree.tsx` de lista indentada por nó
+  que nunca teve componente de origem confirmado no protótipo (apagado nesta fase). Cada card mostra
+  um `StatusRing` (verde/âmbar/vermelho), o path completo como segmentos individualmente clicáveis
+  (`.seg-link`, cada um abre `EditToggleDrawer` pro id daquele nó específico — ancestral ou a
+  própria folha), um switch pra ligar/desligar só a folha, e um badge RULE quando aquele nó tem
+  regra de ativação. Toolbar com busca por substring do path completo (`lib/toggleLeaves.ts
+  #filterLeaves`) + legenda de cores.
+  - **Fusão de dois endpoints obrigatória**: `GET .../toggles?hierarchy=true` só dá `id`/`value`/
+    `enabled` (este último já cascateado, own AND parent — nunca o bit próprio) e omite `toggles`
+    em folhas; não carrega `has_activation_rule` em lugar nenhum. Pra decidir a cor certa do card
+    (verde = folha e todo ancestral ligados; âmbar = folha ligada mas um ancestral desligado
+    bloqueia; vermelho = o próprio bit da folha está desligado, ganha de qualquer ancestral) e pra
+    mostrar o badge RULE, é preciso o bit próprio (não cascateado) de cada nó do caminho — que só
+    existe no endpoint plano (`GET .../toggles`, sem `hierarchy=true`, `api/toggles.ts
+    #getTogglesFlat`, bare array — confirmado lendo `toggle_handler.go:281`, não documentado
+    explicitamente em `docs/rest-flow.md`). `lib/toggleLeaves.ts#flattenToLeaves` funde os dois por
+    id, andando a árvore e emitindo uma `ToggleLeaf` por folha com arrays paralelos
+    (`segs`/`ids`/`rules`/`enabledOwn`, raiz→folha); `deriveCardState` deriva status/footText/cut
+    (índice do primeiro ancestral desligado, usado pra riscar visualmente o ramo morto) a partir
+    disso, puro e testado isoladamente. `buildChildrenCountMap` resolve o `childrenCount` real de
+    QUALQUER nó clicado (não só a folha) pro hint de cascata do `EditToggleDrawer`.
+  - Criação via `CreateToggleModal` (path com ponto, ex. `payments.card`), liga/desliga via o
+    endpoint **recursivo** `PUT .../toggle/:id` (singular — desliga o nó inteiro e a subárvore de
+    uma vez; o card calcula o próximo estado a partir do bit próprio da folha, já que o switch do
+    card só recebe o id, não o valor desejado). Inclui `SecretKeySection` (gerar/regerar/apagar a
+    service key; `GeneratedKeyModal` mostra a chave em texto plano **uma única vez** — só fecha
+    depois de marcar "copiei e guardei"). **Regra de ativação** (`EditToggleDrawer`, botão
+    "Configure" — no rodapé de cada card, só pra folha, já que ancestrais se configuram clicando no
+    próprio segmento do path): liga/desliga status, ativa uma regra dentre os 7 tipos de
+    `entity.GetRuleTypeOptions()` (`lib/activationRuleTypes.ts`) e salva via `PUT
+    .../toggles/:id` (plural, não-recursivo — diferente do liga/desliga da árvore). Bug real
+    encontrado testando ao vivo contra o servidor: `GET/PUT .../toggles/:id` devolve
+    `activation_rule: {type:"", value:""}` (objeto truthy, **nunca `null`**) sempre que
+    `has_activation_rule` é `false` — ler isso com `activation_rule?.type ?? null` resolvia pra
+    `""` (um `ActivationRuleType` inválido) em vez de `null`. Corrigido extraindo a derivação pra
+    uma função pura testável isoladamente (`deriveInitialRuleState`, em
+    `lib/activationRuleTypes.ts`) que trata `has_activation_rule` como o único sinal confiável —
+    nunca confia na forma/truthiness de `activation_rule` sozinho. **Exclusão** (toggle, aplicação):
+    botão de lixeira no rodapé de cada card (só a folha pode ser apagada por essa UI — folhas nunca
+    têm filhos, então a nuance de "nó com filhos não é apagado" abaixo nunca se aplica a um clique
+    real aqui) e "Delete application" no cabeçalho (root only), ambos abrindo
+    `components/ConfirmModal.tsx` (adaptado de `get_component_spec("ConfirmModal")`, casca genérica
+    reutilizável sobre `Modal`). Nuance real da API confirmada ao vivo: `DELETE
+    .../toggles/:toggleId` num nó **com filhos** responde `200 OK` normalmente mas **não apaga
+    nada** (o handler não tem como sinalizar isso na resposta) — como a UI só oferece apagar folhas,
+    isso nunca é alcançável por aqui, mas continua valendo pra API em si. Deletar a folha funciona e
+    ainda faz bubble-up: se isso deixa o pai sem filhos, o pai também é removido — testado ao vivo
+    (`payments.card` → apagar `card` → `payments` some sozinho também).
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

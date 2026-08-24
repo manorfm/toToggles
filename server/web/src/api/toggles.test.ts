@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createToggle, deleteToggle, getToggle, getToggleHierarchy, setToggleEnabled, updateToggleRule } from "./toggles";
+import { createToggle, deleteToggle, getToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled, updateToggleRule } from "./toggles";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -25,6 +25,35 @@ describe("getToggleHierarchy", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { application: "app1" })));
 
     await expect(getToggleHierarchy("app1")).resolves.toEqual([]);
+  });
+});
+
+describe("getTogglesFlat", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches the flat endpoint (no hierarchy param) and returns the bare array of toggle details", async () => {
+    const toggles = [
+      {
+        id: "1",
+        value: "card",
+        enabled: true,
+        path: "payments.card",
+        level: 1,
+        parent_id: "0",
+        app_id: "app1",
+        has_activation_rule: false,
+        activation_rule: null,
+      },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, toggles));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getTogglesFlat("app1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles", expect.anything());
+    expect(result).toEqual(toggles);
   });
 });
 

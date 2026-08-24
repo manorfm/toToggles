@@ -13,6 +13,20 @@ export interface ToggleHierarchy {
   toggles: ToggleNode[];
 }
 
+// Uma folha da árvore "achatada" pra grade de cards (TogglePaths/ToggleCard no protótipo — ver
+// lib/toggleLeaves.ts#flattenToLeaves). Cada array é paralelo: segs[i]/ids[i]/rules[i]/
+// enabledOwn[i] descrevem o mesmo nó do caminho, da raiz (índice 0) até a própria folha (último
+// índice). enabledOwn é o bit PRÓPRIO de cada nó (não cascateado) — só existe no endpoint flat,
+// por isso a folha carrega os dois em vez de reusar ToggleNode.enabled (que já vem cascateado).
+export interface ToggleLeaf {
+  leafId: string;
+  root: string;
+  segs: string[];
+  ids: string[];
+  rules: boolean[];
+  enabledOwn: boolean[];
+}
+
 // POST /applications/:id/toggles — approval-aware, mesmo padrão de CreateApplicationResult.
 export type CreateToggleResult =
   | { kind: "created"; path: string; enabled: boolean }

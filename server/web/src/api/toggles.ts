@@ -20,6 +20,13 @@ export async function getToggleHierarchy(applicationId: string): Promise<ToggleN
   return body.toggles ?? [];
 }
 
+// GET .../toggles (sem ?hierarchy=true) — bare array de entity.Toggle "crus": own enabled (não
+// cascateado) + has_activation_rule, que a árvore hierárquica não carrega. Ver
+// lib/toggleLeaves.ts#flattenToLeaves, que funde este resultado com getToggleHierarchy.
+export async function getTogglesFlat(applicationId: string): Promise<ToggleDetail[]> {
+  return apiFetch<ToggleDetail[]>(`/applications/${applicationId}/toggles`);
+}
+
 interface CreateToggleBody {
   message: string;
   path: string;

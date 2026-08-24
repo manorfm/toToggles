@@ -16,7 +16,8 @@ export type IconName =
   | "trash"
   | "clock"
   | "settings"
-  | "edit";
+  | "edit"
+  | "search";
 
 interface IconProps {
   name: IconName;
@@ -131,6 +132,12 @@ const paths: Record<IconName, JSX.Element> = {
   edit: (
     <>
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
     </>
   ),
 };
