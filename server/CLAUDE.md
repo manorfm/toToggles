@@ -414,24 +414,53 @@ go test -coverprofile=coverage.out ./...  # Com coverage
       chevron (`Icon` ganhou o glifo `"chevron-down"`).
     - **Topbar é um breadcrumb de verdade** (`.crumbs` > `.c.link` "Applications" sempre clicável
       + `.sep` "/" + `.c.now` pra seção atual), não um rótulo único — corrigido de uma versão
-      anterior que só mostrava uma string. O protótipo real ainda mostra um 3º nível com o nome
-      da aplicação aberta ("Applications / {app.name} / Toggles") quando dentro de
-      `ApplicationDetailScreen` — **omitido aqui** porque exigiria levantar o nome da app até
-      `AppShell` (ela não busca dados de aplicação individual); gap conhecido, não corrigido.
+      anterior que só mostrava uma string.
+    - **3º nível do breadcrumb ("Applications / {app.name} / Toggles") — corrigido numa fase
+      posterior.** `AppShell` não busca dados de aplicação individual, então precisava de um jeito
+      de `ApplicationDetailScreen` "avisar" o nome pro shell. Solução: `AppShellContext` (ver
+      `hooks/useAppUser.ts`) ganhou `setBreadcrumbApp`, passado via `Outlet context`;
+      `ApplicationDetailScreen` chama `useSetBreadcrumbApp()` (novo hook,
+      `hooks/useSetBreadcrumbApp.ts`) num `useEffect` assim que carrega o nome, e limpa no
+      unmount — `AppShell` também limpa sozinho sempre que `location.pathname` sai de
+      `/applications/`, pra não vazar o nome antigo pra outra rota. Confirmado: o 2º nível
+      (`{app.name}`) usa classe `.c.link` (clicável, mas nosso app não tem uma ação de tab pra
+      disparar — fica só visual), só o 3º (`Toggles`) é `.c.now`.
     - Confirmado (não no JSX de `App`, mas na página `ApprovalsView` em si): o **título da
       página**/breadcrumb de Approvals é "Approval Management", não "Approvals" — só o item de
       nav usa "Approvals". Corrigido em `screens/ApprovalsScreen.tsx` (`page-title` + `page-desc`
       condicional root/não-root).
     - `screens/ApplicationsScreen.tsx`: empty state trocado do texto solto em português pela
       estrutura confirmada `.empty` (ícone + `.et` + `.ed`), igual Approvals/TogglePaths.
+  - **Terceira passada, depois de comparar 4 screenshots lado a lado (Applications + Toggles,
+    protótipo vs. atual) e o usuário apontar mais divergência.** Encontrado via
+    `validate_component_implementation(name="App", jsx_source="<div></div>")` — que expôs textos
+    "ausentes" (`"New toggle"`, `"{stats.total}"`, `"Each path is a chain of toggles —"`) que
+    nunca apareceram em `get_component_spec`/`get_full_jsx` por causa do truncamento "+N mais"
+    (ver `docs/investigation/design-graph-findings.md`, Achado 2, pro log completo dessa
+    investigação — pedido explícito do usuário). Confirmados e corrigidos:
+    - `ApplicationDetailScreen`'s header estava faltando: botão de voltar como ícone
+      (`.btn.btn-icon.btn-soft`, `Icon name="back"`) em vez do link de texto "← Applications";
+      o parágrafo de descrição ("Each path is a chain of toggles —
+      `service.feature.flag`. A path is active only when every segment is on."); e o contador
+      "{on}/{total} active" ao lado do botão "New toggle". O contador usa `lib/toggleLeaves.ts
+      #countToggleTree` (novo, port do `countTree()` real — soma TODO nó da árvore, não só
+      folhas; como `ToggleNode.enabled` do endpoint hierarchy já vem cascateado, não precisa
+      recalcular ancestorsOn como o protótipo faz).
+    - `Icon.tsx`: praticamente todos os glifos (exceto `"toggle"`) eram aproximações "convenção,
+      não confirmadas" — agora são os paths reais de `icons.jsx` (decodificado do mesmo bundle).
+      Ganhou `"back"` (só faltava).
+    - `brand-mark`: `Icon name="toggle" size={20}`, estava `18`.
   - **Ainda deliberadamente fora de escopo** (confirmados no JSX real, não construídos): item de
     nav "Guia de início" (ícone `rocket`, abre `OnboardingModal` de 7 passos — feature inteira
     ainda não existe, adicionar o link seria clique morto); linha "Light mode" no rodapé (no
     protótipo é funcional de verdade, mas este app só suporta o tema escuro por decisão já
     documentada — replicar só visualmente seria UI morta pelo mesmo motivo); a sub-navegação da
-    sidebar quando uma aplicação está aberta (`.nav-label` com o nome da app + itens "Toggles"/
-    "Service key" como abas) — nosso `ApplicationDetailScreen` mostra os dois numa página só, sem
-    tabs; decidir se vale replicar como abas de verdade fica pra uma iteração futura.
+    sidebar quando uma aplicação está aberta (`.nav-label` com o nome da app + itens "Toggles"
+    com contador + "Service key" com indicador de chave ativa) — nosso `ApplicationDetailScreen`
+    mostra os dois numa página só, sem tabs. Plano se for retomado: reusar o mecanismo de
+    `setBreadcrumbApp` (mesma ideia, um `setSidebarSubnav` ou similar) pra `AppShell` saber que
+    uma app está aberta + seus stats, e os dois "itens de nav" virariam scroll-to-section reais
+    (não fake) já que não existe estado de tab pra alternar de verdade.
 - ✅ **Applications** (`/`, `screens/ApplicationsScreen.tsx`) — lista real via `GET /applications` +
   `AppModal` (root/admin; `<select>` de time via `listTeamOptions` — root vê todos os times com
   `GET /teams`, outras roles só os próprios com `GET /profile/teams`, já que `POST /applications`

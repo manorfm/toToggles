@@ -56,6 +56,28 @@ export function buildChildrenCountMap(hierarchy: ToggleNode[]): Map<string, numb
   return map;
 }
 
+// Port do countTree() real do protótipo (data.js, decodificado do bundle comprimido em
+// docs/toToggle.html — ver flattenToLeaves acima pro método). Conta TODO nó da árvore (galhos e
+// folhas, não só folhas) — usado pro contador "{on}/{total} active" no header de
+// ApplicationDetailScreen. Ao contrário do protótipo (que recalcula ancestorsOn recursivamente
+// porque sua árvore guarda o bit próprio de cada nó), o endpoint real já devolve `enabled`
+// cascateado (own AND parent) em cada ToggleNode, então basta somar direto.
+export function countToggleTree(hierarchy: ToggleNode[]): { total: number; on: number } {
+  let total = 0;
+  let on = 0;
+
+  function walk(nodes: ToggleNode[]) {
+    for (const node of nodes) {
+      total++;
+      if (node.enabled) on++;
+      if (node.toggles) walk(node.toggles);
+    }
+  }
+
+  walk(hierarchy);
+  return { total, on };
+}
+
 export function filterLeaves(leaves: ToggleLeaf[], search: string): ToggleLeaf[] {
   const q = search.trim().toLowerCase();
   if (!q) return leaves;

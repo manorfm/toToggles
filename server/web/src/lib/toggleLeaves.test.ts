@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChildrenCountMap, deriveCardState, filterLeaves, flattenToLeaves } from "./toggleLeaves";
+import { buildChildrenCountMap, countToggleTree, deriveCardState, filterLeaves, flattenToLeaves } from "./toggleLeaves";
 import type { ToggleDetail, ToggleNode } from "../types/toggle";
 
 function detail(overrides: Partial<ToggleDetail> & { id: string }): ToggleDetail {
@@ -96,6 +96,31 @@ describe("buildChildrenCountMap", () => {
     expect(map.get("payments")).toBe(2);
     expect(map.get("card")).toBe(0);
     expect(map.get("billing")).toBe(0);
+  });
+});
+
+describe("countToggleTree", () => {
+  // Port do countTree() real do protótipo (data.js, decodificado do bundle comprimido em
+  // docs/toToggle.html — ver o header deste arquivo). Conta TODO nó da árvore (galhos e
+  // folhas), não só folhas — usado pro contador "X/Y active" no header de
+  // ApplicationDetailScreen. hierarchy.enabled já vem cascateado (own AND parent) do endpoint
+  // real, então basta somar node.enabled direto — sem precisar recalcular ancestorsOn aqui.
+  it("counts every node (branches and leaves), not just leaves", () => {
+    const result = countToggleTree(hierarchy);
+
+    // user, payments, card, reader, billing = 5 nós no total
+    expect(result.total).toBe(5);
+  });
+
+  it("counts a node as 'on' using its already-cascaded enabled bit", () => {
+    const result = countToggleTree(hierarchy);
+
+    // user(on) payments(on) card(on) = 3 cascaded-on; reader(off), billing(off)
+    expect(result.on).toBe(3);
+  });
+
+  it("returns zeros for an empty tree", () => {
+    expect(countToggleTree([])).toEqual({ total: 0, on: 0 });
   });
 });
 

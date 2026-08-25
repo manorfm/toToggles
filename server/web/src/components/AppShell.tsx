@@ -45,11 +45,25 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean;
 
 // Breadcrumb no topo do conteúdo — confirmado no app.jsx real como uma trilha
 // (.crumbs > .c.link "Applications" sempre clicável + .sep "/" + .c.now por seção), não um
-// rótulo único. Reconstrução fiel ao confirmado; a versão real também mostra um 3º nível com o
-// nome da aplicação aberta ("Applications / {app.name} / Toggles") — omitido aqui porque
-// AppShell não carrega dados de aplicação individual (isso vive em ApplicationDetailScreen);
-// ver server/CLAUDE.md para esse gap registrado.
-function Crumbs({ pathname, onHome }: { pathname: string; onHome: () => void }) {
+// rótulo único. Dentro de uma aplicação aberta, o confirmado é 3 níveis
+// ("Applications / {app.name} / Toggles") — o nome vem de `breadcrumbAppName`, que
+// ApplicationDetailScreen preenche via useSetBreadcrumbApp assim que carrega a aplicação (ver
+// hooks/useAppUser.ts#AppShellContext).
+function Crumbs({ pathname, onHome, breadcrumbAppName }: { pathname: string; onHome: () => void; breadcrumbAppName: string | null }) {
+  if (pathname.startsWith("/applications/") && breadcrumbAppName) {
+    return (
+      <div className="crumbs">
+        <button className="c link" onClick={onHome}>
+          Applications
+        </button>
+        <span className="sep">/</span>
+        <span className="c link">{breadcrumbAppName}</span>
+        <span className="sep">/</span>
+        <span className="c now">Toggles</span>
+      </div>
+    );
+  }
+
   const now = pathname.startsWith("/teams")
     ? "Teams & people"
     : pathname.startsWith("/users")
@@ -87,6 +101,15 @@ export function AppShell() {
   const [pendingCount, setPendingCount] = useState(0);
   const [appCount, setAppCount] = useState(0);
   const [teamCount, setTeamCount] = useState(0);
+  const [breadcrumbAppName, setBreadcrumbAppName] = useState<string | null>(null);
+
+  // A tela de detalhe de aplicação é quem sabe o nome (AppShell nunca busca uma aplicação
+  // individual) — mas se o usuário navegar embora sem essa tela limpar o próprio nome (ex.:
+  // clicar direto num item de nav em vez de "Applications"), o nome antigo não pode vazar pro
+  // breadcrumb de outra rota.
+  useEffect(() => {
+    if (!location.pathname.startsWith("/applications/")) setBreadcrumbAppName(null);
+  }, [location.pathname]);
 
   const [userCount, setUserCount] = useState(0);
 
@@ -186,7 +209,7 @@ export function AppShell() {
       <div className="sidebar">
         <div className="brand">
           <div className="brand-mark">
-            <Icon name="toggle" size={18} />
+            <Icon name="toggle" size={20} />
           </div>
           <div>
             <div className="brand-name">
@@ -239,9 +262,9 @@ export function AppShell() {
 
       <main className="main">
         <div className="topbar">
-          <Crumbs pathname={location.pathname} onHome={() => navigate("/")} />
+          <Crumbs pathname={location.pathname} onHome={() => navigate("/")} breadcrumbAppName={breadcrumbAppName} />
         </div>
-        <Outlet context={{ user }} />
+        <Outlet context={{ user, setBreadcrumbApp: setBreadcrumbAppName }} />
       </main>
     </div>
   );

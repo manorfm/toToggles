@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { deleteApplication, getApplication } from "../api/applications";
 import { deleteToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
@@ -10,12 +10,19 @@ import { Icon } from "../components/Icon";
 import { SecretKeySection } from "../components/SecretKeySection";
 import { TogglePaths } from "../components/TogglePaths";
 import { useAppUser } from "../hooks/useAppUser";
-import { buildChildrenCountMap, flattenToLeaves } from "../lib/toggleLeaves";
+import { useSetBreadcrumbApp } from "../hooks/useSetBreadcrumbApp";
+import { buildChildrenCountMap, countToggleTree, flattenToLeaves } from "../lib/toggleLeaves";
 import type { ToggleLeaf } from "../types/toggle";
 
 type LoadState =
+  | {
+      status: "loaded";
+      applicationName: string;
+      leaves: ToggleLeaf[];
+      childrenCountById: Map<string, number>;
+      stats: { total: number; on: number };
+    }
   | { status: "loading" }
-  | { status: "loaded"; applicationName: string; leaves: ToggleLeaf[]; childrenCountById: Map<string, number> }
   | { status: "error"; message: string };
 
 // Tela de detalhe de uma aplicação: grade de cards de toggles (TogglePaths/ToggleCard,
@@ -29,6 +36,7 @@ export function ApplicationDetailScreen() {
   const applicationId = id!;
   const user = useAppUser();
   const navigate = useNavigate();
+  const setBreadcrumbApp = useSetBreadcrumbApp();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
@@ -47,6 +55,7 @@ export function ApplicationDetailScreen() {
           applicationName: application.name,
           leaves: flattenToLeaves(hierarchy, flat),
           childrenCountById: buildChildrenCountMap(hierarchy),
+          stats: countToggleTree(hierarchy),
         });
       })
       .catch((err) => {
@@ -58,6 +67,13 @@ export function ApplicationDetailScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Confirmado no protótipo real: o breadcrumb do topbar ganha um 3º nível com o nome da
+  // aplicação aberta ("Applications / {app.name} / Toggles") — só esta tela sabe o nome.
+  useEffect(() => {
+    if (state.status === "loaded") setBreadcrumbApp(state.applicationName);
+    return () => setBreadcrumbApp(null);
+  }, [state.status === "loaded" ? state.applicationName : null, setBreadcrumbApp]);
 
   const canEdit = user.role === "root" || user.role === "admin";
   const canDeleteApp = user.role === "root";
@@ -123,19 +139,30 @@ export function ApplicationDetailScreen() {
   return (
     <div className="page">
       <div className="page-head">
+        <button className="btn btn-icon btn-soft" onClick={() => navigate("/")} title="Back" aria-label="Back">
+          <Icon name="back" size={16} />
+        </button>
         <div className="h">
-          <Link to="/" className="field-hint">
-            ← Applications
-          </Link>
           <div className="page-title">{state.status === "loaded" ? state.applicationName : "Application"}</div>
+          <div className="page-desc">
+            Each path is a chain of toggles — <span className="mono" style={{ color: "var(--ink-2)" }}>service.feature.flag</span>. A path is
+            active only when every segment is on.
+          </div>
         </div>
         {state.status === "loaded" && (
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             {canDeleteApp && (
               <button className="btn btn-danger" onClick={() => setDeletingApp(true)}>
                 <Icon name="trash" size={14} /> Delete application
               </button>
             )}
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 600 }}>
+                <span style={{ color: "var(--accent)" }}>{state.stats.on}</span>
+                <span style={{ color: "var(--ink-4)" }}>/{state.stats.total}</span>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>active</div>
+            </div>
             {canEdit && (
               <button className="btn btn-primary" onClick={() => setCreating(true)}>
                 <Icon name="plus" size={16} /> New toggle
