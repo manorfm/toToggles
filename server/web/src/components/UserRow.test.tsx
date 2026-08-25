@@ -4,52 +4,101 @@ import { describe, expect, it, vi } from "vitest";
 import { UserRow } from "./UserRow";
 import type { User } from "../types/user";
 
-const bob: User = { id: "2", username: "bob", role: "admin", must_change_password: false, created_at: "", updated_at: "" };
-const rootUser: User = { id: "1", username: "root", role: "root", must_change_password: false, created_at: "", updated_at: "" };
+const baseUser: User = {
+  id: "1",
+  username: "ana.ribeiro",
+  role: "user",
+  must_change_password: false,
+  active: true,
+  status: "active",
+  teams: [{ id: "t1", name: "Payments Squad" }],
+  created_at: "",
+  updated_at: "",
+};
 
 describe("UserRow", () => {
-  it("shows the username and current role", () => {
-    render(<UserRow user={bob} isSelf={false} onRoleChange={vi.fn()} onDelete={vi.fn()} />);
+  it("shows the username, role, status and team names", () => {
+    render(
+      <UserRow user={baseUser} isSelf={false} manageable canDelete onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
 
-    expect(screen.getByText("bob")).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toHaveValue("admin");
+    expect(screen.getByText("@ana.ribeiro")).toBeInTheDocument();
+    expect(screen.getByText("User")).toBeInTheDocument();
+    expect(screen.getByText("Ativo")).toBeInTheDocument();
+    expect(screen.getByText("Payments Squad")).toBeInTheDocument();
   });
 
-  it("calls onRoleChange with the new role when changed", async () => {
-    const onRoleChange = vi.fn();
+  it("shows a 'você' badge only for the current user's own row", () => {
+    const { rerender } = render(
+      <UserRow user={baseUser} isSelf={false} manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
+    expect(screen.queryByText("você")).not.toBeInTheDocument();
+
+    rerender(
+      <UserRow user={baseUser} isSelf manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
+    expect(screen.getByText("você")).toBeInTheDocument();
+  });
+
+  it("hides reset-password/toggle-status/delete actions when not manageable/deletable", () => {
+    render(
+      <UserRow user={baseUser} isSelf={false} manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
+
+    expect(screen.queryByRole("button", { name: /resetar senha/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /desativar|reativar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /excluir/i })).not.toBeInTheDocument();
+  });
+
+  it("wires reset-password and toggle-status when manageable", async () => {
+    const onResetPassword = vi.fn();
+    const onToggleStatus = vi.fn();
     const user = userEvent.setup();
-    render(<UserRow user={bob} isSelf={false} onRoleChange={onRoleChange} onDelete={vi.fn()} />);
+    render(
+      <UserRow user={baseUser} isSelf={false} manageable canDelete={false} onResetPassword={onResetPassword} onToggleStatus={onToggleStatus} onDelete={vi.fn()} />
+    );
 
-    await user.selectOptions(screen.getByRole("combobox"), "user");
+    await user.click(screen.getByRole("button", { name: /resetar senha/i }));
+    expect(onResetPassword).toHaveBeenCalled();
 
-    expect(onRoleChange).toHaveBeenCalledWith("user");
+    const toggleBtn = screen.getByRole("button", { name: /desativar/i });
+    await user.click(toggleBtn);
+    expect(onToggleStatus).toHaveBeenCalled();
   });
 
-  it("does not offer 'Root' as a role option for someone else's account", () => {
-    render(<UserRow user={bob} isSelf={false} onRoleChange={vi.fn()} onDelete={vi.fn()} />);
+  it("labels the toggle-status button 'Reativar' for a disabled user", () => {
+    render(
+      <UserRow
+        user={{ ...baseUser, status: "disabled", active: false }}
+        isSelf={false}
+        manageable
+        canDelete={false}
+        onResetPassword={vi.fn()}
+        onToggleStatus={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
 
-    expect(screen.queryByRole("option", { name: "Root" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reativar/i })).toBeInTheDocument();
   });
 
-  it("offers 'Root' as a role option only when editing your own account", () => {
-    render(<UserRow user={rootUser} isSelf onRoleChange={vi.fn()} onDelete={vi.fn()} />);
+  it("shows delete only when canDelete, independent of manageable", () => {
+    const { rerender } = render(
+      <UserRow user={baseUser} isSelf={false} manageable canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
+    expect(screen.queryByRole("button", { name: /excluir/i })).not.toBeInTheDocument();
 
-    expect(screen.getByRole("option", { name: "Root" })).toBeInTheDocument();
+    rerender(
+      <UserRow user={baseUser} isSelf={false} manageable={false} canDelete onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
+    expect(screen.getByRole("button", { name: /excluir/i })).toBeInTheDocument();
   });
 
-  it("calls onDelete when the delete button is clicked", async () => {
-    const onDelete = vi.fn();
-    const user = userEvent.setup();
-    render(<UserRow user={bob} isSelf={false} onRoleChange={vi.fn()} onDelete={onDelete} />);
+  it("shows '—' when the user has no teams", () => {
+    render(
+      <UserRow user={{ ...baseUser, teams: [] }} isSelf={false} manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
 
-    await user.click(screen.getByRole("button", { name: /delete user/i }));
-
-    expect(onDelete).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not render a delete button for your own account (self-delete is refused by the API)", () => {
-    render(<UserRow user={rootUser} isSelf onRoleChange={vi.fn()} onDelete={vi.fn()} />);
-
-    expect(screen.queryByRole("button", { name: /delete user/i })).not.toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 });

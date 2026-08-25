@@ -4,6 +4,7 @@ import { useCurrentUser } from "../hooks/useCurrentUser";
 import { listApplications } from "../api/applications";
 import { listApprovableApprovals, listPendingApprovals } from "../api/approvals";
 import { listTeams } from "../api/teams";
+import { listUsers } from "../api/users";
 import { logout } from "../api/profile";
 import { Icon, type IconName } from "./Icon";
 import { RoleBadge } from "./RoleBadge";
@@ -26,14 +27,18 @@ import { UserMenu } from "./UserMenu";
 // como título de página (page-title/breadcrumb), mas o item da sidebar continua "Approvals";
 // "Configurar" só troca de aba dentro da mesma tela, nunca navega.
 //
-// "Users" (User Management) e "Guia de início" (onboarding) FORAM cogitados como itens de nav
-// mas: "Users" nunca teve texto confirmado (removido — ver /user-management, rota direta sem
-// nav); "Guia de início" É confirmado (ícone "rocket", abre um OnboardingModal de 7 passos) mas
-// mapeia pra uma feature inteira ainda não construída nesta reescrita — adicionar o item de nav
-// sem destino real seria um clique morto, então continua de fora até o modal existir.
-const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean; icon: IconName; alwaysShowCount?: boolean }[] = [
+// "Usuários" (User Management) FOI removido do menu numa fase anterior por não ter texto
+// confirmado no protótipo — o protótipo foi atualizado depois e agora tem uma tela de usuários
+// de verdade (UsersView/UserModal/TempPasswordModal/StatusPill), com este item de nav
+// confirmado: `{canManageUsers && <button>...<Icon name="user" size={17}/> Usuários
+// <span className="count">{users.length}</span></button>}`, `canManageUsers =
+// role === "root" || role === "admin"`. "Guia de início" continua de fora: é confirmado (ícone
+// "rocket", abre um OnboardingModal de 7 passos) mas mapeia pra uma feature inteira ainda não
+// construída nesta reescrita — adicionar o item de nav sem destino real seria um clique morto.
+const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean; adminOrRoot?: boolean; icon: IconName; alwaysShowCount?: boolean }[] = [
   { to: "/", label: "Applications", end: true, icon: "apps", alwaysShowCount: true },
   { to: "/teams", label: "Teams & people", rootOnly: true, icon: "users", alwaysShowCount: true },
+  { to: "/users", label: "Usuários", adminOrRoot: true, icon: "user", alwaysShowCount: true },
   { to: "/approvals", label: "Approvals", icon: "check" },
   { to: "/history", label: "History", icon: "clock" },
 ];
@@ -47,14 +52,14 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean;
 function Crumbs({ pathname, onHome }: { pathname: string; onHome: () => void }) {
   const now = pathname.startsWith("/teams")
     ? "Teams & people"
-    : pathname.startsWith("/approvals")
-      ? "Approval Management"
-      : pathname.startsWith("/history")
-        ? "History"
-        : pathname.startsWith("/account")
-          ? "Account security"
-          : pathname.startsWith("/user-management")
-            ? "User management"
+    : pathname.startsWith("/users")
+      ? "Usuários"
+      : pathname.startsWith("/approvals")
+        ? "Approval Management"
+        : pathname.startsWith("/history")
+          ? "History"
+          : pathname.startsWith("/account")
+            ? "Account security"
             : null;
 
   return (
@@ -83,8 +88,12 @@ export function AppShell() {
   const [appCount, setAppCount] = useState(0);
   const [teamCount, setTeamCount] = useState(0);
 
+  const [userCount, setUserCount] = useState(0);
+
   const authenticatedUserId = currentUser.status === "authenticated" ? currentUser.user.id : null;
   const authenticatedUserIsRoot = currentUser.status === "authenticated" && currentUser.user.role === "root";
+  const authenticatedUserCanManageUsers =
+    currentUser.status === "authenticated" && (currentUser.user.role === "root" || currentUser.user.role === "admin");
 
   useEffect(() => {
     if (!authenticatedUserId) return;
@@ -132,9 +141,25 @@ export function AppShell() {
     };
   }, [authenticatedUserId, authenticatedUserIsRoot]);
 
+  useEffect(() => {
+    if (!authenticatedUserId || !authenticatedUserCanManageUsers) return;
+    let cancelled = false;
+    listUsers()
+      .then((users) => {
+        if (!cancelled) setUserCount(users.length);
+      })
+      .catch(() => {
+        // Idem: contagem informativa no badge de nav, não crítica.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticatedUserId, authenticatedUserCanManageUsers]);
+
   function badgeCountFor(to: string): number {
     if (to === "/") return appCount;
     if (to === "/teams") return teamCount;
+    if (to === "/users") return userCount;
     if (to === "/approvals") return pendingCount;
     return 0;
   }
@@ -172,7 +197,9 @@ export function AppShell() {
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {NAV_ITEMS.filter((item) => !item.rootOnly || user.role === "root").map((item) => {
+          {NAV_ITEMS.filter(
+            (item) => (!item.rootOnly || user.role === "root") && (!item.adminOrRoot || user.role === "root" || user.role === "admin")
+          ).map((item) => {
             const count = badgeCountFor(item.to);
             const showCount = item.alwaysShowCount || count > 0;
             return (

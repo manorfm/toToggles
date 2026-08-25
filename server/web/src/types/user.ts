@@ -2,18 +2,52 @@
 // serializado (json:"-").
 export type UserRole = "root" | "admin" | "user";
 
+// Derivado no servidor (User.RefreshStatus), nunca escolhido diretamente pelo client.
+// Confirmado no protótipo (data.js#USER_STATUS): "disabled" tem prioridade sobre
+// "pending_first_login" — uma conta desativada continua desativada mesmo com a senha
+// provisória ainda não trocada.
+export type UserStatus = "active" | "pending_first_login" | "disabled";
+
+export interface UserTeam {
+  id: string;
+  name: string;
+}
+
 export interface User {
   id: string;
   username: string;
   role: UserRole;
   must_change_password: boolean;
+  active: boolean;
+  status: UserStatus;
+  teams?: UserTeam[];
   created_at: string;
   updated_at: string;
 }
 
-// POST /users — a senha só existe nesta resposta (docs/rest-flow.md §3: gerada pelo
-// servidor, nunca recuperável de novo), mesmo padrão de reveal-once do secret key.
+// POST /users (docs/rest-flow.md §3) — confirmado no protótipo real (UserModal): o time é
+// escolhido na própria criação, não é mais um passo separado. isApprover só tem efeito quando
+// quem cria é root criando um admin — o servidor reforça isso mesmo que o client mande true
+// fora desse caso.
+export interface CreateUserInput {
+  username: string;
+  role: "admin" | "user";
+  teamId: string;
+  isApprover?: boolean;
+}
+
+// A senha só existe nesta resposta (gerada pelo servidor, nunca recuperável de novo depois),
+// mesmo padrão de reveal-once do secret key. warning é preenchido quando o usuário foi criado
+// mas associá-lo ao time (ou marcá-lo aprovador) falhou — não desfazemos a criação por isso.
 export interface CreateUserResult {
+  user: User;
+  password: string;
+  warning?: string;
+}
+
+// POST /users/:id/reset-password — mesmo contrato de reveal-once; não existe endpoint pra
+// reler uma senha já mostrada (só o hash fica guardado), resetar é o único caminho.
+export interface ResetPasswordResult {
   user: User;
   password: string;
 }

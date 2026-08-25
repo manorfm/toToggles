@@ -69,7 +69,7 @@ func InitHandlers(db *gorm.DB) {
 	toggleHandler = NewToggleHandler(toggleUseCase)
 	authHandler = NewAuthHandler(authUseCase)
 	userHandler = NewUserHandler(userUseCase)
-	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase)
+	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase, approvalUseCase)
 	teamHandler = NewTeamHandler(teamUseCase)
 	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase, appUseCase)
 	approvalHandler = NewApprovalHandler(approvalUseCase)
@@ -197,6 +197,14 @@ func UpdateUser(c *gin.Context) {
 
 func DeleteUser(c *gin.Context) {
 	userManagementHandler.DeleteUser(c)
+}
+
+func ResetUserPassword(c *gin.Context) {
+	userManagementHandler.ResetUserPassword(c)
+}
+
+func SetUserStatus(c *gin.Context) {
+	userManagementHandler.SetUserStatus(c)
 }
 
 func ChangePassword(c *gin.Context) {

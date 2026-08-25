@@ -17,14 +17,33 @@ function FakeShell({ user }: { user: AuthenticatedUser }) {
 
 function renderScreen(user: AuthenticatedUser = root) {
   return render(
-    <MemoryRouter initialEntries={["/user-management"]}>
+    <MemoryRouter initialEntries={["/users"]}>
       <Routes>
         <Route element={<FakeShell user={user} />}>
-          <Route path="/user-management" element={<UserManagementScreen />} />
+          <Route path="/users" element={<UserManagementScreen />} />
         </Route>
       </Routes>
     </MemoryRouter>
   );
+}
+
+function rootFixture() {
+  return { id: "1", username: "root", role: "root", must_change_password: false, active: true, status: "active", teams: [], created_at: "", updated_at: "" };
+}
+
+function bobFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "2",
+    username: "bob",
+    role: "user",
+    must_change_password: false,
+    active: true,
+    status: "active",
+    teams: [{ id: "t1", name: "Payments Squad" }],
+    created_at: "",
+    updated_at: "",
+    ...overrides,
+  };
 }
 
 describe("UserManagementScreen", () => {
@@ -33,23 +52,12 @@ describe("UserManagementScreen", () => {
   });
 
   it("lists every user returned by the API", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(200, {
-          success: true,
-          users: [
-            { id: "1", username: "root", role: "root", must_change_password: false, created_at: "", updated_at: "" },
-            { id: "2", username: "bob", role: "admin", must_change_password: false, created_at: "", updated_at: "" },
-          ],
-        })
-      )
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] })));
 
     renderScreen();
 
-    expect(await screen.findByText("root")).toBeInTheDocument();
-    expect(screen.getByText("bob")).toBeInTheDocument();
+    expect(await screen.findByText("@root")).toBeInTheDocument();
+    expect(screen.getByText("@bob")).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no users besides the caller", async () => {
@@ -57,108 +65,133 @@ describe("UserManagementScreen", () => {
 
     renderScreen();
 
-    expect(await screen.findByText(/nenhum usuário/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nenhum usuário encontrado/i)).toBeInTheDocument();
+  });
+
+  it("filters the list by the search box", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] })));
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("@bob");
+
+    await user.type(screen.getByPlaceholderText(/buscar por username/i), "bob");
+
+    expect(screen.getByText("@bob")).toBeInTheDocument();
+    expect(screen.queryByText("@root")).not.toBeInTheDocument();
+  });
+
+  it("shows a badge counting users still on their temporary password", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture({ status: "pending_first_login" })] }))
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText("1 aguardando 1º acesso")).toBeInTheDocument();
   });
 
   it("creates a user, shows the one-time password modal, and adds them to the list", async () => {
     let created = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
       if (path === "/api/users" && init?.method === "POST") {
         created = true;
-        return Promise.resolve(
-          jsonResponse(201, {
-            success: true,
-            user: { id: "2", username: "bob", role: "user", must_change_password: true, created_at: "", updated_at: "" },
-            password: "Xk9$mQ2pLw#T",
-          })
-        );
+        return Promise.resolve(jsonResponse(201, { success: true, user: bobFixture({ status: "pending_first_login" }), password: "Xk9$mQ2pLw#T" }));
       }
-      const users = [{ id: "1", username: "root", role: "root", must_change_password: false, created_at: "", updated_at: "" }];
-      if (created) users.push({ id: "2", username: "bob", role: "user", must_change_password: true, created_at: "", updated_at: "" });
+      const users = created ? [rootFixture(), bobFixture({ status: "pending_first_login" })] : [rootFixture()];
       return Promise.resolve(jsonResponse(200, { success: true, users }));
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
     renderScreen();
-    await screen.findByText("root");
+    await screen.findByText("@root");
 
-    await user.click(screen.getByRole("button", { name: /new user/i }));
+    await user.click(screen.getByRole("button", { name: /criar usuário/i }));
+    await screen.findByRole("option", { name: "Payments Squad" });
     await user.type(screen.getByLabelText(/username/i), "bob");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await user.click(screen.getAllByRole("button", { name: /^criar usuário$/i })[1]);
 
     expect(await screen.findByText("Xk9$mQ2pLw#T")).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: /done/i }));
+    await user.click(screen.getByRole("button", { name: /entendi/i }));
 
-    expect(screen.getByText("bob")).toBeInTheDocument();
+    expect(screen.getByText("@bob")).toBeInTheDocument();
   });
 
-  it("changes a user's role", async () => {
-    let bobRole: "user" | "admin" = "user";
+  it("resets a user's password from the row and shows the new one-time password", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/api/users/2" && init?.method === "PUT") {
-        bobRole = "admin";
-        return Promise.resolve(
-          jsonResponse(200, {
-            success: true,
-            message: "User updated successfully",
-            user: { id: "2", username: "bob", role: bobRole, must_change_password: false, created_at: "", updated_at: "" },
-          })
-        );
+      if (path === "/api/users/2/reset-password" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse(200, { success: true, user: bobFixture({ status: "pending_first_login" }), password: "Nq7!vRxK2pLm" }));
       }
-      return Promise.resolve(
-        jsonResponse(200, {
-          success: true,
-          users: [
-            { id: "1", username: "root", role: "root", must_change_password: false, created_at: "", updated_at: "" },
-            { id: "2", username: "bob", role: bobRole, must_change_password: false, created_at: "", updated_at: "" },
-          ],
-        })
-      );
+      return Promise.resolve(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] }));
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
     renderScreen();
-    await screen.findByText("bob");
+    await screen.findByText("@bob");
 
-    await user.selectOptions(screen.getByLabelText(/role for bob/i), "admin");
+    await user.click(screen.getByRole("button", { name: /resetar senha/i }));
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/users/2", expect.objectContaining({ method: "PUT", body: JSON.stringify({ role: "admin" }) }));
-    await vi.waitFor(() => expect(screen.getByLabelText(/role for bob/i)).toHaveValue("admin"));
+    expect(await screen.findByText("Senha provisória redefinida")).toBeInTheDocument();
+    expect(screen.getByText("Nq7!vRxK2pLm")).toBeInTheDocument();
   });
 
-  it("deletes a user via the confirm modal and removes them from the list", async () => {
+  it("toggles a user's status (disable/reactivate) from the row", async () => {
+    let active = true;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/users/2/status" && init?.method === "PUT") {
+        active = JSON.parse(init.body as string).active;
+        return Promise.resolve(jsonResponse(200, { success: true, user: bobFixture({ active, status: active ? "active" : "disabled" }) }));
+      }
+      return Promise.resolve(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture({ active, status: active ? "active" : "disabled" })] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("@bob");
+
+    await user.click(screen.getByRole("button", { name: /desativar/i }));
+
+    await vi.waitFor(() => expect(screen.getByText("Desativado")).toBeInTheDocument());
+  });
+
+  it("deletes a user via the confirm modal and removes them from the list (root only)", async () => {
     let deleted = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
       if (path === "/api/users/2" && init?.method === "DELETE") {
         deleted = true;
         return Promise.resolve(jsonResponse(200, { success: true, message: "User deleted successfully" }));
       }
-      return Promise.resolve(
-        jsonResponse(200, {
-          success: true,
-          users: deleted
-            ? [{ id: "1", username: "root", role: "root", must_change_password: false, created_at: "", updated_at: "" }]
-            : [
-                { id: "1", username: "root", role: "root", must_change_password: false, created_at: "", updated_at: "" },
-                { id: "2", username: "bob", role: "user", must_change_password: false, created_at: "", updated_at: "" },
-              ],
-        })
-      );
+      return Promise.resolve(jsonResponse(200, { success: true, users: deleted ? [rootFixture()] : [rootFixture(), bobFixture()] }));
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
     renderScreen();
-    await screen.findByText("bob");
+    await screen.findByText("@bob");
 
-    await user.click(screen.getByRole("button", { name: /delete user/i }));
+    await user.click(screen.getByRole("button", { name: /excluir usuário/i }));
     await screen.findByText(/delete user/i, { selector: ".modal-title" });
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
-    await vi.waitFor(() => expect(screen.queryByText("bob")).not.toBeInTheDocument());
+    await vi.waitFor(() => expect(screen.queryByText("@bob")).not.toBeInTheDocument());
     expect(deleted).toBe(true);
+  });
+
+  it("does not show manage actions on the caller's own row", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] })));
+
+    renderScreen();
+    await screen.findByText("@root");
+
+    const rows = screen.getAllByText(/^@/);
+    expect(rows).toHaveLength(2);
+    // Only bob's row should offer manage actions — root's own row shows none.
+    expect(screen.getAllByRole("button", { name: /resetar senha/i })).toHaveLength(1);
   });
 });

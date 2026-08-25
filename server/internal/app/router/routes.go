@@ -83,15 +83,17 @@ func Init(router *gin.Engine) {
 				secretKeys.DELETE("/:id", handler.RequireAdmin(), handler.DeleteSecretKey)
 			}
 
-			// Rotas de gestão de usuários (apenas root pode acessar)
+			// Rotas de gestão de usuários — criar/listar: root ou admin (admin escopado aos
+			// próprios times, checado no handler); as demais mutações continuam root only.
 			userManagement := protected.Group("/users")
-			userManagement.Use(handler.RequireRoot())
 			{
-				userManagement.POST("", handler.CreateUser)
-				userManagement.GET("", handler.ListUsers)
-				userManagement.GET("/:id", handler.GetUser)
-				userManagement.PUT("/:id", handler.UpdateUser)
-				userManagement.DELETE("/:id", handler.DeleteUser)
+				userManagement.POST("", handler.RequireAdmin(), handler.CreateUser)
+				userManagement.GET("", handler.RequireAdmin(), handler.ListUsers)
+				userManagement.GET("/:id", handler.RequireRoot(), handler.GetUser)
+				userManagement.PUT("/:id", handler.RequireRoot(), handler.UpdateUser)
+				userManagement.DELETE("/:id", handler.RequireRoot(), handler.DeleteUser)
+				userManagement.POST("/:id/reset-password", handler.RequireAdmin(), handler.ResetUserPassword)
+				userManagement.PUT("/:id/status", handler.RequireAdmin(), handler.SetUserStatus)
 			}
 
 			// Rotas de usuário logado (todos podem acessar)

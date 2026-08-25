@@ -160,11 +160,15 @@ ToToogle é uma plataforma completa de gerenciamento de feature toggles (feature
 - `POST /api/auth/logout` - Logout do usuário
 - `POST /api/auth/change-password` - Alteração de senha
 
-### Rotas de Usuários (Root Only)
-- `POST /api/users` - Criar usuário
-- `GET /api/users` - Listar usuários
-- `PUT /api/users/:id` - Atualizar usuário
-- `DELETE /api/users/:id` - Remover usuário
+### Rotas de Usuários (criar/listar: root ou admin, admin escopado aos próprios times via
+### `canManageUser`; as demais: root only)
+- `POST /api/users` - Criar usuário (root: qualquer time; admin: só os seus)
+- `GET /api/users` - Listar usuários (admin só vê quem compartilha time consigo + si mesmo)
+- `GET /api/users/:id` - Buscar usuário (root only)
+- `PUT /api/users/:id` - Atualizar usuário (root only)
+- `DELETE /api/users/:id` - Remover usuário (root only)
+- `POST /api/users/:id/reset-password` - Gerar nova senha provisória (root ou admin, escopado por `canManageUser`)
+- `PUT /api/users/:id/status` - Ativar/desativar (root ou admin, escopado por `canManageUser`)
 
 ### Rotas de Times (Protegidas)
 - `POST /api/teams` - Criar time
@@ -631,19 +635,53 @@ go test -coverprofile=coverage.out ./...  # Com coverage
   ver "Separação API vs SPA" na seção "API e Rotas" acima pro detalhe completo da mudança
   estrutural (não foi um remendo pontual como o do bullet anterior, e sim uma mudança na forma
   como o middleware inteiro decide servir API vs SPA).
-- ✅ **User Management** (`/user-management`, `screens/UserManagementScreen.tsx`, root only) —
-  sem tela equivalente no protótipo (só a referência em `MemberRow.tsx` sobre role ser global,
-  não por time). Rota client-side é `/user-management`, não `/users`: esse último é o path real
-  de API hoje (`GET`/`POST /api/users`) — na época em que essa tela foi construída a API ainda
-  era bare `/users` (path idêntico à rota client-side cogitada, sem solução por boundary de
-  string), o que já apontava pra necessidade da correção estrutural que veio depois.
-  Criar usuário reaproveita o padrão de reveal-once já usado pela secret key
-  (`components/GeneratedPasswordModal.tsx`, mesma estrutura de `GeneratedKeyModal.tsx`): a senha
-  gerada pelo servidor só existe na resposta de `POST /users` (docs/rest-flow.md §3), nunca mais
-  recuperável. Troca de role usa um `<select>` por linha (`UserRow`) — "Root" só aparece como
-  opção na própria linha do usuário logado (atribuir root pra outra conta sempre dá `403`).
-  Apagar usuário usa `ConfirmModal`; o botão de apagar nem aparece na própria linha (auto-exclusão
-  sempre recusada pela API).
+- ✅ **User Management** (`/users`, `screens/UserManagementScreen.tsx`, root ou admin) —
+  **reconstruído do zero** depois que o protótipo (`docs/toToggle v2.1.html`) ganhou uma tela
+  real de usuários que não existia na versão anterior (`UsersView`/`UserModal`/
+  `TempPasswordModal`/`StatusPill`/`UserRow` em `users.jsx`, decodificado do bundle comprimido —
+  ver o aviso grande no topo da seção "Frontend"). Rota client-side mudou de `/user-management`
+  pra `/users`: seguro desde a migração de toda a API pra `/api` (antes esse path colidia com o
+  prefixo real da API de usuários).
+  - **Item de nav "Usuários" confirmado** (ícone `user`, `canManageUsers = role root || admin`,
+    entre "Teams & people" e "Approvals") — trazido de volta ao `AppShell` depois de ter sido
+    removido numa fase anterior por não ter respaldo nenhum no protótipo na época.
+  - **Criação passou a exigir time e suporta aprovador desde o início**: `UserModal` tem campo
+    Time (root escolhe qualquer time; admin só os seus, via `listTeamOptions` já existente) e um
+    switch "Aprovador do time" visível só quando root está criando um admin. O backend
+    (`POST /api/users`) ganhou `team_id` (obrigatório — associa o usuário ao time na mesma
+    chamada, não é mais um passo separado) e `is_approver` (reforçado no servidor: só tem efeito
+    quando quem chama é root criando um admin, mesmo que o client mande diferente).
+  - **`canManageUser` — nova regra de autorização, portada 1:1 do protótipo real**: root
+    gerencia qualquer usuário (exceto root/si mesmo); admin gerencia qualquer usuário que
+    compartilhe pelo menos um time consigo, **inclusive outro admin**, exceto root/si mesmo;
+    `user` não gerencia ninguém. Isso agora governa `GET /api/users` (lista filtrada pra admin:
+    só quem compartilha time + a própria conta), `POST /api/users/:id/reset-password` (novo) e
+    `PUT /api/users/:id/status` (novo). **Deliberadamente NÃO estendido a `DELETE
+    /api/users/:id`** nesta passada — excluir continua root-only; ampliar pro mesmo escopo de
+    `canManageUser` fica pra uma iteração futura (registrado aqui pra não se perder).
+  - **`status` é um campo derivado, nunca armazenado direto** (`entity.User.RefreshStatus`,
+    chamado via hook `AfterFind` do GORM em toda leitura): `"disabled"` (tem prioridade) quando
+    `active=false`; `"pending_first_login"` quando `must_change_password=true`; `"active"` caso
+    contrário. Só uma coluna nova de verdade foi adicionada (`active BOOLEAN DEFAULT TRUE`,
+    migration `20260824000000_add_user_active_column.sql`) — `pending_first_login` reaproveita o
+    `must_change_password` que já existia, sem duplicar estado.
+  - **`POST /api/users/:id/reset-password`** (novo): gera uma senha provisória nova e invalida a
+    anterior. **`PUT /api/users/:id/status`** (novo): `{active: bool}`, desativa/reativa sem
+    apagar a conta. Confirmado ao vivo (root cria admin escopado a um time com aprovador=true →
+    `GET /teams/:id/approvers` reflete a associação; admin lista só a si mesmo + colega de time;
+    admin cria dentro do próprio time e recebe `403` fora dele; admin reseta senha de colega mas
+    recebe `403` tentando mexer em alguém de outro time ou em si mesmo; `DELETE` continua
+    recusando pra admin com `403` "Root privileges required").
+  - **Duas divergências forçadas pelo modelo de dados real** (não por escolha): o protótipo tem
+    "Nome completo" (separado do username, vira slug); `entity.User` só tem `Username`, sem campo
+    de nome de exibição — a tela só pede username. O protótipo tem um botão "Ver senha" pra reler
+    a senha já mostrada enquanto `pending_first_login` — só é possível lá porque é estado em
+    memória; com bcrypt uma senha já exibida nunca pode ser lida de novo, então só existe
+    "Resetar senha" (gera uma nova, sempre).
+  - **A troca de role por `<select>` (existente antes) foi removida do `UserRow`** — o `UserRow`
+    confirmado do protótipo não tem esse controle (só `RoleBadge` somente-leitura); o endpoint
+    `PUT /api/users/:id` continua existindo e funcionando, só não tem mais um ponto de entrada na
+    UI. Registrado como capacidade perdida na tela, não no backend.
 - **Bug real de status HTTP encontrado e corrigido**: `POST /users` com username duplicado
   devolvia `500 Internal Server Error` em vez de `409 Conflict` — `UserUseCase.CreateUser`
   retornava um `errors.New()` genérico em vez do `*entity.AppError{Code: ErrCodeAlreadyExists}`

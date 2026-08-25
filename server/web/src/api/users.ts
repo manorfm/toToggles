@@ -1,34 +1,38 @@
 import { apiFetch } from "./client";
-import type { CreateUserResult, User, UserRole } from "../types/user";
+import type { CreateUserInput, CreateUserResult, ResetPasswordResult, User } from "../types/user";
 
 export async function listUsers(): Promise<User[]> {
   const body = await apiFetch<{ success: boolean; users?: User[] }>("/users");
   return body.users ?? [];
 }
 
-export interface CreateUserInput {
-  username: string;
-  // "root" é rejeitado pela API na criação (docs/rest-flow.md §3) — só existe via
-  // PUT /users/:id, e só quando o próprio root está editando a própria conta.
-  role: "admin" | "user";
-}
-
 export async function createUser(input: CreateUserInput): Promise<CreateUserResult> {
-  const body = await apiFetch<{ success: boolean; user: User; password: string }>("/users", {
+  const body = await apiFetch<{ success: boolean; user: User; password: string; warning?: string }>("/users", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ username: input.username, role: input.role, team_id: input.teamId, is_approver: input.isApprover ?? false }),
   });
-  return { user: body.user, password: body.password };
+  return { user: body.user, password: body.password, warning: body.warning };
 }
 
 export async function deleteUser(id: string): Promise<void> {
   await apiFetch<{ success: boolean; message: string }>(`/users/${id}`, { method: "DELETE" });
 }
 
-export async function updateUserRole(id: string, role: UserRole): Promise<User> {
-  const body = await apiFetch<{ success: boolean; message: string; user: User; team_warnings?: string[] }>(`/users/${id}`, {
+// POST /users/:id/reset-password (docs/rest-flow.md §3) — gera uma nova senha provisória e
+// invalida a anterior; não existe (nem pode existir com segurança) um jeito de reler uma senha
+// já mostrada, já que o servidor só guarda o hash bcrypt.
+export async function resetUserPassword(id: string): Promise<ResetPasswordResult> {
+  const body = await apiFetch<{ success: boolean; user: User; password: string }>(`/users/${id}/reset-password`, {
+    method: "POST",
+  });
+  return { user: body.user, password: body.password };
+}
+
+// PUT /users/:id/status — desativa/reativa sem apagar a conta.
+export async function setUserStatus(id: string, active: boolean): Promise<User> {
+  const body = await apiFetch<{ success: boolean; user: User }>(`/users/${id}/status`, {
     method: "PUT",
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({ active }),
   });
   return body.user;
 }

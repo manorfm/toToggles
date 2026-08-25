@@ -24,9 +24,10 @@ export function App() {
           <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
           <Route path="/account/security" element={<AccountSecurityScreen />} />
           <Route path="/teams" element={<TeamsScreen />} />
-          {/* "/user-management", não "/users": esse último é o prefixo real de API
-              (GET/POST /users) e nunca receberia a casca do SPA num hard refresh. */}
-          <Route path="/user-management" element={<UserManagementScreen />} />
+          {/* "/users" — seguro desde que toda a API sessão/secret-key migrou pra debaixo de
+              /api (ver "Separação API vs SPA" em server/CLAUDE.md); antes desse namespace
+              único, este path colidia com o prefixo real de API (GET/POST /users). */}
+          <Route path="/users" element={<UserManagementScreen />} />
           {/* Approvals + Approval Management são a MESMA tela com abas no protótipo
               (get_screen_full("ApprovalsView")) — "Configurar" só troca de aba, não navega. */}
           <Route path="/approvals" element={<ApprovalsScreen />} />

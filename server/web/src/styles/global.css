@@ -547,6 +547,17 @@ input[type="checkbox"] {
   color: var(--ink-3);
   border: 1px solid var(--border);
 }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 .badge.on {
   color: var(--accent);
   background: var(--accent-soft);
@@ -920,6 +931,29 @@ input[type="checkbox"] {
   background: var(--surface-2);
   border: 2px dashed var(--border-hi);
   border-radius: var(--radius-sm);
+}
+.temp-pw-box {
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 16px var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.temp-pw-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+}
+.temp-pw-value {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  user-select: all;
 }
 .skey-val {
   font-family: var(--font-mono);

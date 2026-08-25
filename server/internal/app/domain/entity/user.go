@@ -24,8 +24,13 @@ type User struct {
 	Password           string    `json:"-" gorm:"not null;type:varchar(255)"` // Hash da senha
 	Role               UserRole  `json:"role" gorm:"not null;type:varchar(20);default:'user'"`
 	MustChangePassword bool      `json:"must_change_password" gorm:"default:false"` // Obriga troca de senha no próximo login
+	Active             bool      `json:"active" gorm:"not null;default:true"`       // Desativado = login bloqueado, mas a conta não é apagada
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
+
+	// Status é derivado, nunca persistido — ver RefreshStatus/AfterFind. Confirmado no protótipo
+	// (StatusPill, get_component_spec("UserRow")): "active" | "disabled" | "pending_first_login".
+	Status string `json:"status" gorm:"-"`
 
 	// Relacionamentos
 	Applications []Application `json:"applications,omitempty" gorm:"many2many:user_applications;"`
@@ -40,6 +45,28 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// AfterFind popula Status sempre que o GORM carrega um User do banco (Find/First/etc.) — ponto
+// único, em vez de cada handler ter que lembrar de chamar RefreshStatus depois de todo GetByID/
+// GetAll. Construtores em memória (ex.: CreateUser antes do insert) ainda precisam chamar
+// RefreshStatus manualmente, já que não passam por uma leitura.
+func (u *User) AfterFind(tx *gorm.DB) error {
+	u.RefreshStatus()
+	return nil
+}
+
+// RefreshStatus deriva Status a partir de Active/MustChangePassword. Disabled tem prioridade
+// sobre pending_first_login: uma conta desativada continua desativada mesmo que a senha
+// provisória nunca tenha sido trocada.
+func (u *User) RefreshStatus() {
+	switch {
+	case !u.Active:
+		u.Status = "disabled"
+	case u.MustChangePassword:
+		u.Status = "pending_first_login"
+	default:
+		u.Status = "active"
+	}
+}
 
 // SetPassword cria o hash da senha
 func (u *User) SetPassword(password string) error {
