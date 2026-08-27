@@ -33,17 +33,18 @@ func InitHandlers(db *gorm.DB) {
 	approvalRequestRepo := database.NewApprovalRequestRepository(db)
 	approvalSettingsRepo := database.NewApprovalSettingsRepository(db)
 	teamApproverRepo := database.NewTeamApproverRepository(db)
+	sessionRepo := database.NewSessionRepository(db)
 
 	// Inicializa sistema de autenticação
 	authManager := auth.NewAuthManager()
-	localStrategy := auth.NewLocalAuthStrategy(userRepo, []byte("jwt-secret-key"))
+	localStrategy := auth.NewLocalAuthStrategy(userRepo)
 	authManager.RegisterStrategy("local", localStrategy)
 
 	// Inicializa use cases
 	appUseCase := usecase.NewApplicationUseCase(appRepo, toggleRepo)
 	toggleUseCase := usecase.NewToggleUseCase(toggleRepo, appRepo)
-	authUseCase := usecase.NewAuthUseCase(userRepo, authManager)
-	userUseCase := usecase.NewUserUseCase(userRepo)
+	authUseCase := usecase.NewAuthUseCase(userRepo, authManager, sessionRepo)
+	userUseCase := usecase.NewUserUseCase(userRepo, sessionRepo)
 	teamUseCase := usecase.NewTeamUseCase(teamRepo, userRepo, appRepo)
 	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)
 	approvalUseCase := usecase.NewApprovalUseCase(

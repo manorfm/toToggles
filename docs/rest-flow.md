@@ -65,9 +65,14 @@ Most routes require a session token, sent either as an HTTP-only cookie (`auth_t
 Authorization: Bearer <token>
 ```
 
-The token is an opaque string in the form `token_<userID>` (not a signed JWT despite the internal naming) — it
-is only resolvable server-side against the user table, so it is not a general-purpose bearer credential and
-must be treated as a session secret.
+The token is a 256-bit random value (32 bytes, hex-encoded — `entity.Session`/`entity.NewSession`), issued
+server-side on successful login and stored, hashed (SHA-256, never the raw value), in a `sessions` table. It
+is only resolvable server-side by hashing the presented token and looking up that hash, so it is not a
+general-purpose bearer credential and must be treated as a session secret. **Historical note**: an earlier
+version of this API used an unsigned, unverified `token_<userID>` format here — trivially forgeable by anyone
+who knew a user's ID. That was a real authentication bypass, fixed by replacing it with the real session
+mechanism described above; every session (and the separate, single-use `password_change` token issued by the
+forced-first-login flow) is invalidated on logout and on password change.
 
 > **Cross-origin caveat:** the `auth_token` cookie is set with `SameSite=Strict`
 > (`auth_handler.go`), so browsers will never send it on requests originating from a different
@@ -79,6 +84,13 @@ must be treated as a session secret.
 > working way to authenticate** against this API. Building such a frontend requires either
 > serving it from the same origin as the API, or a backend change (return the token in the
 > login response body, and/or relax `SameSite`) before a Bearer-based flow is possible.
+
+> **Deployment env vars** (all optional, safe defaults): `SERVER_PORT` (default `3056`), `DB_PATH`
+> (default `./db/toggles.db`), `COOKIE_SECURE` (default `true` — only set to `false` for local
+> HTTP-only development; the `auth_token`/`password_change_token` cookies won't be sent by the
+> browser over plain HTTP when this is `true`), `CORS_ALLOWED_ORIGINS` (comma-separated, default
+> empty — no cross-origin credentialed request is allowed unless a frontend is genuinely hosted on
+> a different origin from this API).
 
 The public toggle-read endpoint uses a different credential instead of a session:
 

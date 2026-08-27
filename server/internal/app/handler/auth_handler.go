@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/manorfm/totoogle/internal/app/config"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/middleware"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 )
 
@@ -60,6 +62,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Credenciais corretas — não penaliza o próximo login legítimo desse IP por tentativas
+	// erradas anteriores (ex.: mesmo IP via NAT compartilhado).
+	middleware.ResetLoginRateLimit(c.ClientIP())
+
 	// Se o usuário precisa trocar a senha, não gerar token de autenticação
 	if result.User.MustChangePassword {
 		// Gerar um token temporário especial para mudança de senha
@@ -71,7 +77,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Set secure HTTP-only cookie com o token temporário
 		c.SetSameSite(http.SameSiteStrictMode)
 		c.SetCookie(
@@ -80,17 +86,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			3600, // 1 hora
 			"/",
 			"",
-			false, // não requer HTTPS em desenvolvimento
-			true,  // HTTP-only
+			config.CookieSecure(),
+			true, // HTTP-only
 		)
-		
+
 		// Retornar resposta indicando que precisa trocar senha
 		c.JSON(http.StatusOK, gin.H{
 			"success":              true,
 			"must_change_password": true,
-			"user_id":             result.User.ID,
-			"username":            result.User.Username,
-			"message":             "Password change required before login",
+			"user_id":              result.User.ID,
+			"username":             result.User.Username,
+			"message":              "Password change required before login",
 		})
 		return
 	}
@@ -106,13 +112,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Set secure HTTP-only cookie
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(
-		"auth_token",     // cookie name
-		result.Token,     // cookie value
-		3600*24*7,       // max age in seconds (7 days)
-		"/",             // path
-		"",              // domain (empty for current domain)
-		false,           // secure (set to true in production with HTTPS)
-		true,            // httpOnly
+		"auth_token",          // cookie name
+		result.Token,          // cookie value
+		3600*24*7,             // max age in seconds (7 days)
+		"/",                   // path
+		"",                    // domain (empty for current domain)
+		config.CookieSecure(), // secure — via COOKIE_SECURE, defaults to true
+		true,                  // httpOnly
 	)
 
 	c.JSON(http.StatusOK, LoginResponse{
@@ -123,17 +129,23 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // Logout realiza o logout do usuário
 func (h *AuthHandler) Logout(c *gin.Context) {
+	// Invalida a sessão no servidor — sem isso, o token continuaria "válido" até expirar
+	// sozinho mesmo depois do cookie ser limpo no cliente.
+	if token, err := c.Cookie("auth_token"); err == nil && token != "" {
+		_ = h.authUseCase.Logout(token)
+	}
+
 	// Clear the auth cookie
 	c.SetCookie(
-		"auth_token",  // cookie name
+		"auth_token", // cookie name
 		"",           // empty value
 		-1,           // max age -1 deletes the cookie
 		"/",          // path
 		"",           // domain
-		false,        // secure
-		true,         // httpOnly
+		config.CookieSecure(),
+		true, // httpOnly
 	)
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Logged out successfully",
@@ -158,7 +170,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 	}
 
 	var username, userID string
-	
+
 	// Se não foi fornecido user_id/username no request, tentar obter do token temporário
 	if req.UserID == "" || req.Username == "" {
 		tempToken, err := c.Cookie("password_change_token")
@@ -169,7 +181,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Validar token temporário
 		tokenUserID, tokenUsername, err := h.authUseCase.ValidatePasswordChangeToken(tempToken)
 		if err != nil {
@@ -179,7 +191,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		userID = tokenUserID
 		username = tokenUsername
 	} else {
@@ -224,7 +236,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// Limpar o cookie de token temporário após mudança bem-sucedida
 	c.SetCookie(
 		"password_change_token",
@@ -232,7 +244,7 @@ func (h *AuthHandler) ChangePasswordFirstTime(c *gin.Context) {
 		-1, // max age -1 deletes the cookie
 		"/",
 		"",
-		false,
+		config.CookieSecure(),
 		true,
 	)
 
@@ -273,8 +285,8 @@ func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 
 		if token == "" {
 			// Clear any invalid cookie
-			c.SetCookie("auth_token", "", -1, "/", "", false, true)
-			
+			c.SetCookie("auth_token", "", -1, "/", "", config.CookieSecure(), true)
+
 			// Se é uma requisição para a página principal, redirecionar para login
 			if c.Request.URL.Path == "/" {
 				c.Redirect(http.StatusTemporaryRedirect, "/login")
@@ -292,8 +304,8 @@ func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 		user, err := h.authUseCase.ValidateToken(token)
 		if err != nil {
 			// Clear invalid cookie
-			c.SetCookie("auth_token", "", -1, "/", "", false, true)
-			
+			c.SetCookie("auth_token", "", -1, "/", "", config.CookieSecure(), true)
+
 			// Se é uma requisição para a página principal, redirecionar para login
 			if c.Request.URL.Path == "/" {
 				c.Redirect(http.StatusTemporaryRedirect, "/login")
@@ -310,7 +322,7 @@ func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 
 		// Adicionar usuário ao contexto
 		c.Set("user", user)
-		
+
 		// Verificar se precisa trocar a senha (exceto na própria rota de troca de senha)
 		if user.MustChangePassword && c.Request.URL.Path != "/api/auth/change-password" && c.Request.URL.Path != "/change-password" {
 			// Se é uma requisição para a página principal, redirecionar para troca de senha
@@ -321,13 +333,13 @@ func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 			}
 			// Para APIs, retornar status especial
 			c.JSON(http.StatusPreconditionRequired, gin.H{
-				"error": "Password change required",
+				"error":    "Password change required",
 				"redirect": "/change-password",
 			})
 			c.Abort()
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -337,7 +349,7 @@ func (h *AuthHandler) ValidatePasswordChangeAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Primeiro verificar se há um token de autenticação normal
 		token, err := c.Cookie("auth_token")
-		
+
 		if err == nil {
 			// Se há token, verificar se o usuário precisa trocar senha
 			user, err := h.authUseCase.ValidateToken(token)
@@ -346,7 +358,7 @@ func (h *AuthHandler) ValidatePasswordChangeAccess() gin.HandlerFunc {
 				c.Next()
 				return
 			}
-			
+
 			// Se há token válido mas não precisa trocar senha, redirecionar para home
 			if err == nil && !user.MustChangePassword {
 				c.Redirect(http.StatusTemporaryRedirect, "/")
@@ -354,7 +366,7 @@ func (h *AuthHandler) ValidatePasswordChangeAccess() gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		// Verificar se há token temporário de mudança de senha
 		tempToken, err := c.Cookie("password_change_token")
 		if err == nil {
@@ -369,7 +381,7 @@ func (h *AuthHandler) ValidatePasswordChangeAccess() gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		// Se não há tokens válidos, redirecionar para login
 		c.Redirect(http.StatusTemporaryRedirect, "/login")
 		c.Abort()
@@ -492,7 +504,7 @@ func RequireApplicationAccess(permission entity.TeamPermissionLevel) gin.Handler
 			return
 		}
 
-		// Verificar permissões através dos teams (via use case seria melhor, 
+		// Verificar permissões através dos teams (via use case seria melhor,
 		// mas para middleware simples, faremos direto)
 		// TODO: Implementar verificação de permissões via teams
 		// Por enquanto, usar as permissões antigas baseadas em role

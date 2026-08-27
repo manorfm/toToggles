@@ -399,6 +399,9 @@ func (h *UserManagementHandler) ResetUserPassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, ResetPasswordResponse{Success: false, Error: "Failed to update user: " + err.Error()})
 		return
 	}
+	// Reset de senha é a resposta padrão a uma conta possivelmente comprometida — qualquer
+	// sessão existente do alvo deve morrer junto, não só a senha antiga.
+	_ = h.userUseCase.InvalidateSessions(userID)
 	user.RefreshStatus()
 
 	c.JSON(http.StatusOK, ResetPasswordResponse{Success: true, User: user, Password: randomPassword})

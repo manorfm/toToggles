@@ -27,7 +27,7 @@ func verifyDbFile(dbPath string) error {
 
 func InitializeDB() (*gorm.DB, error) {
 	logger := GetLogger("database")
-	dbPath := "./db/toggles.db"
+	dbPath := DBPath()
 
 	err := verifyDbFile(dbPath)
 	if err != nil {

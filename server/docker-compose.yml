@@ -4,9 +4,18 @@ services:
   totoogle:
     build: .
     ports:
-      - "8081:8081"
+      # A porta real que o binário escuta é 3056 (ver Dockerfile/SERVER_PORT) — o mapeamento
+      # antigo (8081:8081) nunca alcançava o servidor de verdade.
+      - "3056:3056"
     volumes:
       - ./db:/root/db
     environment:
       - GIN_MODE=release
+      # O volume acima monta em /root/db — sem isso, o binário grava no default
+      # (./db/toggles.db relativo ao diretório de trabalho da imagem) e o volume fica sem uso.
+      - DB_PATH=/root/db/toggles.db
+      - COOKIE_SECURE=true
+      # - CORS_ALLOWED_ORIGINS=https://your-frontend-domain.example.com  # só necessário se o
+      #   frontend for servido de uma origem diferente deste server — o caso comum (frontend
+      #   embutido no mesmo binário) não precisa disso.
     restart: unless-stopped 

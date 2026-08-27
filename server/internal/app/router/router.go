@@ -14,5 +14,5 @@ func Initialize() {
 
 	Init(router)
 
-	router.Run(":3056")
+	router.Run(":" + config.ServerPort())
 }

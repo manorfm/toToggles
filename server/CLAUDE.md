@@ -136,18 +136,99 @@ ToToogle é uma plataforma completa de gerenciamento de feature toggles (feature
 ## Sistema de Autenticação e Autorização
 
 ### Fluxo de Autenticação
-1. Login via POST `/auth/login` com username/password
-2. Validação de credenciais com bcrypt
-3. Criação de sessão com cookie HTTP-only
-4. Middleware de segurança valida sessões em rotas protegidas
+1. Login via POST `/api/auth/login` com username/password (rate-limitado por IP, ver abaixo)
+2. Validação de credenciais com bcrypt + checagem de `entity.User.Active`
+3. Emissão de uma sessão real (token opaco de 256 bits, ver abaixo) num cookie HTTP-only
+4. `ValidateToken()` (middleware) valida a sessão em toda rota protegida
+
+**Bypass de autenticação real encontrado e corrigido numa auditoria de produção.** O mecanismo de
+sessão inteiro era falso: `LocalAuthStrategy.generateJWT()` (nome do método era enganoso — nunca
+gerava JWT nenhum) devolvia literalmente `"token_" + user.ID`, e `AuthUseCase.ValidateToken()` só
+tirava esse prefixo e buscava o usuário por ID — **sem verificar assinatura, expiração ou
+qualquer segredo**. Qualquer pessoa que soubesse o ID (ULID) de um usuário — inclusive root —
+conseguia montar um cookie `auth_token` válido pra essa conta, sem senha nenhuma; IDs aparecem em
+várias respostas de API já autenticadas (listas de time, `created_by`/`approved_by` em
+aprovações). O fluxo de troca de senha obrigatória tinha o mesmo problema:
+`GeneratePasswordChangeToken` gerava `"temp_password_change_" + userID + "_" + username`, forjável
+por qualquer um que soubesse essas duas informações — igualmente públicas. Os testes existentes
+(`local_strategy_test.go`, `auth_usecase_test.go`) afirmavam esses formatos como comportamento
+**esperado**, então o bug nunca foi pego por eles.
+
+Corrigido substituindo por um esquema de sessão opaca server-side — reaproveitando 1:1 o padrão já
+usado por `entity.SecretKey` (32 bytes de `crypto/rand`, só o hash SHA-256 vai pro banco, nunca o
+valor bruto) em vez de introduzir JWT: este é um monólito único com SQLite, toda validação já
+batia (e continua batendo) no banco, então JWT só traria a complexidade de gerenciar uma chave de
+assinatura sem nenhum ganho real de "stateless".
+
+- **`entity.Session`** (`internal/app/domain/entity/session.go`) — `TokenHash` (SHA-256,
+  `uniqueIndex`), `UserID`, `Purpose` (`"auth"` ou `"password_change"` — os dois tipos de token
+  antigos viraram uma única tabela/mecanismo, só divergindo em TTL e em `password_change` ser de
+  uso único), `ExpiresAt`. `NewSession(userID, purpose, ttl)` gera o token bruto e devolve
+  `(*Session, rawToken, error)` — o valor bruto nunca é persistido.
+- **Migração**: `db/migrations/20260827000000_add_sessions_table.sql` (goose — ver "Sistema de
+  Migrações" abaixo; não é AutoMigrate).
+- **`AuthUseCase`** (`internal/app/usecase/auth_usecase.go`) ganhou `sessionRepo
+  repository.SessionRepository`. `Login` autentica e, se `Success` e `!MustChangePassword`, emite
+  uma sessão `Purpose: auth` (TTL 7 dias, `AuthSessionTTL`, casando com o `Max-Age` do cookie).
+  `ValidateToken` faz hash do token recebido, busca por hash, confere expiração, `Purpose ==
+  auth`, **e que a conta ainda está ativa** (uma sessão de um usuário desativado depois de emitida
+  deixa de validar). `Logout(token)` apaga a sessão de verdade (antes, só o cookie era limpo — a
+  sessão "válida" continuava existindo até expirar sozinha). `GeneratePasswordChangeToken`/
+  `ValidatePasswordChangeToken` usam `Purpose: password_change` (TTL 1h) e são de uso único
+  (`Validate...` apaga a sessão após consumida).
+- **Defesa em profundidade — trocar/resetar senha invalida sessões existentes**:
+  `ChangePasswordFirstTime` e `UserUseCase.ChangePassword` (troca voluntária) chamam
+  `sessionRepo.DeleteByUserID` depois de trocar a senha — se um token vazou, trocar a senha mata
+  ele também (efeito colateral esperado: força novo login, inclusive da própria sessão que fez a
+  chamada). `UserManagementHandler.ResetUserPassword` (reset feito por admin/root) chama o mesmo
+  via `UserUseCase.InvalidateSessions` — reset de senha é a resposta padrão a uma conta
+  possivelmente comprometida, faz sentido matar a sessão junto.
+- **`entity.User.Active` nunca era checado** (achado na mesma auditoria) — a feature "desativar
+  usuário" (`SetUserStatus`) era cosmética: a conta continuava logando e sessões existentes
+  continuavam válidas. Corrigido em dois pontos: `LocalAuthStrategy.Authenticate` recusa login
+  (mensagem genérica "Invalid username or password", pra não revelar que a conta existe mas está
+  desativada) e `AuthUseCase.ValidateToken` recusa uma sessão pré-existente se a conta foi
+  desativada depois.
 
 ### Middleware de Segurança
-- **Localização**: `internal/app/middleware/security.go`
-- **Funcionalidades**:
-  - Validação de sessão
-  - Controle de acesso baseado em roles
-  - Proteção CSRF
-  - Rate limiting (se implementado)
+- **Localização**: `internal/app/middleware/security.go`, `internal/app/middleware/login_rate_limiter.go`
+- **`SecurityHeaders()`**: CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+  Permissions-Policy, `Cache-Control: no-store` em toda `/api/*`.
+- **`CORSHeaders()` — CORS restrito por allowlist, corrigido na mesma auditoria.** Antes ecoava de
+  volta **qualquer** `Origin` recebido com `Access-Control-Allow-Credentials: true` (comentário no
+  próprio código: "In production, restrict this to specific domains" — nunca implementado). Como
+  o app é same-origin por arquitetura (frontend servido pelo próprio binário), isso não tinha
+  motivo real de existir tão permissivo — qualquer site conseguiria disparar requisições
+  autenticadas via `Authorization` header (o cookie de sessão é `SameSite=Strict` e não seria
+  enviado cross-site de qualquer forma, mas o header Bearer não tem essa proteção). Agora só ecoa
+  `Access-Control-Allow-Origin`/liga `Allow-Credentials` se a origem estiver em
+  `config.AllowedOrigins()` (env var `CORS_ALLOWED_ORIGINS`, vazia por padrão — nenhuma origem
+  cross-site ganha acesso credenciado a menos que configurado explicitamente).
+- **Cookies `Secure` configuráveis** (`config.CookieSecure()`, env var `COOKIE_SECURE`, default
+  `true`) — antes `false` hardcoded em toda chamada `SetCookie` (5 lugares), com o próprio
+  comentário admitindo "set to true in production". Nunca era.
+- **`LoginRateLimit()`** (novo) — limita `POST /api/auth/login` a 10 tentativas por IP a cada 15
+  minutos (`429` ao estourar), resetado em login bem-sucedido. Em memória, sem dependência nova
+  (mapa + mutex, janela deslizante) — processo único, sem necessidade de um limitador distribuído.
+  Só faz sentido como defesa depois da correção acima: antes, login nem era um alvo de força bruta
+  que importasse (o "token" verdadeiro nunca dependia da senha real de qualquer jeito).
+
+### Configuração de ambiente (nova — antes tudo hardcoded)
+`internal/app/config/env.go`: `SERVER_PORT` (default `3056` — antes hardcoded em
+`router.go`, enquanto `server/Dockerfile`/`docker-compose.yml` expunham `8081`, um mismatch que
+tornava o deploy via Docker inalcançável na porta mapeada; corrigido nos dois lados),
+`DB_PATH` (default `./db/toggles.db` — antes hardcoded em `db.go`, apesar do README já documentar
+essa env var como se existisse), `COOKIE_SECURE`, `CORS_ALLOWED_ORIGINS` (ambas acima).
+
+### Achados de empacotamento Docker (não corrigidos — fora do escopo da auditoria de segurança)
+Testando o build da imagem depois das correções acima: (1) o `builder` stage faz cross-compile
+`GOARCH=amd64` com cgo a partir de uma imagem `golang:1.23-alpine` — falha em host arm64
+(`gcc: unrecognized command-line option '-m64'`), builda normalmente só quando `GOARCH` bate com o
+host; (2) `RUN ls -la totoogle && file totoogle` falha porque a imagem alpine do builder não tem o
+binário `file` instalado; (3) a `production` stage roda como `USER 65534:65534` (nobody) mas não
+cria `/db` com permissão de escrita pra esse usuário — o binário falha ao tentar criar
+`./db/toggles.db` (`permission denied`). Nenhum dos três tem relação com autenticação — são bugs
+de empacotamento pré-existentes, encontrados incidentalmente ao validar a correção de porta.
 
 ## API e Rotas
 
@@ -314,8 +395,11 @@ go test -coverprofile=coverage.out ./...  # Com coverage
 - **Localização**: `internal/app/config/`
 - **Arquivos**:
   - `config.go` - Configuração principal
-  - `db.go` - Setup do banco de dados
+  - `db.go` - Setup do banco de dados (caminho via `env.go#DBPath()`)
   - `logger.go` - Configuração de logs
+  - `env.go` - Env vars com fallback pro comportamento anterior hardcoded: `SERVER_PORT`,
+    `DB_PATH`, `COOKIE_SECURE`, `CORS_ALLOWED_ORIGINS` (detalhes na seção "Sistema de Autenticação
+    e Autorização")
 
 ## Frontend
 

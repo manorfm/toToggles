@@ -12,40 +12,40 @@ import (
 
 func TestSecurityHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	tests := []struct {
-		name     string
-		path     string
+		name             string
+		path             string
 		wantCacheControl bool
 	}{
 		{
-			name:     "should set security headers on normal route",
-			path:     "/test",
+			name:             "should set security headers on normal route",
+			path:             "/test",
 			wantCacheControl: false,
 		},
 		{
-			name:     "should set security headers and cache control on applications route",
-			path:     "/api/applications",
+			name:             "should set security headers and cache control on applications route",
+			path:             "/api/applications",
 			wantCacheControl: true,
 		},
 		{
-			name:     "should set security headers and cache control on applications/ route",
-			path:     "/api/applications/",
+			name:             "should set security headers and cache control on applications/ route",
+			path:             "/api/applications/",
 			wantCacheControl: true,
 		},
 		{
-			name:     "should set security headers and cache control on toggles route",
-			path:     "/api/applications/:id/toggles",
+			name:             "should set security headers and cache control on toggles route",
+			path:             "/api/applications/:id/toggles",
 			wantCacheControl: true,
 		},
 		{
-			name:     "should set cache control on any other API route too (not just applications)",
-			path:     "/api/teams",
+			name:             "should set cache control on any other API route too (not just applications)",
+			path:             "/api/teams",
 			wantCacheControl: true,
 		},
 		{
-			name:     "should not set cache control on a non-API (SPA) route",
-			path:     "/applications",
+			name:             "should not set cache control on a non-API (SPA) route",
+			path:             "/applications",
 			wantCacheControl: false,
 		},
 	}
@@ -61,7 +61,7 @@ func TestSecurityHeaders(t *testing.T) {
 			SecurityHeaders()(c)
 
 			// Assert security headers
-			assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self';", 
+			assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self';",
 				w.Header().Get("Content-Security-Policy"))
 			assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
 			assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
@@ -87,48 +87,67 @@ func TestCORSHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name         string
-		method       string
-		origin       string
-		expectedCode int
-		wantOrigin   string
+		name          string
+		allowedOrigin string // CORS_ALLOWED_ORIGINS, empty = unset (nothing allowed)
+		method        string
+		origin        string
+		expectedCode  int
+		wantCORS      bool // whether CORS headers should be present at all
 	}{
 		{
-			name:         "should handle regular GET request without origin",
+			name:         "same-origin request (no Origin header) gets no CORS headers",
 			method:       "GET",
 			origin:       "",
-			expectedCode: 0, // middleware continues
-			wantOrigin:   "",
+			expectedCode: 0,
+			wantCORS:     false,
 		},
 		{
-			name:         "should handle regular GET request with origin",
-			method:       "GET", 
-			origin:       "https://example.com",
-			expectedCode: 0, // middleware continues
-			wantOrigin:   "https://example.com",
+			// Real bug fixed here: this used to reflect back ANY Origin with
+			// Access-Control-Allow-Credentials: true, letting any site read authenticated
+			// responses (e.g. via a stolen/guessed Authorization header). Now an origin not on
+			// the allowlist gets no CORS headers at all — the browser blocks the response.
+			name:          "an origin NOT on the allowlist gets no CORS headers",
+			allowedOrigin: "https://trusted.example.com",
+			method:        "GET",
+			origin:        "https://evil.example.com",
+			expectedCode:  0,
+			wantCORS:      false,
 		},
 		{
-			name:         "should handle OPTIONS preflight request",
-			method:       "OPTIONS",
-			origin:       "https://example.com",
-			expectedCode: 204,
-			wantOrigin:   "https://example.com",
+			name:          "an origin on the allowlist gets full CORS headers",
+			allowedOrigin: "https://trusted.example.com",
+			method:        "GET",
+			origin:        "https://trusted.example.com",
+			expectedCode:  0,
+			wantCORS:      true,
 		},
 		{
-			name:         "should handle OPTIONS without origin",
-			method:       "OPTIONS",
-			origin:       "",
-			expectedCode: 204,
-			wantOrigin:   "",
+			name:          "OPTIONS preflight always returns 204, regardless of the origin",
+			allowedOrigin: "https://trusted.example.com",
+			method:        "OPTIONS",
+			origin:        "https://evil.example.com",
+			expectedCode:  204,
+			wantCORS:      false,
+		},
+		{
+			name:          "OPTIONS preflight from an allowed origin returns 204 with CORS headers",
+			allowedOrigin: "https://trusted.example.com",
+			method:        "OPTIONS",
+			origin:        "https://trusted.example.com",
+			expectedCode:  204,
+			wantCORS:      true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.allowedOrigin != "" {
+				t.Setenv("CORS_ALLOWED_ORIGINS", tt.allowedOrigin)
+			}
+
 			w := httptest.NewRecorder()
 			c, r := gin.CreateTestContext(w)
-			
-			// Setup route to capture if middleware continues
+
 			r.Use(CORSHeaders())
 			r.Any("/test", func(c *gin.Context) {
 				c.JSON(200, gin.H{"status": "ok"})
@@ -142,16 +161,15 @@ func TestCORSHeaders(t *testing.T) {
 
 			r.ServeHTTP(w, req)
 
-			// Assert CORS headers
-			assert.Equal(t, "GET, POST, PUT, DELETE, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
-			assert.Equal(t, "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization", w.Header().Get("Access-Control-Allow-Headers"))
-			assert.Equal(t, "Content-Length", w.Header().Get("Access-Control-Expose-Headers"))
-			assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
-
-			if tt.wantOrigin != "" {
-				assert.Equal(t, tt.wantOrigin, w.Header().Get("Access-Control-Allow-Origin"))
+			if tt.wantCORS {
+				assert.Equal(t, tt.origin, w.Header().Get("Access-Control-Allow-Origin"))
+				assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
+				assert.Equal(t, "GET, POST, PUT, DELETE, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
+				assert.Equal(t, "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization", w.Header().Get("Access-Control-Allow-Headers"))
+				assert.Equal(t, "Content-Length", w.Header().Get("Access-Control-Expose-Headers"))
 			} else {
 				assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+				assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
 			}
 
 			if tt.expectedCode != 0 {
@@ -178,7 +196,7 @@ func TestRequestID(t *testing.T) {
 		requestID := w.Header().Get("X-Request-ID")
 		assert.NotEmpty(t, requestID)
 		assert.True(t, strings.HasPrefix(requestID, "req-"))
-		
+
 		// Should have set in context
 		contextID, exists := c.Get("request_id")
 		assert.True(t, exists)
@@ -197,7 +215,7 @@ func TestRequestID(t *testing.T) {
 
 		// Should use provided request ID
 		assert.Equal(t, existingID, w.Header().Get("X-Request-ID"))
-		
+
 		// Should have set in context
 		contextID, exists := c.Get("request_id")
 		assert.True(t, exists)
@@ -209,7 +227,7 @@ func TestGenerateRequestID(t *testing.T) {
 	t.Run("should generate unique request IDs", func(t *testing.T) {
 		id1 := generateRequestID()
 		id2 := generateRequestID()
-		
+
 		assert.NotEqual(t, id1, id2)
 		assert.True(t, strings.HasPrefix(id1, "req-"))
 		assert.True(t, strings.HasPrefix(id2, "req-"))
@@ -220,7 +238,7 @@ func TestGenerateULID(t *testing.T) {
 	t.Run("should generate valid ULIDs", func(t *testing.T) {
 		ulid1 := generateULID()
 		ulid2 := generateULID()
-		
+
 		assert.NotEqual(t, ulid1, ulid2)
 		assert.Equal(t, 26, len(ulid1)) // ULID should be 26 characters
 		assert.Equal(t, 26, len(ulid2))

@@ -8,26 +8,20 @@ import (
 )
 
 // Tests for LocalAuthStrategy
-
 func TestNewLocalAuthStrategy(t *testing.T) {
 	mockRepo := &MockUserRepository{}
-	jwtKey := []byte("test_jwt_key")
-	
-	strategy := NewLocalAuthStrategy(mockRepo, jwtKey)
-	
+
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	if strategy == nil {
 		t.Error("Expected non-nil LocalAuthStrategy")
 		return
 	}
-	
+
 	if strategy.userRepo == nil {
 		t.Error("Expected userRepo to be set")
 	}
-	
-	if string(strategy.jwtKey) != string(jwtKey) {
-		t.Error("Expected jwtKey to be set")
-	}
-	
+
 	if !strategy.enabled {
 		t.Error("Expected strategy to be enabled by default")
 	}
@@ -35,8 +29,8 @@ func TestNewLocalAuthStrategy(t *testing.T) {
 
 func TestLocalAuthStrategy_GetName(t *testing.T) {
 	mockRepo := &MockUserRepository{}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	if strategy.GetName() != "local" {
 		t.Errorf("Expected name 'local', got '%s'", strategy.GetName())
 	}
@@ -44,12 +38,12 @@ func TestLocalAuthStrategy_GetName(t *testing.T) {
 
 func TestLocalAuthStrategy_IsEnabled(t *testing.T) {
 	mockRepo := &MockUserRepository{}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	if !strategy.IsEnabled() {
 		t.Error("Expected strategy to be enabled")
 	}
-	
+
 	// Test disabling
 	strategy.enabled = false
 	if strategy.IsEnabled() {
@@ -59,8 +53,8 @@ func TestLocalAuthStrategy_IsEnabled(t *testing.T) {
 
 func TestLocalAuthStrategy_Authenticate_ValidationErrors(t *testing.T) {
 	mockRepo := &MockUserRepository{}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("test_key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	tests := []struct {
 		name        string
 		credentials map[string]interface{}
@@ -97,25 +91,25 @@ func TestLocalAuthStrategy_Authenticate_ValidationErrors(t *testing.T) {
 			expectedErr: "Password is required",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := strategy.Authenticate(tt.credentials)
-			
+
 			if err != nil {
 				t.Errorf("Expected no error, got %v", err)
 				return
 			}
-			
+
 			if result == nil {
 				t.Error("Expected non-nil result")
 				return
 			}
-			
+
 			if result.Success {
 				t.Error("Expected authentication to fail")
 			}
-			
+
 			if result.Error != tt.expectedErr {
 				t.Errorf("Expected error '%s', got '%s'", tt.expectedErr, result.Error)
 			}
@@ -127,29 +121,29 @@ func TestLocalAuthStrategy_Authenticate_UserNotFound(t *testing.T) {
 	mockRepo := &MockUserRepository{
 		GetByUsernameError: errors.New("user not found"),
 	}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("test_key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	credentials := map[string]interface{}{
 		"username": "nonexistent",
 		"password": "password123",
 	}
-	
+
 	result, err := strategy.Authenticate(credentials)
-	
+
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 		return
 	}
-	
+
 	if result == nil {
 		t.Error("Expected non-nil result")
 		return
 	}
-	
+
 	if result.Success {
 		t.Error("Expected authentication to fail")
 	}
-	
+
 	if result.Error != "Invalid username or password" {
 		t.Errorf("Expected error 'Invalid username or password', got '%s'", result.Error)
 	}
@@ -159,36 +153,37 @@ func TestLocalAuthStrategy_Authenticate_WrongPassword(t *testing.T) {
 	user := &entity.User{
 		ID:       "user123",
 		Username: "testuser",
+		Active:   true,
 	}
 	// Set a password so CheckPassword returns false for wrong password
 	user.SetPassword("correctpassword")
-	
+
 	mockRepo := &MockUserRepository{
 		GetByUsernameResult: user,
 	}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("test_key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	credentials := map[string]interface{}{
 		"username": "testuser",
 		"password": "wrongpassword",
 	}
-	
+
 	result, err := strategy.Authenticate(credentials)
-	
+
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 		return
 	}
-	
+
 	if result == nil {
 		t.Error("Expected non-nil result")
 		return
 	}
-	
+
 	if result.Success {
 		t.Error("Expected authentication to fail")
 	}
-	
+
 	if result.Error != "Invalid username or password" {
 		t.Errorf("Expected error 'Invalid username or password', got '%s'", result.Error)
 	}
@@ -198,140 +193,84 @@ func TestLocalAuthStrategy_Authenticate_Success(t *testing.T) {
 	user := &entity.User{
 		ID:       "user123",
 		Username: "testuser",
+		Active:   true,
 	}
 	user.SetPassword("correctpassword")
-	
+
 	mockRepo := &MockUserRepository{
 		GetByUsernameResult: user,
 	}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("test_key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	credentials := map[string]interface{}{
 		"username": "testuser",
 		"password": "correctpassword",
 	}
-	
+
 	result, err := strategy.Authenticate(credentials)
-	
+
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 		return
 	}
-	
+
 	if result == nil {
 		t.Error("Expected non-nil result")
 		return
 	}
-	
+
 	if !result.Success {
 		t.Error("Expected authentication to succeed")
 	}
-	
+
 	if result.User == nil {
 		t.Error("Expected user in result")
 	}
-	
+
 	if result.User.ID != user.ID {
 		t.Errorf("Expected user ID '%s', got '%s'", user.ID, result.User.ID)
 	}
-	
-	if result.Token == "" {
-		t.Error("Expected non-empty token")
-	}
-	
-	expectedToken := "token_user123"
-	if result.Token != expectedToken {
-		t.Errorf("Expected token '%s', got '%s'", expectedToken, result.Token)
+
+	// A strategy não emite mais token nenhum — quem emite sessão de verdade é
+	// AuthUseCase.Login (ver auth_usecase.go), não a strategy.
+	if result.Token != "" {
+		t.Errorf("Expected no token from the strategy itself, got '%s'", result.Token)
 	}
 }
 
-func TestLocalAuthStrategy_Authenticate_JWTGenerationError(t *testing.T) {
+func TestLocalAuthStrategy_Authenticate_DisabledUser(t *testing.T) {
 	user := &entity.User{
 		ID:       "user123",
 		Username: "testuser",
+		Active:   false,
 	}
 	user.SetPassword("correctpassword")
-	
+
 	mockRepo := &MockUserRepository{
 		GetByUsernameResult: user,
 	}
-	// Create strategy with empty JWT key to trigger error
-	strategy := NewLocalAuthStrategy(mockRepo, []byte{})
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	credentials := map[string]interface{}{
 		"username": "testuser",
 		"password": "correctpassword",
 	}
-	
+
 	result, err := strategy.Authenticate(credentials)
-	
-	if err == nil {
-		t.Error("Expected error for JWT generation failure")
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
 		return
 	}
-	
-	if result != nil {
-		t.Error("Expected nil result on JWT error")
-	}
-	
-	expectedError := "failed to generate token: JWT key not configured"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
-}
 
-func TestLocalAuthStrategy_generateJWT(t *testing.T) {
-	user := &entity.User{ID: "user123", Username: "testuser"}
-	
-	tests := []struct {
-		name        string
-		jwtKey      []byte
-		expectedErr string
-	}{
-		{
-			name:        "empty JWT key",
-			jwtKey:      []byte{},
-			expectedErr: "JWT key not configured",
-		},
-		{
-			name:        "nil JWT key",
-			jwtKey:      nil,
-			expectedErr: "JWT key not configured",
-		},
-		{
-			name:   "valid JWT key",
-			jwtKey: []byte("test_key"),
-		},
+	if result.Success {
+		t.Error("Expected authentication to fail for a disabled user, even with the right password")
 	}
-	
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := &MockUserRepository{}
-			strategy := NewLocalAuthStrategy(mockRepo, tt.jwtKey)
-			
-			token, err := strategy.generateJWT(user)
-			
-			if tt.expectedErr != "" {
-				if err == nil {
-					t.Errorf("Expected error '%s', got nil", tt.expectedErr)
-					return
-				}
-				if err.Error() != tt.expectedErr {
-					t.Errorf("Expected error '%s', got '%s'", tt.expectedErr, err.Error())
-				}
-				return
-			}
-			
-			if err != nil {
-				t.Errorf("Expected no error, got %v", err)
-				return
-			}
-			
-			expectedToken := "token_user123"
-			if token != expectedToken {
-				t.Errorf("Expected token '%s', got '%s'", expectedToken, token)
-			}
-		})
+
+	// Mesma mensagem genérica de senha errada — não revela que a conta existe mas está
+	// desativada.
+	if result.Error != "Invalid username or password" {
+		t.Errorf("Expected generic 'Invalid username or password' error, got '%s'", result.Error)
 	}
 }
 
@@ -341,37 +280,34 @@ func TestLocalAuthStrategy_Integration(t *testing.T) {
 		ID:       "admin123",
 		Username: "admin",
 		Role:     entity.UserRoleAdmin,
+		Active:   true,
 	}
 	user.SetPassword("admin_password")
-	
+
 	mockRepo := &MockUserRepository{
 		GetByUsernameResult: user,
 	}
-	strategy := NewLocalAuthStrategy(mockRepo, []byte("secure_jwt_key"))
-	
+	strategy := NewLocalAuthStrategy(mockRepo)
+
 	// Test successful login
 	credentials := map[string]interface{}{
 		"username": "admin",
 		"password": "admin_password",
 	}
-	
+
 	result, err := strategy.Authenticate(credentials)
-	
+
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 		return
 	}
-	
+
 	if !result.Success {
 		t.Error("Expected successful authentication")
 	}
-	
+
 	if result.User.Role != entity.UserRoleAdmin {
 		t.Errorf("Expected user role '%s', got '%s'", entity.UserRoleAdmin, result.User.Role)
-	}
-	
-	if result.Token != "token_admin123" {
-		t.Errorf("Expected token 'token_admin123', got '%s'", result.Token)
 	}
 }
 
@@ -389,12 +325,18 @@ func (m *MockUserRepository) GetByUsername(username string) (*entity.User, error
 }
 
 // Required methods for UserRepository interface (not used in these tests)
-func (m *MockUserRepository) Create(user *entity.User) error                                                     { return nil }
-func (m *MockUserRepository) GetByID(id string) (*entity.User, error)                                           { return nil, nil }
-func (m *MockUserRepository) GetAll() ([]*entity.User, error)                                                    { return nil, nil }
-func (m *MockUserRepository) Update(user *entity.User) error                                                     { return nil }
-func (m *MockUserRepository) Delete(id string) error                                                             { return nil }
-func (m *MockUserRepository) GetApplicationsByUserID(userID string) ([]*entity.Application, error)             { return nil, nil }
-func (m *MockUserRepository) AddUserToApplication(userID, applicationID string) error                          { return nil }
-func (m *MockUserRepository) RemoveUserFromApplication(userID, applicationID string) error                     { return nil }
-func (m *MockUserRepository) GetUsersByApplicationID(applicationID string) ([]*entity.User, error)             { return nil, nil }
+func (m *MockUserRepository) Create(user *entity.User) error          { return nil }
+func (m *MockUserRepository) GetByID(id string) (*entity.User, error) { return nil, nil }
+func (m *MockUserRepository) GetAll() ([]*entity.User, error)         { return nil, nil }
+func (m *MockUserRepository) Update(user *entity.User) error          { return nil }
+func (m *MockUserRepository) Delete(id string) error                  { return nil }
+func (m *MockUserRepository) GetApplicationsByUserID(userID string) ([]*entity.Application, error) {
+	return nil, nil
+}
+func (m *MockUserRepository) AddUserToApplication(userID, applicationID string) error { return nil }
+func (m *MockUserRepository) RemoveUserFromApplication(userID, applicationID string) error {
+	return nil
+}
+func (m *MockUserRepository) GetUsersByApplicationID(applicationID string) ([]*entity.User, error) {
+	return nil, nil
+}

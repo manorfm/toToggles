@@ -211,11 +211,11 @@ func (m *MockToggleRepository) GetChildren(parentID string) ([]*entity.Toggle, e
 
 // MockUserRepository represents a mock implementation of UserRepository
 type MockUserRepository struct {
-	Users       map[string]*entity.User
-	CreateError error
+	Users        map[string]*entity.User
+	CreateError  error
 	GetByIDError error
-	UpdateError error
-	DeleteError error
+	UpdateError  error
+	DeleteError  error
 }
 
 func NewMockUserRepository() *MockUserRepository {
@@ -294,11 +294,11 @@ func (m *MockUserRepository) GetUsersByApplicationID(applicationID string) ([]*e
 
 // MockTeamRepository represents a mock implementation of TeamRepository
 type MockTeamRepository struct {
-	Teams       map[string]*entity.Team
-	CreateError error
+	Teams        map[string]*entity.Team
+	CreateError  error
 	GetByIDError error
-	UpdateError error
-	DeleteError error
+	UpdateError  error
+	DeleteError  error
 }
 
 func NewMockTeamRepository() *MockTeamRepository {
@@ -409,4 +409,64 @@ func (m *MockTeamRepository) GetTeamsWithCounts() ([]*entity.TeamWithCounts, err
 
 func (m *MockTeamRepository) GetTeamWithCounts(id string) (*entity.TeamWithCounts, error) {
 	return &entity.TeamWithCounts{}, nil
+}
+
+// MockSessionRepository represents a mock implementation of SessionRepository
+type MockSessionRepository struct {
+	Sessions       map[string]*entity.Session // keyed by TokenHash
+	CreateError    error
+	GetByHashError error
+}
+
+func NewMockSessionRepository() *MockSessionRepository {
+	return &MockSessionRepository{
+		Sessions: make(map[string]*entity.Session),
+	}
+}
+
+func (m *MockSessionRepository) Create(session *entity.Session) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+	m.Sessions[session.TokenHash] = session
+	return nil
+}
+
+func (m *MockSessionRepository) GetByTokenHash(tokenHash string) (*entity.Session, error) {
+	if m.GetByHashError != nil {
+		return nil, m.GetByHashError
+	}
+	session, exists := m.Sessions[tokenHash]
+	if !exists {
+		return nil, errors.New("session not found")
+	}
+	return session, nil
+}
+
+func (m *MockSessionRepository) DeleteByID(id string) error {
+	for hash, session := range m.Sessions {
+		if session.ID == id {
+			delete(m.Sessions, hash)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *MockSessionRepository) DeleteByUserID(userID string) error {
+	for hash, session := range m.Sessions {
+		if session.UserID == userID {
+			delete(m.Sessions, hash)
+		}
+	}
+	return nil
+}
+
+func (m *MockSessionRepository) DeleteExpired() error {
+	for hash, session := range m.Sessions {
+		if session.IsExpired() {
+			delete(m.Sessions, hash)
+		}
+	}
+	return nil
 }

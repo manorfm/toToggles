@@ -36,7 +36,7 @@ func Init(router *gin.Engine) {
 		// Rotas públicas de autenticação
 		auth := api.Group("/auth")
 		{
-			auth.POST("/login", handler.Login)
+			auth.POST("/login", middleware.LoginRateLimit(), handler.Login)
 			auth.POST("/logout", handler.Logout)
 			auth.GET("/check-first-access", handler.CheckFirstAccess)
 			auth.POST("/change-password", handler.ValidateToken(), handler.ChangePassword)

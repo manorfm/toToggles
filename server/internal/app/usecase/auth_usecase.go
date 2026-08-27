@@ -2,38 +2,62 @@ package usecase
 
 import (
 	"errors"
-	"fmt"
+	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/domain/repository"
 )
 
+// AuthSessionTTL/PasswordChangeTokenTTL casam com o MaxAge dos cookies correspondentes em
+// auth_handler.go (7 dias / 1 hora) — mudar um lado sem o outro deixaria o cookie "vivo" no
+// browser depois da sessão já ter expirado no servidor, ou vice-versa.
+const (
+	AuthSessionTTL         = 7 * 24 * time.Hour
+	PasswordChangeTokenTTL = time.Hour
+)
+
 type AuthUseCase struct {
 	userRepo    repository.UserRepository
 	authManager *auth.AuthManager
+	sessionRepo repository.SessionRepository
 }
 
-func NewAuthUseCase(userRepo repository.UserRepository, authManager *auth.AuthManager) *AuthUseCase {
+func NewAuthUseCase(userRepo repository.UserRepository, authManager *auth.AuthManager, sessionRepo repository.SessionRepository) *AuthUseCase {
 	return &AuthUseCase{
 		userRepo:    userRepo,
 		authManager: authManager,
+		sessionRepo: sessionRepo,
 	}
 }
 
-// Login realiza a autenticação do usuário
+// Login autentica o usuário e, se as credenciais forem válidas, emite uma sessão de verdade
+// (token opaco aleatório, ver entity.Session) — preenchendo result.Token com o token bruto pro
+// handler devolver como cookie. Usuários com MustChangePassword NÃO ganham sessão de auth aqui;
+// o handler decide chamar GeneratePasswordChangeToken nesse caso, como já fazia.
 func (uc *AuthUseCase) Login(username, password string) (*auth.AuthenticationResult, error) {
-	strategy := uc.authManager.GetDefaultStrategy()
-	if strategy == nil {
-		return nil, errors.New("no authentication strategy available")
+	result, err := uc.Authenticate(username, password)
+	if err != nil || !result.Success || result.User.MustChangePassword {
+		return result, err
 	}
 
-	credentials := map[string]interface{}{
-		"username": username,
-		"password": password,
+	token, err := uc.createSession(result.User.ID, entity.SessionPurposeAuth, AuthSessionTTL)
+	if err != nil {
+		return nil, err
 	}
+	result.Token = token
+	return result, nil
+}
 
-	return strategy.Authenticate(credentials)
+func (uc *AuthUseCase) createSession(userID string, purpose entity.SessionPurpose, ttl time.Duration) (string, error) {
+	session, rawToken, err := entity.NewSession(userID, purpose, ttl)
+	if err != nil {
+		return "", err
+	}
+	if err := uc.sessionRepo.Create(session); err != nil {
+		return "", err
+	}
+	return rawToken, nil
 }
 
 // InitializeRootUser cria o usuário root padrão se não existir
@@ -83,21 +107,49 @@ func (uc *AuthUseCase) InitializeRootUser() error {
 	return nil
 }
 
-// ValidateToken valida um token de autenticação
+// ValidateToken valida um token de sessão de autenticação: procura pelo hash no banco (o token
+// bruto nunca é armazenado — ver entity.Session/HashSessionToken), confere expiração, o
+// propósito (só sessões "auth", não tokens de troca de senha) e que a conta ainda está ativa
+// (uma sessão criada antes de a conta ser desativada não deve continuar valendo).
 func (uc *AuthUseCase) ValidateToken(token string) (*entity.User, error) {
-	// Implementação simples para validação de token
-	// Em produção, usar JWT adequadamente
 	if token == "" {
 		return nil, errors.New("token is required")
 	}
 
-	// Por enquanto, extrair ID do token simples
-	if len(token) > 6 && token[:6] == "token_" {
-		userID := token[6:]
-		return uc.userRepo.GetByID(userID)
+	session, err := uc.sessionRepo.GetByTokenHash(entity.HashSessionToken(token))
+	if err != nil {
+		return nil, errors.New("invalid token")
+	}
+	if session.Purpose != entity.SessionPurposeAuth {
+		return nil, errors.New("invalid token")
+	}
+	if session.IsExpired() {
+		_ = uc.sessionRepo.DeleteByID(session.ID)
+		return nil, errors.New("token expired")
 	}
 
-	return nil, errors.New("invalid token")
+	user, err := uc.userRepo.GetByID(session.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if !user.Active {
+		return nil, errors.New("account disabled")
+	}
+
+	return user, nil
+}
+
+// Logout invalida a sessão associada ao token — sem isso, um cookie limpo no cliente ainda
+// deixaria a sessão "válida" no servidor até expirar sozinha.
+func (uc *AuthUseCase) Logout(token string) error {
+	if token == "" {
+		return nil
+	}
+	session, err := uc.sessionRepo.GetByTokenHash(entity.HashSessionToken(token))
+	if err != nil {
+		return nil // token já inválido/inexistente — nada a fazer
+	}
+	return uc.sessionRepo.DeleteByID(session.ID)
 }
 
 // Authenticate valida credenciais do usuário sem gerar token
@@ -142,7 +194,13 @@ func (uc *AuthUseCase) ChangePasswordFirstTime(userID, newPassword string) error
 	user.MustChangePassword = false
 
 	// Salvar no banco
-	return uc.userRepo.Update(user)
+	if err := uc.userRepo.Update(user); err != nil {
+		return err
+	}
+
+	// Defesa em profundidade: qualquer sessão pré-existente do usuário (incluindo o próprio
+	// token de troca de senha que autorizou esta chamada) deixa de valer depois da troca.
+	return uc.sessionRepo.DeleteByUserID(userID)
 }
 
 // GetUserCount retorna o número total de usuários no sistema
@@ -154,51 +212,43 @@ func (uc *AuthUseCase) GetUserCount() (int, error) {
 	return len(users), nil
 }
 
-// GeneratePasswordChangeToken gera um token temporário para mudança de senha
+// GeneratePasswordChangeToken emite um token opaco de uso único (mesmo mecanismo de sessão,
+// Purpose: password_change) autorizando a troca de senha obrigatória no primeiro acesso —
+// substitui um formato anterior sem verificação nenhuma
+// ("temp_password_change_"+userID+"_"+username, forjável por qualquer um que soubesse essas
+// duas informações, já públicas em várias respostas de API).
 func (uc *AuthUseCase) GeneratePasswordChangeToken(userID, username string) (string, error) {
-	// Criar um token temporário simples no formato: "temp_password_change_userID_username"
-	return fmt.Sprintf("temp_password_change_%s_%s", userID, username), nil
+	return uc.createSession(userID, entity.SessionPurposePasswordChange, PasswordChangeTokenTTL)
 }
 
-// ValidatePasswordChangeToken valida um token temporário de mudança de senha
+// ValidatePasswordChangeToken valida um token de troca de senha e devolve o (userID, username)
+// associado. É de uso único: a sessão é apagada aqui mesmo após validar com sucesso, então um
+// token só autoriza uma troca de senha.
 func (uc *AuthUseCase) ValidatePasswordChangeToken(token string) (userID, username string, err error) {
-	// Verificar se é um token de mudança de senha
-	if len(token) < 20 || token[:20] != "temp_password_change" {
+	if token == "" {
+		return "", "", errors.New("token is required")
+	}
+
+	session, err := uc.sessionRepo.GetByTokenHash(entity.HashSessionToken(token))
+	if err != nil {
+		return "", "", errors.New("invalid token")
+	}
+	if session.Purpose != entity.SessionPurposePasswordChange {
 		return "", "", errors.New("invalid token type")
 	}
-	
-	// Extrair dados do token: temp_password_change_userID_username
-	parts := token[21:] // Remove "temp_password_change_"
-	lastUnderscore := -1
-	
-	// Encontrar o último underscore para separar userID e username
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] == '_' {
-			lastUnderscore = i
-			break
-		}
+	if session.IsExpired() {
+		_ = uc.sessionRepo.DeleteByID(session.ID)
+		return "", "", errors.New("token expired")
 	}
-	
-	if lastUnderscore == -1 {
-		return "", "", errors.New("invalid token format")
-	}
-	
-	userIDVal := parts[:lastUnderscore]
-	usernameVal := parts[lastUnderscore+1:]
-	
-	// Verificar se o usuário ainda existe e ainda precisa trocar senha
-	user, err := uc.userRepo.GetByID(userIDVal)
+
+	user, err := uc.userRepo.GetByID(session.UserID)
 	if err != nil {
 		return "", "", errors.New("user not found")
 	}
-	
-	if user.Username != usernameVal {
-		return "", "", errors.New("invalid token data")
-	}
-	
 	if !user.MustChangePassword {
 		return "", "", errors.New("password change no longer required")
 	}
-	
-	return userIDVal, usernameVal, nil
+
+	_ = uc.sessionRepo.DeleteByID(session.ID) // uso único
+	return user.ID, user.Username, nil
 }

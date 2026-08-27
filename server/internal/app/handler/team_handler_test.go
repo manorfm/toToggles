@@ -15,20 +15,20 @@ import (
 
 func setupTeamTestRouter() (*gin.Engine, *gorm.DB) {
 	gin.SetMode(gin.TestMode)
-	
+
 	// Cria base de dados em memória para testes
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	
+
 	// Auto migrate tables
-	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{}, 
+	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{}, &entity.Session{},
 		&entity.Team{}, &entity.TeamUser{}, &entity.TeamApplication{})
-	
+
 	// Inicializa handlers com a base de dados de teste
 	InitHandlers(db)
-	
+
 	// Cria router de teste
 	router := gin.New()
-	
+
 	// Mock root user middleware
 	router.Use(func(c *gin.Context) {
 		c.Set("user", &entity.User{
@@ -38,7 +38,7 @@ func setupTeamTestRouter() (*gin.Engine, *gorm.DB) {
 		})
 		c.Next()
 	})
-	
+
 	// Rotas de teams
 	teams := router.Group("/teams")
 	{
@@ -47,19 +47,19 @@ func setupTeamTestRouter() (*gin.Engine, *gorm.DB) {
 		teams.GET("/:id", GetTeam)
 		teams.PUT("/:id", UpdateTeam)
 		teams.DELETE("/:id", DeleteTeam)
-		
+
 		// Gestão de usuários
 		teams.POST("/:id/users", AddUserToTeam)
 		teams.DELETE("/:id/users/:user_id", RemoveUserFromTeam)
 		teams.GET("/:id/users", GetTeamUsers)
-		
+
 		// Gestão de aplicações
 		teams.POST("/:id/applications", AddApplicationToTeam)
 		teams.DELETE("/:id/applications/:app_id", RemoveApplicationFromTeam)
 		teams.PUT("/:id/applications/:app_id", UpdateApplicationPermission)
 		teams.GET("/:id/applications", GetTeamApplications)
 	}
-	
+
 	return router, db
 }
 
@@ -70,9 +70,9 @@ func TestCreateTeam_Success(t *testing.T) {
 		Name:        "Development Team",
 		Description: "Team for development projects",
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
-	
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/teams", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -112,9 +112,9 @@ func TestCreateTeam_DuplicateName(t *testing.T) {
 		Name:        "Test Team",
 		Description: "New team with same name",
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
-	
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/teams", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -145,7 +145,7 @@ func TestGetAllTeams(t *testing.T) {
 		Description: "First team",
 	}
 	team2 := &entity.Team{
-		Name:        "Team 2", 
+		Name:        "Team 2",
 		Description: "Second team",
 	}
 	db.Create(team1)
@@ -234,9 +234,9 @@ func TestUpdateTeam_Success(t *testing.T) {
 		Name:        "Updated Team",
 		Description: "Updated description",
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
-	
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/teams/"+team.ID, bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -309,9 +309,9 @@ func TestAddUserToTeam_Success(t *testing.T) {
 	requestBody := AddUserToTeamRequest{
 		UserID: user.ID,
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
-	
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/teams/"+team.ID+"/users", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -351,9 +351,9 @@ func TestAddApplicationToTeam_Success(t *testing.T) {
 		ApplicationID: app.ID,
 		Permission:    "write",
 	}
-	
+
 	jsonBody, _ := json.Marshal(requestBody)
-	
+
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/teams/"+team.ID+"/applications", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")

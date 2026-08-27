@@ -37,7 +37,7 @@ func setupUserManagementTestRouterAs(mockUser *entity.User) (*gin.Engine, *gorm.
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
 	// Auto migrate tables
-	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{},
+	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{}, &entity.Session{},
 		&entity.Team{}, &entity.TeamUser{}, &entity.TeamApplication{})
 
 	// Inicializa handlers com a base de dados de teste — semeia um usuário root real (log
@@ -707,7 +707,7 @@ func TestChangePassword_Success(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
 	// Auto migrate tables
-	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{})
+	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{}, &entity.Session{})
 
 	// Inicializa handlers com a base de dados de teste
 	InitHandlers(db)
@@ -776,7 +776,7 @@ func TestChangePassword_WrongCurrentPassword(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 
 	// Auto migrate tables
-	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{})
+	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{}, &entity.Session{})
 
 	// Inicializa handlers com a base de dados de teste
 	InitHandlers(db)

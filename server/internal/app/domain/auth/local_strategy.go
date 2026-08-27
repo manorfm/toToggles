@@ -1,25 +1,22 @@
 package auth
 
 import (
-	"errors"
-	"fmt"
-
-	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/domain/repository"
 )
 
-// LocalAuthStrategy implementa autenticação local com username/password
+// LocalAuthStrategy implementa autenticação local com username/password. Responsável só por
+// verificar a credencial — emitir uma sessão de verdade (token opaco, ver entity.Session) é
+// responsabilidade da camada de usecase (AuthUseCase.Login), não da strategy, já que qualquer
+// strategy futura (OAuth, LDAP...) precisaria da mesma sessão de qualquer forma.
 type LocalAuthStrategy struct {
 	userRepo repository.UserRepository
-	jwtKey   []byte
 	enabled  bool
 }
 
 // NewLocalAuthStrategy cria uma nova instância da estratégia local
-func NewLocalAuthStrategy(userRepo repository.UserRepository, jwtKey []byte) *LocalAuthStrategy {
+func NewLocalAuthStrategy(userRepo repository.UserRepository) *LocalAuthStrategy {
 	return &LocalAuthStrategy{
 		userRepo: userRepo,
-		jwtKey:   jwtKey,
 		enabled:  true,
 	}
 }
@@ -59,16 +56,18 @@ func (las *LocalAuthStrategy) Authenticate(credentials map[string]interface{}) (
 		}, nil
 	}
 
-	// Gerar token JWT
-	token, err := las.generateJWT(user)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+	// Conta desativada não deve logar — mesma mensagem genérica de senha errada, pra não
+	// revelar a um atacante se a conta existe mas está desativada.
+	if !user.Active {
+		return &AuthenticationResult{
+			Success: false,
+			Error:   "Invalid username or password",
+		}, nil
 	}
 
 	return &AuthenticationResult{
 		Success: true,
 		User:    user,
-		Token:   token,
 	}, nil
 }
 
@@ -80,16 +79,4 @@ func (las *LocalAuthStrategy) GetName() string {
 // IsEnabled verifica se a estratégia está habilitada
 func (las *LocalAuthStrategy) IsEnabled() bool {
 	return las.enabled
-}
-
-// generateJWT gera um token JWT para o usuário
-func (las *LocalAuthStrategy) generateJWT(user *entity.User) (string, error) {
-	// Por simplicidade, vou usar uma implementação básica
-	// Em produção, usar uma biblioteca JWT adequada como github.com/golang-jwt/jwt
-	if len(las.jwtKey) == 0 {
-		return "", errors.New("JWT key not configured")
-	}
-
-	// Por enquanto, retornar um token simples (implementar JWT adequadamente depois)
-	return fmt.Sprintf("token_%s", user.ID), nil
 }

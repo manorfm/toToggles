@@ -85,8 +85,11 @@ COPY --from=assets /assets/db/migrations /db/migrations
 # Definir timezone padrão
 ENV TZ=UTC
 
-# Expor porta da aplicação
-EXPOSE 8081
+# Porta real que o binário escuta (internal/app/router/router.go via config.ServerPort(),
+# default 3056) — precisa bater com esse valor ou com o SERVER_PORT passado no `docker run`/
+# docker-compose.yml, senão o mapeamento de porta do container não alcança nada.
+ENV SERVER_PORT=3056
+EXPOSE 3056
 
 # Definir usuário não-root (opcional, mas boa prática de segurança)
 USER 65534:65534
@@ -121,8 +124,9 @@ RUN mkdir -p ./db && \
 # Mudar para usuário não-root
 USER appuser:appgroup
 
-# Expor porta
-EXPOSE 8081
+# Expor porta (ver a nota na production stage acima — precisa bater com o real SERVER_PORT)
+ENV SERVER_PORT=3056
+EXPOSE 3056
 
 # Comando para executar
 CMD ["./totoogle"] 
