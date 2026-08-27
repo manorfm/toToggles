@@ -52,7 +52,11 @@ toToogle/
 - **Cascading Validation**: Automatic validation of parent toggles
 - **Activation Strategies**: Support for all 7 server-defined rule types — percentage (consistent
   per-key hashing), parameter, user ID, IP address/CIDR, country, time window, and canary
-- **Caching & Resilience**: Efficient caching with offline mode support
+- **Caching & Resilience**: Efficient caching with offline mode support, configurable refresh
+  interval — `isActive()` never blocks on the network, always answers from memory
+- **Observability**: staleness-aware health check (`isHealthy()`/`isStale()`), consecutive-failure
+  tracking, and an optional `ToToggleMetricsListener` hook for refresh/evaluation events — no
+  metrics dependency required
 - **Thread-Safe**: Designed for concurrent use
 - **Comprehensive Logging**: Configurable logging levels
 - **Clean Architecture**: Built with design patterns and clean code principles
@@ -226,10 +230,12 @@ Both projects maintain high test coverage with unit, integration, and end-to-end
 
 ### Server Configuration
 ```bash
-# Environment variables
+# Environment variables (all optional, safe defaults)
 export GIN_MODE=release
 export DB_PATH=./db/toggles.db
-export SERVER_PORT=8081
+export SERVER_PORT=3056
+export COOKIE_SECURE=true                              # default; only set to false for local HTTP-only dev
+export CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # only needed for a cross-origin frontend
 ```
 
 ### Client Configuration
@@ -247,6 +253,42 @@ val config = ToToggleConfig.builder()
     // on its own.
     .timeZone(ZoneId.of("America/Sao_Paulo"))
     .build()
+```
+
+### Observability
+
+Everything the client tracks is available without any extra dependency (no Micrometer/StatsD
+required — the SDK stays dependency-light; wire it into whatever your service already uses):
+
+```kotlin
+val client = ToToggleClient(config)
+
+// Optional: react to refresh/evaluation events (e.g. push into your own metrics registry).
+// A listener that throws is caught and logged — it can never break evaluation or refresh.
+client.addMetricsListener(object : ToToggleMetricsListener {
+    override fun onRefreshSuccess(toggleCount: Int) {
+        myMetrics.gauge("totoggle.cache.size", toggleCount)
+    }
+    override fun onRefreshFailure(error: Exception, consecutiveFailures: Int) {
+        myMetrics.counter("totoggle.refresh.failures").increment()
+        if (consecutiveFailures >= 5) alerting.page("ToToggle server unreachable for a while")
+    }
+    override fun onEvaluation(path: String, result: Boolean) {
+        myMetrics.counter("totoggle.evaluations", "path", path, "result", result.toString()).increment()
+    }
+})
+
+client.start()
+
+// Health/staleness — isHealthy() is false if the cache is stale (no successful refresh in more
+// than 2x the refresh interval), not just "has some data": with enableOfflineMode=true, a client
+// can keep answering isActive() from increasingly old data if the server has been unreachable for
+// a while, so isHealthy()/isStale() are how you'd wire that into a liveness/readiness check.
+client.isHealthy()                     // started, not shut down, has data, and not stale
+client.isStale()                       // no successful refresh in the last 2x refreshInterval
+client.getConsecutiveFailureCount()    // resets to 0 on the next successful refresh
+client.getLastErrorTime()              // Instant of the last failure, or null
+client.getCacheInfo()                  // human-readable summary of all of the above
 ```
 
 ## 📚 Documentation

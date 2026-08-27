@@ -2,6 +2,7 @@ package com.totoggle.client
 
 import com.totoggle.client.config.LogLevel
 import com.totoggle.client.config.ToToggleConfig
+import com.totoggle.client.metrics.ToToggleMetricsListener
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.assertj.core.api.Assertions.assertThat
@@ -200,7 +201,142 @@ class ToToggleClientTest {
         assertThat(client.isActive("user")).isTrue()
         assertThat(client.getLastError()).isNotNull()
     }
-    
+
+    @Test
+    fun `should track consecutive failures and reset on the next success`() {
+        mockSuccessfulResponse()
+        client.start()
+        assertThat(client.getConsecutiveFailureCount()).isEqualTo(0)
+        assertThat(client.getLastErrorTime()).isNull()
+
+        mockServer.enqueue(MockResponse().setResponseCode(500))
+        client.refresh()
+        assertThat(client.getConsecutiveFailureCount()).isEqualTo(1)
+        assertThat(client.getLastErrorTime()).isNotNull()
+
+        mockServer.enqueue(MockResponse().setResponseCode(500))
+        client.refresh()
+        assertThat(client.getConsecutiveFailureCount()).isEqualTo(2)
+
+        mockSuccessfulResponse()
+        client.refresh()
+        assertThat(client.getConsecutiveFailureCount()).isEqualTo(0)
+    }
+
+    @Test
+    fun `should not be stale right after a successful refresh, and isHealthy should be true`() {
+        mockSuccessfulResponse()
+        client.start()
+
+        assertThat(client.isStale()).isFalse()
+        assertThat(client.isHealthy()).isTrue()
+    }
+
+    @Test
+    fun `should become stale (and unhealthy) once too much time passes with no successful refresh`() {
+        // A tiny refreshInterval so the 2x-interval staleness threshold is reachable with a real
+        // (short) sleep instead of mocking time — same pragmatic approach used elsewhere in this
+        // suite (e.g. the rate limiter tests) rather than injecting a Clock just for this.
+        val staleConfig = config.copy(refreshInterval = Duration.ofMillis(20), enableOfflineMode = true)
+        val staleClient = ToToggleClient(staleConfig)
+        try {
+            mockSuccessfulResponse()
+            staleClient.start()
+            assertThat(staleClient.isStale()).isFalse()
+
+            // Every subsequent refresh attempt fails, but offline mode keeps serving cached data.
+            repeat(3) { mockServer.enqueue(MockResponse().setResponseCode(500)) }
+            Thread.sleep(120) // > 2x the 20ms refresh interval, background refresh keeps failing
+
+            assertThat(staleClient.isStale()).isTrue()
+            assertThat(staleClient.isHealthy()).isFalse()
+            assertThat(staleClient.getConsecutiveFailureCount()).isGreaterThan(0)
+        } finally {
+            staleClient.shutdown()
+        }
+    }
+
+    @Test
+    fun `should report stale when there has never been a successful refresh`() {
+        mockServer.enqueue(MockResponse().setResponseCode(500))
+        client.start() // initial fetch fails; no data was ever cached
+
+        assertThat(client.isStale()).isTrue()
+        assertThat(client.isHealthy()).isFalse()
+    }
+
+    @Test
+    fun `metrics listener receives onRefreshSuccess and onEvaluation`() {
+        val events = mutableListOf<String>()
+        client.addMetricsListener(object : ToToggleMetricsListener {
+            override fun onRefreshSuccess(toggleCount: Int) {
+                events.add("refreshSuccess:$toggleCount")
+            }
+            override fun onEvaluation(path: String, result: Boolean) {
+                events.add("evaluation:$path:$result")
+            }
+        })
+
+        mockSuccessfulResponse()
+        client.start()
+        client.isActive("user")
+
+        assertThat(events).contains("refreshSuccess:3")
+        assertThat(events).contains("evaluation:user:true")
+    }
+
+    @Test
+    fun `metrics listener receives onRefreshFailure with the running consecutive-failure count`() {
+        val failures = mutableListOf<Int>()
+        client.addMetricsListener(object : ToToggleMetricsListener {
+            override fun onRefreshFailure(error: Exception, consecutiveFailures: Int) {
+                failures.add(consecutiveFailures)
+            }
+        })
+
+        mockSuccessfulResponse()
+        client.start()
+
+        mockServer.enqueue(MockResponse().setResponseCode(500))
+        client.refresh()
+        mockServer.enqueue(MockResponse().setResponseCode(500))
+        client.refresh()
+
+        assertThat(failures).containsExactly(1, 2)
+    }
+
+    @Test
+    fun `a throwing metrics listener does not break evaluation or refresh`() {
+        client.addMetricsListener(object : ToToggleMetricsListener {
+            override fun onRefreshSuccess(toggleCount: Int) = throw RuntimeException("boom")
+            override fun onEvaluation(path: String, result: Boolean) = throw RuntimeException("boom")
+        })
+
+        mockSuccessfulResponse()
+        client.start() // must not throw despite the listener throwing on refresh success
+
+        val result = client.isActive("user") // must not throw despite the listener throwing on evaluation
+        assertThat(result).isTrue()
+    }
+
+    @Test
+    fun `removeMetricsListener stops further notifications`() {
+        var calls = 0
+        val listener = object : ToToggleMetricsListener {
+            override fun onEvaluation(path: String, result: Boolean) { calls++ }
+        }
+
+        mockSuccessfulResponse()
+        client.addMetricsListener(listener)
+        client.start()
+        client.isActive("user")
+        assertThat(calls).isEqualTo(1)
+
+        client.removeMetricsListener(listener)
+        client.isActive("user")
+        assertThat(calls).isEqualTo(1) // unchanged — listener no longer registered
+    }
+
     @Test
     fun `should not allow operations before start`() {
         assertThatThrownBy { client.isActive("user") }
