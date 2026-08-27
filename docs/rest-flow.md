@@ -188,12 +188,15 @@ PUT    /api/applications/:id/toggle/:toggleId                # recursive enable/
 # Secret keys management (session required, admin/root only)
 DELETE /api/secret-keys/:id
 
-# User management (session required, root only)
+# User management (session required; create/list: root or admin, scoped to admin's own teams —
+# get/update/delete/reset-password/status: root only)
 POST   /api/users
 GET    /api/users
 GET    /api/users/:id
 PUT    /api/users/:id
 DELETE /api/users/:id
+POST   /api/users/:id/reset-password
+PUT    /api/users/:id/status
 
 # Current user profile (session required, any role)
 GET  /api/profile
@@ -311,23 +314,34 @@ POST /api/auth/change-password
 Requires a valid session (`ValidateToken()`); routed to the same profile handler as
 `POST /api/profile/change-password` (see §5).
 
-## 3. User Management (Root Only)
+## 3. User Management
 
-Only `root` can create, list, update or delete users. Regular admins cannot self-register other admins.
+Create/list: `root` **or** `admin` (`admin` is restricted to teams they already belong to — see below).
+Get/update/delete/reset-password/status: `root` only.
 
 ```http
 POST /api/users
 ```
 
 ```json
-{ "username": "alice", "role": "admin" }
+{ "username": "alice", "role": "admin", "team_id": "01TEAM000000000000000001", "is_approver": false }
 ```
 
 Rules:
 
 - `role` must be `"admin"` or `"user"` — `"root"` is rejected (`400`, "Cannot create additional root users").
+- `team_id` is **required** — the new user is associated with that team as part of the same request (not a
+  separate step). The team must exist (`400` otherwise). When the caller is `admin` (not `root`), `team_id`
+  must be one of the teams the caller already belongs to, or the request is rejected (`403`,
+  "Admins can only create users in teams they belong to").
+- `is_approver` is optional and only takes effect when the caller is `root` **and** `role` is `"admin"` — any
+  other combination (an `admin` caller, or `role: "user"`) silently ignores it, enforced server-side
+  regardless of what the client sends.
 - No password is supplied by the caller: the server generates a random one and forces `must_change_password =
   true`. The response is the only place the plaintext password is returned, so it must be captured immediately.
+- Team association (and the approver flag, when applicable) is applied **after** the user is created and is
+  best-effort: a failure there does not roll back the user, it's surfaced as a non-fatal `warning` string in
+  the response instead (mirrors `team_warnings` on `PUT /api/users/:id` below).
 
 Response (`201`):
 
@@ -339,12 +353,19 @@ Response (`201`):
     "username": "alice",
     "role": "admin",
     "must_change_password": true,
+    "active": true,
+    "status": "pending_first_login",
     "created_at": "2026-08-19T10:00:00Z",
     "updated_at": "2026-08-19T10:00:00Z"
   },
-  "password": "Xk9$mQ2pLw#T"
+  "password": "Xk9$mQ2pLw#T",
+  "warning": null
 }
 ```
+
+`status` is derived, never stored directly: `"disabled"` when `active` is `false` (takes priority),
+`"pending_first_login"` when `active` is `true` but `must_change_password` is still `true`, `"active"`
+otherwise.
 
 Read/delete:
 
@@ -354,8 +375,36 @@ GET    /api/users/:id
 DELETE /api/users/:id
 ```
 
+`GET /api/users` (list) is scoped when the caller is `admin`: only accounts that share at least one team
+with the caller are returned, plus the caller's own account. `root` always sees everyone.
+
 `DELETE` refuses to remove a `root` user (`403`), and refuses to let a `root` user delete their own account
 (`403`).
+
+```http
+POST /api/users/:id/reset-password
+```
+
+Root only. Generates a fresh random password, sets `must_change_password = true`, and returns the plaintext
+password once — same reveal-once contract as creation. Refuses to reset the `root` user's own password this
+way (`403`; root changes its own password via `POST /api/profile/change-password`, §4).
+
+```json
+{ "success": true, "user": { "...": "...", "status": "pending_first_login" }, "password": "Nq7!vRxK2pLm" }
+```
+
+There is deliberately **no** endpoint to re-read a password already shown once — only the bcrypt hash is
+ever stored, so an already-displayed password cannot be recovered. Resetting (which invalidates the old one)
+is the only way to hand out a new one.
+
+```http
+PUT /api/users/:id/status
+```
+
+Root only. Body: `{ "active": false }`. Disables or re-enables a user without deleting the account — a
+disabled user is blocked at login but keeps their history/associations intact. Refuses to change the `root`
+user's status either way (`403`) — this also covers "root can't disable itself", since root can never be the
+target of this endpoint at all.
 
 ```http
 PUT /api/users/:id

@@ -1,11 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
+import { useSetOpenApp } from "../hooks/useSetOpenApp";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+// Simula o que ApplicationDetailScreen faz de verdade (useSetOpenApp num useEffect) sem puxar a
+// tela inteira (com seu próprio fetch de toggles/hierarquia) pra este teste de shell.
+function FakeOpenAppScreen({ name, toggleCount, hasSecretKey }: { name: string; toggleCount: number; hasSecretKey: boolean }) {
+  const setOpenApp = useSetOpenApp();
+  useEffect(() => {
+    setOpenApp({ name, toggleCount, hasSecretKey });
+    return () => setOpenApp(null);
+  }, [name, toggleCount, hasSecretKey, setOpenApp]);
+  return <div>App detail content</div>;
 }
 
 function renderShell(initialPath = "/") {
@@ -16,6 +29,10 @@ function renderShell(initialPath = "/") {
           <Route path="/" element={<div>Applications content</div>} />
           <Route path="/teams" element={<div>Teams content</div>} />
           <Route path="/account/security" element={<div>Account security content</div>} />
+          <Route
+            path="/applications/:id"
+            element={<FakeOpenAppScreen name="Billing Service" toggleCount={5} hasSecretKey={true} />}
+          />
         </Route>
         <Route path="/login" element={<div>Login screen</div>} />
       </Routes>
@@ -290,6 +307,43 @@ describe("AppShell", () => {
 
     expect(await screen.findByText("Login screen")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("shows a sidebar sub-navigation (app name, Toggles count, Service key dot) once a nested screen reports an open app", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+      )
+    );
+
+    renderShell("/applications/app1");
+    await screen.findByText("App detail content");
+
+    expect(screen.getByText("Billing Service", { selector: ".nav-label" })).toBeInTheDocument();
+    const togglesLink = screen.getByRole("button", { name: /toggles/i });
+    expect(togglesLink).toHaveTextContent("5");
+    expect(screen.getByRole("button", { name: /service key/i }).querySelector(".key-active-dot")).toBeInTheDocument();
+  });
+
+  it("hides the sidebar sub-navigation once the route leaves the open application", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+      )
+    );
+    const user = userEvent.setup();
+
+    renderShell("/applications/app1");
+    await screen.findByText("App detail content");
+    expect(screen.getByText("Billing Service", { selector: ".nav-label" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^applications$/i }));
+
+    expect(await screen.findByText("Applications content")).toBeInTheDocument();
+    expect(screen.queryByText("Billing Service", { selector: ".nav-label" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /service key/i })).not.toBeInTheDocument();
   });
 
   it("navigates to /account/security when 'Change password' is used", async () => {

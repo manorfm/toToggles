@@ -450,17 +450,62 @@ go test -coverprofile=coverage.out ./...  # Com coverage
       não confirmadas" — agora são os paths reais de `icons.jsx` (decodificado do mesmo bundle).
       Ganhou `"back"` (só faltava).
     - `brand-mark`: `Icon name="toggle" size={20}`, estava `18`.
+  - **Quarta passada, o usuário reenviou as mesmas 4 screenshots pedindo pra olhar
+    especificamente "o título" e "a forma dos menus" da sidebar.** CSS/JSX da sidebar batiam 1:1
+    com a fonte confirmada nas checagens anteriores — a comparação visual direta com as
+    screenshots revelou dois problemas que a comparação por texto tinha deixado passar:
+    - **"Toggle" no `brand-name` renderizava branco, não verde**: `.brand-name b { color:
+      var(--accent); font-weight: 700; }` estava **inteiramente ausente** de `global.css` — não
+      era um valor errado, era uma regra que nunca existiu. Confirmado byte-a-byte contra o CSS
+      real do protótipo. Esse é o "título" que o usuário via diferente.
+    - **Ícone do item "History" era o glifo errado**: usávamos `Icon name="clock"` (relógio
+      simples); o confirmado em `icons.jsx` é `"history"` (espiral + ponteiros), um glifo
+      diferente por completo. Achado ao decodificar a v2.1 do bundle de novo — o `icons.jsx`
+      dessa versão está em UUID **`3e33f8f3-815b-4114-9522-103e78d1bf31`**, diferente do UUID da
+      v1 usado nas passadas anteriores (`e7669351-...`, já não existe no bundle atual). Também
+      confirmado nessa passada: os nomes internos "gear"/"settings" e "chevdown"/"chevron-down"
+      têm paths idênticos aos nossos — só apelidos diferentes, sem bug real.
+    - **A sub-navegação da sidebar quando uma aplicação está aberta foi implementada de
+      verdade** (antes só um plano documentado): `.nav-label` com o nome da app + "Toggles" (com
+      contador do total de toggles) + "Service key" (com indicador `.key-active-dot` quando
+      existe chave ativa) — confirmados no `app.jsx` real e agora visíveis na comparação lado a
+      lado. `AppShellContext#setBreadcrumbApp` (nome só) virou `setOpenApp` (`hooks/useAppUser.ts
+      #OpenAppInfo = {name, toggleCount, hasSecretKey}`), consumido tanto pelo 3º nível do
+      breadcrumb quanto por esta sub-nav — um único ponto de verdade em vez de dois mecanismos
+      paralelos. `useSetBreadcrumbApp` foi renomeado pra `useSetOpenApp`
+      (`hooks/useSetOpenApp.ts`). Os dois itens de nav são **âncoras de scroll reais**
+      (`document.getElementById("toggles-section"|"service-key-section")?.scrollIntoView(...)`),
+      não um fake de estado de aba — nossa página empilha as duas seções (Toggles e Service key)
+      numa página só, sem tabs de verdade pra imitar o `setTab("toggles"|"keys")` do protótipo.
+      `hasSecretKey` vem de `SecretKeySection` via um novo callback opcional
+      `onKeyPresenceChange?: (hasKey: boolean) => void` — mantém `SecretKeySection` como único
+      dono do fetch de `GET /secret-keys` (não duplica a chamada em `ApplicationDetailScreen`).
+      Também trouxe de volta pro `Icon.tsx` o path confirmado de `"layers"` (usado no item
+      "Toggles" da sub-nav) e as regras `.nav-item svg { color: var(--ink-3) }`/`.nav-item.active
+      svg { color: var(--accent) }`/`.key-active-dot` que também estavam faltando em
+      `global.css`.
   - **Ainda deliberadamente fora de escopo** (confirmados no JSX real, não construídos): item de
     nav "Guia de início" (ícone `rocket`, abre `OnboardingModal` de 7 passos — feature inteira
     ainda não existe, adicionar o link seria clique morto); linha "Light mode" no rodapé (no
     protótipo é funcional de verdade, mas este app só suporta o tema escuro por decisão já
-    documentada — replicar só visualmente seria UI morta pelo mesmo motivo); a sub-navegação da
-    sidebar quando uma aplicação está aberta (`.nav-label` com o nome da app + itens "Toggles"
-    com contador + "Service key" com indicador de chave ativa) — nosso `ApplicationDetailScreen`
-    mostra os dois numa página só, sem tabs. Plano se for retomado: reusar o mecanismo de
-    `setBreadcrumbApp` (mesma ideia, um `setSidebarSubnav` ou similar) pra `AppShell` saber que
-    uma app está aberta + seus stats, e os dois "itens de nav" virariam scroll-to-section reais
-    (não fake) já que não existe estado de tab pra alternar de verdade.
+    documentada — replicar só visualmente seria UI morta pelo mesmo motivo). Ambos continuam
+    visivelmente ausentes na comparação lado a lado com o protótipo — é uma divergência real e
+    conhecida, não um erro de implementação; construí-los exigiria as features de verdade por
+    trás (o wizard de onboarding, o suporte a tema claro), não só o item de menu.
+  - **`EditToggleDrawer` (regras de ativação) corrigido contra o `RULE_TYPES` real, achado no
+    mesmo decode do bundle v2.1.** Uma fase anterior tinha inventado nome/descrição/placeholder/
+    hint em português pros 7 tipos de regra porque, na época, `get_full_jsx("EditDrawer")` só
+    mostrava a REFERÊNCIA a `RULE_TYPES` (o array em si vinha de `data.js`, um arquivo
+    diferente, nunca puxado). Corrigido em `lib/activationRuleTypes.ts` pro texto real (inglês,
+    confirmado): nomes/descrições/placeholders/hints exatos, e a ORDEM real — **canary é o 4º
+    item, não o último** (`percentage, parameter, user_id, canary, ip, country, time`). Também
+    achado: os cards de tipo de regra usavam o mesmo ícone genérico `"settings"` pros 7 — cada
+    tipo tem um ícone confirmado próprio (`percent`, `sliders`, `user`, `rocket`, `globe`, `map`,
+    `clock`), adicionados a `Icon.tsx` e ligados via um novo campo `icon` em `RuleTypeMeta`. O
+    formato de UI em si (um único input de texto genérico rotulado "{Nome} value", cujo
+    placeholder/hint mudam por tipo, em vez de campos estruturados por tipo) já batia com o
+    confirmado — o backend também só valida "não vazio" pra qualquer tipo
+    (`entity.ActivationRule.ValidateRule`), então não há formato obrigatório por trás.
 - ✅ **Applications** (`/`, `screens/ApplicationsScreen.tsx`) — lista real via `GET /applications` +
   `AppModal` (root/admin; `<select>` de time via `listTeamOptions` — root vê todos os times com
   `GET /teams`, outras roles só os próprios com `GET /profile/teams`, já que `POST /applications`

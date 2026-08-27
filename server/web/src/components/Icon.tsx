@@ -19,7 +19,14 @@ export type IconName =
   | "edit"
   | "search"
   | "chevron-down"
-  | "back";
+  | "back"
+  | "history"
+  | "layers"
+  | "percent"
+  | "sliders"
+  | "globe"
+  | "map"
+  | "rocket";
 
 interface IconProps {
   name: IconName;
@@ -31,10 +38,14 @@ interface IconProps {
 }
 
 // Glifos confirmados no icons.jsx real do protótipo (decodificado do bundle comprimido embutido
-// em docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método; design-graph só indexa
-// "toggle", o resto nunca veio de nenhuma chamada). Cada `d` abaixo é o path bruto de `ICONS[name]`
-// em icons.jsx, só quebrado em múltiplos "M..." pra ficar legível — mesmo efeito visual do
+// em "docs/toToggle v2.1.html", UUID 3e33f8f3-815b-4114-9522-103e78d1bf31 — ver o header de
+// lib/toggleLeaves.ts pro método; design-graph só indexa "toggle", o resto nunca veio de nenhuma
+// chamada). Cada `d` abaixo é o path bruto de `ICONS[name]` em icons.jsx, só quebrado em
+// múltiplos "M..." pra ficar legível — mesmo efeito visual do
 // `d.split("M").filter(Boolean).map(seg => <path d={"M"+seg} />)` que o Icon real faz em runtime.
+// Nota: o protótipo nomeia o glifo de engrenagem "gear" (path idêntico ao nosso "settings") e o
+// de seta-para-baixo "chevdown" (idêntico ao nosso "chevron-down") — só nomes diferentes, mesmo
+// path, sem impacto visual.
 const paths: Record<IconName, JSX.Element> = {
   toggle: (
     <>
@@ -139,6 +150,56 @@ const paths: Record<IconName, JSX.Element> = {
     <>
       <path d="M19 12H5" />
       <path d="M12 19l-7-7 7-7" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M3 3v5h5" />
+      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+      <path d="M12 7v5l4 2" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 17l10 5 10-5" />
+      <path d="M2 12l10 5 10-5" />
+    </>
+  ),
+  percent: (
+    <>
+      <path d="M19 5L5 19" />
+      <path d="M6.5 6.5a2 2 0 1 0 0 .01" />
+      <path d="M17.5 17.5a2 2 0 1 0 0 .01" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 21v-7" />
+      <path d="M4 10V3" />
+      <path d="M12 21v-9" />
+      <path d="M12 8V3" />
+      <path d="M20 21v-5" />
+      <path d="M20 12V3" />
+      <path d="M1 14h6" />
+      <path d="M9 8h6" />
+      <path d="M17 16h6" />
+    </>
+  ),
+  globe: (
+    <>
+      <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
+      <path d="M2 12h20" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </>
+  ),
+  map: (
+    <path d="M9 20l-5.45-2.72A1 1 0 0 1 3 16.38V4.62a1 1 0 0 1 1.45-.89L9 6m0 14l6-3m-6 3V6m6 11l5.45 2.72A1 1 0 0 0 21 19.38V7.62a1 1 0 0 0-.55-.89L15 4m0 13V4m0 0L9 6" />
+  ),
+  rocket: (
+    <>
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91 0z" />
+      <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
     </>
   ),
 };

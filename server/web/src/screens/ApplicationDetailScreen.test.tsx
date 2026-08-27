@@ -11,7 +11,7 @@ function jsonResponse(status: number, body: unknown) {
 }
 
 function FakeShell({ user }: { user: AuthenticatedUser }) {
-  return <Outlet context={{ user, setBreadcrumbApp: () => {} }} />;
+  return <Outlet context={{ user, setOpenApp: () => {} }} />;
 }
 
 function renderScreen(user: AuthenticatedUser = { id: "1", username: "root", role: "root", must_change_password: false }) {

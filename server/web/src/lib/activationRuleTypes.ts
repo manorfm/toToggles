@@ -1,68 +1,79 @@
+import type { IconName } from "../components/Icon";
 import type { ActivationRuleType, ToggleDetail } from "../types/toggle";
 
 export interface RuleTypeMeta {
   type: ActivationRuleType;
   name: string;
   description: string;
+  icon: IconName;
   placeholder: string;
   hint: string;
 }
 
-// Nome/descrição vêm literalmente de entity.GetRuleTypeOptions() (Go) — a única
-// definição real dessas 7 opções; não existe UI delas no protótipo (get_full_jsx
-// referenciava RULE_TYPES sem incluir os dados). Placeholder/hint são compostos
-// aqui a partir da mesma descrição — o backend não valida formato além de
-// "valor não pode ser vazio" (entity.ActivationRule.ValidateRule), então não há
-// uma sintaxe obrigatória a seguir.
+// name/description/icon/placeholder/hint confirmados 1:1 contra o RULE_TYPES real do
+// protótipo (data.js v2, decodificado do bundle embutido em "docs/toToggle v2.1.html" —
+// ver o header de lib/toggleLeaves.ts pro método). Uma fase anterior tinha inventado texto
+// em português aqui porque, na época, get_full_jsx("EditDrawer") só mostrava a REFERÊNCIA a
+// RULE_TYPES, não os dados — decodificar o bundle revelou os 7 valores reais (em inglês) e a
+// ORDEM real (canary é o 4º item, não o último). O backend não valida formato além de "valor
+// não pode ser vazio" (entity.ActivationRule.ValidateRule), então placeholder/hint aqui são
+// só orientação de UI, sem sintaxe obrigatória.
 export const RULE_TYPES: RuleTypeMeta[] = [
   {
     type: "percentage",
     name: "Percentage",
-    description: "Ativar para X% das requisições",
-    placeholder: "0-100",
-    hint: "Rollout percentual, de 0 a 100.",
+    description: "Activate for X% of traffic",
+    icon: "percent",
+    placeholder: "e.g. 25",
+    hint: "Consistent hashing — same user always gets the same result.",
   },
   {
     type: "parameter",
     name: "Parameter",
-    description: "Ativar baseado em parâmetro específico",
-    placeholder: "nome=valor",
-    hint: "Parâmetro e valor a comparar.",
+    description: "Match a context value",
+    icon: "sliders",
+    placeholder: "premium,enterprise",
+    hint: "Comma-separated values matched against the request parameter.",
   },
   {
     type: "user_id",
     name: "User ID",
-    description: "Ativar para usuários específicos",
-    placeholder: "01ARZ3ND...",
-    hint: "ID do usuário (ou lista separada por vírgula).",
-  },
-  {
-    type: "ip",
-    name: "IP Address",
-    description: "Ativar para IPs específicos",
-    placeholder: "192.168.1.1",
-    hint: "Endereço IP (ou faixa/lista).",
-  },
-  {
-    type: "country",
-    name: "Country",
-    description: "Ativar para países específicos",
-    placeholder: "BR",
-    hint: "Código do país (ISO 3166-1 alpha-2).",
-  },
-  {
-    type: "time",
-    name: "Time",
-    description: "Ativar em horários específicos",
-    placeholder: "09:00-18:00",
-    hint: "Janela de horário em que o toggle fica ativo.",
+    description: "Specific users",
+    icon: "user",
+    placeholder: "12,48,103",
+    hint: "Comma-separated user IDs.",
   },
   {
     type: "canary",
     name: "Canary",
-    description: "Ativar para releases canário",
-    placeholder: "canary-v2",
-    hint: "Identificador do release canário.",
+    description: "Canary release cohort",
+    icon: "rocket",
+    placeholder: "true",
+    hint: "Activates for the canary cohort only.",
+  },
+  {
+    type: "ip",
+    name: "IP Address",
+    description: "Specific IPs / ranges",
+    icon: "globe",
+    placeholder: "10.0.0.0/24",
+    hint: "Comma-separated IPs or CIDR ranges.",
+  },
+  {
+    type: "country",
+    name: "Country",
+    description: "Geo targeting",
+    icon: "map",
+    placeholder: "BR,PT",
+    hint: "ISO country codes, comma-separated.",
+  },
+  {
+    type: "time",
+    name: "Time window",
+    description: "Active during a window",
+    icon: "clock",
+    placeholder: "09:00-18:00",
+    hint: "24h time window in server timezone.",
   },
 ];
 

@@ -281,6 +281,10 @@ input[type="checkbox"] {
   font-size: 16px;
   letter-spacing: -0.02em;
 }
+.brand-name b {
+  color: var(--accent);
+  font-weight: 700;
+}
 .brand-sub {
   font-size: 11px;
   color: var(--ink-4);
@@ -356,6 +360,21 @@ input[type="checkbox"] {
 .nav-item.active .count {
   background: color-mix(in oklab, var(--accent) 22%, transparent);
   color: var(--accent);
+}
+.nav-item svg {
+  width: 17px;
+  height: 17px;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.nav-item.active svg {
+  color: var(--accent);
+}
+.key-active-dot {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  font-size: 8px !important;
+  padding: 3px 7px !important;
 }
 .nav-label {
   font-size: 10.5px;

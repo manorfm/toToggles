@@ -10,7 +10,7 @@ import { Icon } from "../components/Icon";
 import { SecretKeySection } from "../components/SecretKeySection";
 import { TogglePaths } from "../components/TogglePaths";
 import { useAppUser } from "../hooks/useAppUser";
-import { useSetBreadcrumbApp } from "../hooks/useSetBreadcrumbApp";
+import { useSetOpenApp } from "../hooks/useSetOpenApp";
 import { buildChildrenCountMap, countToggleTree, flattenToLeaves } from "../lib/toggleLeaves";
 import type { ToggleLeaf } from "../types/toggle";
 
@@ -36,8 +36,9 @@ export function ApplicationDetailScreen() {
   const applicationId = id!;
   const user = useAppUser();
   const navigate = useNavigate();
-  const setBreadcrumbApp = useSetBreadcrumbApp();
+  const setOpenApp = useSetOpenApp();
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [hasSecretKey, setHasSecretKey] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [configuring, setConfiguring] = useState<{ toggleId: string; childrenCount: number } | null>(null);
@@ -69,11 +70,15 @@ export function ApplicationDetailScreen() {
   }, [load]);
 
   // Confirmado no protótipo real: o breadcrumb do topbar ganha um 3º nível com o nome da
-  // aplicação aberta ("Applications / {app.name} / Toggles") — só esta tela sabe o nome.
+  // aplicação aberta ("Applications / {app.name} / Toggles"), e a sidebar ganha uma sub-nav
+  // ("Toggles"/"Service key") — só esta tela tem esses dados (nome, total de toggles, se existe
+  // service key).
+  const openAppName = state.status === "loaded" ? state.applicationName : null;
+  const openAppToggleCount = state.status === "loaded" ? state.stats.total : 0;
   useEffect(() => {
-    if (state.status === "loaded") setBreadcrumbApp(state.applicationName);
-    return () => setBreadcrumbApp(null);
-  }, [state.status === "loaded" ? state.applicationName : null, setBreadcrumbApp]);
+    if (openAppName !== null) setOpenApp({ name: openAppName, toggleCount: openAppToggleCount, hasSecretKey });
+    return () => setOpenApp(null);
+  }, [openAppName, openAppToggleCount, hasSecretKey, setOpenApp]);
 
   const canEdit = user.role === "root" || user.role === "admin";
   const canDeleteApp = user.role === "root";
@@ -177,20 +182,22 @@ export function ApplicationDetailScreen() {
       {state.status === "loading" && <div className="empty">Carregando…</div>}
       {state.status === "error" && <div className="empty">{state.message}</div>}
       {state.status === "loaded" && (
-        <TogglePaths
-          tree={state.leaves}
-          search={search}
-          setSearch={setSearch}
-          canEdit={canEdit && !mutating}
-          onToggle={handleToggle}
-          onEdit={(toggleId) => setConfiguring({ toggleId, childrenCount: state.childrenCountById.get(toggleId) ?? 0 })}
-          onDelete={(toggleId, path) => setDeletingToggle({ toggleId, path })}
-        />
+        <div id="toggles-section">
+          <TogglePaths
+            tree={state.leaves}
+            search={search}
+            setSearch={setSearch}
+            canEdit={canEdit && !mutating}
+            onToggle={handleToggle}
+            onEdit={(toggleId) => setConfiguring({ toggleId, childrenCount: state.childrenCountById.get(toggleId) ?? 0 })}
+            onDelete={(toggleId, path) => setDeletingToggle({ toggleId, path })}
+          />
+        </div>
       )}
 
       {state.status === "loaded" && (
-        <div style={{ marginTop: 32, paddingTop: 22, borderTop: "1px solid var(--border)" }}>
-          <SecretKeySection applicationId={applicationId} canManage={canEdit} />
+        <div id="service-key-section" style={{ marginTop: 32, paddingTop: 22, borderTop: "1px solid var(--border)" }}>
+          <SecretKeySection applicationId={applicationId} canManage={canEdit} onKeyPresenceChange={setHasSecretKey} />
         </div>
       )}
 

@@ -16,9 +16,8 @@ interface EditToggleDrawerProps {
 
 type LoadState = { status: "loading" } | { status: "loaded"; toggle: ToggleDetail } | { status: "error"; message: string };
 
-// Adaptado de get_full_jsx("EditDrawer"). O picker de tipo de regra (RULE_TYPES) não
-// veio com dados no protótipo (só a referência); os nomes/descrições reais vêm de
-// entity.GetRuleTypeOptions() no Go — ver lib/activationRuleTypes.ts.
+// Adaptado do EditDrawer real (decodificado do bundle — ver lib/activationRuleTypes.ts pro
+// porquê get_full_jsx("EditDrawer") sozinho não bastava aqui).
 export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClose, onSaved, onPendingApproval }: EditToggleDrawerProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [enabled, setEnabled] = useState(true);
@@ -142,7 +141,7 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
                           className={"rule-opt" + (ruleType === r.type ? " sel" : "")}
                           onClick={() => setRuleType(r.type)}
                         >
-                          <Icon name="settings" size={16} />
+                          <Icon name={r.icon} size={16} />
                           <div>
                             <div className="rn">{r.name}</div>
                             <div className="rd">{r.description}</div>

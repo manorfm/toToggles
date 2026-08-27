@@ -7,24 +7,31 @@ import type { SecretKey } from "../types/secretKey";
 interface SecretKeySectionProps {
   applicationId: string;
   canManage: boolean;
+  // A sidebar mostra um indicador (".key-active-dot") no item "Service key" quando a aplicação
+  // aberta tem uma chave ativa — só esta seção sabe isso (dono único do fetch), então avisa o
+  // pai em vez de duplicar a chamada a GET /secret-keys.
+  onKeyPresenceChange?: (hasKey: boolean) => void;
 }
 
 type State = { status: "loading" } | { status: "loaded"; key: SecretKey | null } | { status: "error"; message: string };
 
 // Uma aplicação tem no máximo uma secret key ativa por vez — "gerar" no servidor é
 // sempre "regerar" (apaga as anteriores primeiro), então só mostramos a mais recente.
-export function SecretKeySection({ applicationId, canManage }: SecretKeySectionProps) {
+export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange }: SecretKeySectionProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     listSecretKeys(applicationId)
-      .then((keys) => setState({ status: "loaded", key: keys[0] ?? null }))
+      .then((keys) => {
+        setState({ status: "loaded", key: keys[0] ?? null });
+        onKeyPresenceChange?.(keys.length > 0);
+      })
       .catch((err) => {
         setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível carregar a chave." });
       });
-  }, [applicationId]);
+  }, [applicationId, onKeyPresenceChange]);
 
   useEffect(() => {
     load();

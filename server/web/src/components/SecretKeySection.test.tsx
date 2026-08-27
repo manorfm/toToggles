@@ -97,4 +97,32 @@ describe("SecretKeySection", () => {
 
     expect(await screen.findByText(/nenhuma chave/i)).toBeInTheDocument();
   });
+
+  it("reports key presence via onKeyPresenceChange as false when there is no key and true when there is", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          success: true,
+          secret_keys: [{ id: "1", name: "API Access Key", application_id: "app1", created_by: "u1", created_at: "", updated_at: "" }],
+        })
+      )
+    );
+    const onKeyPresenceChange = vi.fn();
+
+    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />);
+    await screen.findByText("API Access Key");
+
+    expect(onKeyPresenceChange).toHaveBeenCalledWith(true);
+  });
+
+  it("reports key presence as false when the key list is empty", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
+    const onKeyPresenceChange = vi.fn();
+
+    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />);
+    await screen.findByText(/nenhuma chave/i);
+
+    expect(onKeyPresenceChange).toHaveBeenCalledWith(false);
+  });
 });

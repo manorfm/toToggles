@@ -1,12 +1,19 @@
 import { useOutletContext } from "react-router-dom";
 import type { AuthenticatedUser } from "../types/auth";
 
+// Dados da aplicação aberta que só ApplicationDetailScreen tem (AppShell nunca busca uma
+// aplicação individual) mas que o shell precisa pra dois lugares confirmados no app.jsx real:
+// o 3º nível do breadcrumb ("Applications / {app.name} / Toggles") e a sub-navegação da sidebar
+// (".nav-label" com o nome da app + itens "Toggles"/"Service key", ver AppShell.tsx).
+export interface OpenAppInfo {
+  name: string;
+  toggleCount: number;
+  hasSecretKey: boolean;
+}
+
 export interface AppShellContext {
   user: AuthenticatedUser;
-  // Confirmado no protótipo real (app.jsx): o breadcrumb do topbar ganha um 3º nível com o nome
-  // da aplicação aberta ("Applications / {app.name} / Toggles") — dado que só a própria tela de
-  // detalhe tem (AppShell nunca carrega uma aplicação individual). Ver useSetBreadcrumbApp.
-  setBreadcrumbApp: (name: string | null) => void;
+  setOpenApp: (app: OpenAppInfo | null) => void;
 }
 
 // AppShell já resolveu a sessão (useCurrentUser) antes de renderizar seu Outlet

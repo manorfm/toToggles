@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useCurrentUser } from "../hooks/useCurrentUser";
+import type { OpenAppInfo } from "../hooks/useAppUser";
 import { listApplications } from "../api/applications";
 import { listApprovableApprovals, listPendingApprovals } from "../api/approvals";
 import { listTeams } from "../api/teams";
@@ -19,7 +20,9 @@ import { UserMenu } from "./UserMenu";
 //   <button onClick={...}><Icon name="apps" size={17}/> Applications <span className="count">{apps.length}</span></button>
 //   <button onClick={...}><Icon name="users" size={17}/> Teams & people <span className="count">{teams.length}</span></button>
 //   {showApprovalsNav && <button>...Approvals {pendingApprovals>0 && <span className="count">{pendingApprovals}</span>}</button>}
-//   <button>...History</button>  {/* sem contador */}
+//   <button><Icon name="history" size={17}/> History</button>  {/* sem contador — "history" é um
+//   glifo distinto de "clock" (espiral + ponteiros vs. relógio simples); usar "clock" aqui foi um
+//   erro corrigido depois que o usuário sinalizou a barra lateral ainda diferente do protótipo */}
 // Applications/Teams mostram a contagem SEMPRE (mesmo "0"); só Approvals é condicional.
 // "Teams & people" some para quem não é root: a API por trás (/teams) exige RequireRoot().
 //
@@ -35,29 +38,36 @@ import { UserMenu } from "./UserMenu";
 // role === "root" || role === "admin"`. "Guia de início" continua de fora: é confirmado (ícone
 // "rocket", abre um OnboardingModal de 7 passos) mas mapeia pra uma feature inteira ainda não
 // construída nesta reescrita — adicionar o item de nav sem destino real seria um clique morto.
+//
+// Sub-navegação da aplicação aberta — confirmada no app.jsx real como um `<div className=
+// "nav-label">{app.name}</div>` seguido de dois nav-items ("Toggles" com contador de
+// `stats.total`, "Service key" com um indicador `.key-active-dot` quando existe chave ativa),
+// que trocam de ABA dentro da mesma view (`setTab("toggles"|"keys")`). Nossa tela não tem essa
+// separação em abas — Toggles e Service key ficam empilhados numa página só — então os dois
+// itens aqui viram âncoras de scroll reais (`#toggles-section`/`#service-key-section`) em vez de
+// fingir um estado de aba que não existe.
 const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean; adminOrRoot?: boolean; icon: IconName; alwaysShowCount?: boolean }[] = [
   { to: "/", label: "Applications", end: true, icon: "apps", alwaysShowCount: true },
   { to: "/teams", label: "Teams & people", rootOnly: true, icon: "users", alwaysShowCount: true },
   { to: "/users", label: "Usuários", adminOrRoot: true, icon: "user", alwaysShowCount: true },
   { to: "/approvals", label: "Approvals", icon: "check" },
-  { to: "/history", label: "History", icon: "clock" },
+  { to: "/history", label: "History", icon: "history" },
 ];
 
 // Breadcrumb no topo do conteúdo — confirmado no app.jsx real como uma trilha
 // (.crumbs > .c.link "Applications" sempre clicável + .sep "/" + .c.now por seção), não um
 // rótulo único. Dentro de uma aplicação aberta, o confirmado é 3 níveis
-// ("Applications / {app.name} / Toggles") — o nome vem de `breadcrumbAppName`, que
-// ApplicationDetailScreen preenche via useSetBreadcrumbApp assim que carrega a aplicação (ver
-// hooks/useAppUser.ts#AppShellContext).
-function Crumbs({ pathname, onHome, breadcrumbAppName }: { pathname: string; onHome: () => void; breadcrumbAppName: string | null }) {
-  if (pathname.startsWith("/applications/") && breadcrumbAppName) {
+// ("Applications / {app.name} / Toggles") — o nome vem de `openApp`, que ApplicationDetailScreen
+// preenche via useSetOpenApp assim que carrega a aplicação (ver hooks/useAppUser.ts#AppShellContext).
+function Crumbs({ pathname, onHome, openAppName }: { pathname: string; onHome: () => void; openAppName: string | null }) {
+  if (pathname.startsWith("/applications/") && openAppName) {
     return (
       <div className="crumbs">
         <button className="c link" onClick={onHome}>
           Applications
         </button>
         <span className="sep">/</span>
-        <span className="c link">{breadcrumbAppName}</span>
+        <span className="c link">{openAppName}</span>
         <span className="sep">/</span>
         <span className="c now">Toggles</span>
       </div>
@@ -101,14 +111,14 @@ export function AppShell() {
   const [pendingCount, setPendingCount] = useState(0);
   const [appCount, setAppCount] = useState(0);
   const [teamCount, setTeamCount] = useState(0);
-  const [breadcrumbAppName, setBreadcrumbAppName] = useState<string | null>(null);
+  const [openApp, setOpenApp] = useState<OpenAppInfo | null>(null);
 
-  // A tela de detalhe de aplicação é quem sabe o nome (AppShell nunca busca uma aplicação
-  // individual) — mas se o usuário navegar embora sem essa tela limpar o próprio nome (ex.:
-  // clicar direto num item de nav em vez de "Applications"), o nome antigo não pode vazar pro
-  // breadcrumb de outra rota.
+  // A tela de detalhe de aplicação é quem sabe esses dados (AppShell nunca busca uma aplicação
+  // individual) — mas se o usuário navegar embora sem essa tela limpar o próprio estado (ex.:
+  // clicar direto num item de nav em vez de "Applications"), os dados antigos não podem vazar
+  // pro breadcrumb/sub-nav de outra rota.
   useEffect(() => {
-    if (!location.pathname.startsWith("/applications/")) setBreadcrumbAppName(null);
+    if (!location.pathname.startsWith("/applications/")) setOpenApp(null);
   }, [location.pathname]);
 
   const [userCount, setUserCount] = useState(0);
@@ -233,6 +243,25 @@ export function AppShell() {
               </NavLink>
             );
           })}
+
+          {openApp && (
+            <>
+              <div className="nav-label">{openApp.name}</div>
+              <button
+                className="nav-item active"
+                onClick={() => document.getElementById("toggles-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                <Icon name="layers" size={17} /> Toggles <span className="count">{openApp.toggleCount}</span>
+              </button>
+              <button
+                className="nav-item"
+                onClick={() => document.getElementById("service-key-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                <Icon name="key" size={17} /> Service key
+                {openApp.hasSecretKey && <span className="count key-active-dot">●</span>}
+              </button>
+            </>
+          )}
         </nav>
 
         <div className="sidebar-foot" style={{ position: "relative" }}>
@@ -262,9 +291,9 @@ export function AppShell() {
 
       <main className="main">
         <div className="topbar">
-          <Crumbs pathname={location.pathname} onHome={() => navigate("/")} breadcrumbAppName={breadcrumbAppName} />
+          <Crumbs pathname={location.pathname} onHome={() => navigate("/")} openAppName={openApp?.name ?? null} />
         </div>
-        <Outlet context={{ user, setBreadcrumbApp: setBreadcrumbAppName }} />
+        <Outlet context={{ user, setOpenApp }} />
       </main>
     </div>
   );
