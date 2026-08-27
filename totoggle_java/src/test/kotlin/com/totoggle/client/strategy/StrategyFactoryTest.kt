@@ -133,9 +133,47 @@ class StrategyFactoryTest {
         
         factory.registerStrategy(faultyStrategy)
         val rule = ActivationRule("faulty", "value")
-        
+
         val result = factory.evaluate(rule)
-        
+
         assertThat(result).isFalse()
+    }
+
+    // A missing parameter for a match-based rule type (parameter/user_id/country/canary) can
+    // only mean the caller forgot to pass one — evaluate() logs an ERROR for this instead of
+    // throwing, so a caller mistake degrades to "rule doesn't match" rather than crashing the
+    // request. These tests only pin down the non-throwing, false-returning behavior; the log
+    // itself isn't asserted (no log-capture harness in this project).
+    @Test
+    fun `should not throw for a parameter-requiring type given no parameter — degrades to false`() {
+        for (type in listOf(
+            ActivationRule.TYPE_PARAMETER,
+            ActivationRule.TYPE_USER_ID,
+            ActivationRule.TYPE_COUNTRY,
+            ActivationRule.TYPE_CANARY,
+        )) {
+            val rule = ActivationRule(type, "some-value")
+            assertThat(factory.evaluate(rule)).isFalse()
+            assertThat(factory.evaluate(rule, null)).isFalse()
+        }
+    }
+
+    @Test
+    fun `should not log the missing-parameter error for percentage (legitimate random fallback)`() {
+        // percentage has a real, intentional meaning for "no parameter" (random draw) — it must
+        // not be treated the same as the four match-based types above. This test only checks it
+        // still evaluates normally (doesn't throw, returns a valid boolean); there's nothing to
+        // assert about logs without a log-capture harness, but the behavioral distinction is the
+        // point: 100% must still deterministically return true even with no parameter.
+        val rule = ActivationRule(ActivationRule.TYPE_PERCENTAGE, "100")
+        assertThat(factory.evaluate(rule)).isTrue()
+        assertThat(factory.evaluate(rule, null)).isTrue()
+    }
+
+    @Test
+    fun `should not require a parameter for time (never uses one)`() {
+        val rule = ActivationRule(ActivationRule.TYPE_TIME, "00:00-23:59")
+        assertThat(factory.evaluate(rule)).isTrue()
+        assertThat(factory.evaluate(rule, null)).isTrue()
     }
 }

@@ -116,7 +116,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
             }
             
             // Validate parent toggles (cascading validation)
-            if (!areParentsActive(path)) {
+            if (!areParentsActive(path, parameter)) {
                 logger.debug("Parent toggles are not active for path: {}", path)
                 return false
             }
@@ -153,34 +153,43 @@ class ToToggleClient(private val config: ToToggleConfig) {
     
     /**
      * Validates that all parent toggles are active (cascading validation).
-     * 
+     *
      * For example, for path "user.payments.view-table":
-     * - Checks that "user" is enabled
-     * - Checks that "user.payments" is enabled
-     * 
+     * - Checks that "user" is enabled (and its activation rule, if any)
+     * - Checks that "user.payments" is enabled (and its activation rule, if any)
+     *
+     * The same [parameter] passed to [isActive] is forwarded to every ancestor's rule
+     * evaluation, not just the target toggle's — a rule configured on an ancestor is exactly as
+     * real as one configured on the toggle itself, so it needs the same context to evaluate
+     * correctly (e.g. consistent percentage hashing, or a parameter/user_id/country/canary
+     * match). Evaluating an ancestor's rule with no parameter used to always fail it for those
+     * four match-based types, silently blocking the whole path regardless of what the caller
+     * passed in.
+     *
      * @param path The toggle path
+     * @param parameter Optional parameter for rule evaluation, forwarded to every ancestor
      * @return true if all parents are active, false otherwise
      */
-    private fun areParentsActive(path: String): Boolean {
+    private fun areParentsActive(path: String, parameter: String?): Boolean {
         val ancestors = cache.getAncestors(path)
-        
+
         for (ancestor in ancestors) {
             if (!ancestor.enabled) {
                 logger.debug("Parent toggle '{}' is disabled, blocking child '{}'", ancestor.path, path)
                 return false
             }
-            
+
             // Check activation rules for parents too
             val ancestorRule = ancestor.activationRule
             if (ancestor.hasActivationRule && ancestorRule != null) {
-                val ruleResult = strategyFactory.evaluate(ancestorRule)
+                val ruleResult = strategyFactory.evaluate(ancestorRule, parameter)
                 if (!ruleResult) {
                     logger.debug("Parent toggle '{}' failed activation rule, blocking child '{}'", ancestor.path, path)
                     return false
                 }
             }
         }
-        
+
         return true
     }
     
