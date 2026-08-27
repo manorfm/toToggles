@@ -13,7 +13,13 @@ import com.fasterxml.jackson.annotation.JsonProperty
  * @property parentId ID of the parent toggle, null for root toggles
  * @property appId Application ID this toggle belongs to
  * @property hasActivationRule Whether this toggle has activation rules
- * @property activationRule The activation rule configuration
+ * @property activationRule The activation rule configuration. Nullable: the real public
+ *   `GET /api/toggles` endpoint (server/internal/app/handler/secret_key_handler.go) serializes
+ *   this as JSON `null` whenever `hasActivationRule` is false (the field is a Go `*ActivationRule`
+ *   pointer, `omitempty`) — confirmed in docs/rest-flow.md's own documented example response.
+ *   A non-nullable type here made Jackson's kotlin-module throw MissingKotlinParameterException
+ *   on every toggle without a rule, i.e. the common case — breaking `fetchToggles()` for almost
+ *   any real application.
  */
 data class Toggle(
     @JsonProperty("id")
@@ -41,7 +47,7 @@ data class Toggle(
     val hasActivationRule: Boolean,
     
     @JsonProperty("activation_rule")
-    val activationRule: ActivationRule
+    val activationRule: ActivationRule? = null
 ) {
     
     /**

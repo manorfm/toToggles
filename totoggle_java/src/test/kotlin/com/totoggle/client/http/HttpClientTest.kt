@@ -60,10 +60,7 @@ class HttpClientTest {
                             "parent_id": "user-toggle",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {
-                                "type": "",
-                                "value": ""
-                            }
+                            "activation_rule": null
                         }
                     ]
                 }
@@ -98,6 +95,58 @@ class HttpClientTest {
             .hasMessageContaining("Invalid secret key")
     }
     
+    @Test
+    fun `should parse multiple toggles where activation_rule is null for every one without a rule`() {
+        // The real GET /api/toggles handler (server/internal/app/handler/secret_key_handler.go)
+        // serializes a nil *ActivationRule as JSON null whenever has_activation_rule is false —
+        // confirmed in docs/rest-flow.md's documented example response. Toggle.activationRule
+        // used to be non-nullable, which made every toggle without a rule (the common case) fail
+        // to parse via Jackson's kotlin-module (MissingKotlinParameterException).
+        val responseBody = """
+            {
+                "application": {
+                    "id": "app-123",
+                    "name": "Test App",
+                    "toggles": [
+                        {
+                            "id": "toggle-1",
+                            "path": "user",
+                            "value": "user",
+                            "enabled": true,
+                            "level": 0,
+                            "parent_id": null,
+                            "app_id": "app-123",
+                            "has_activation_rule": false,
+                            "activation_rule": null
+                        },
+                        {
+                            "id": "toggle-2",
+                            "path": "user.payments",
+                            "value": "payments",
+                            "enabled": true,
+                            "level": 1,
+                            "parent_id": "toggle-1",
+                            "app_id": "app-123",
+                            "has_activation_rule": true,
+                            "activation_rule": {"type": "percentage", "value": "50"}
+                        }
+                    ]
+                }
+            }
+        """.trimIndent()
+
+        mockServer.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setBody(responseBody)
+            .setHeader("Content-Type", "application/json"))
+
+        val response = httpClient.fetchToggles()
+
+        assertThat(response.application.toggles).hasSize(2)
+        assertThat(response.application.toggles[0].activationRule).isNull()
+        assertThat(response.application.toggles[1].activationRule?.type).isEqualTo("percentage")
+    }
+
     @Test
     fun `should handle not found error`() {
         mockServer.enqueue(MockResponse().setResponseCode(404))

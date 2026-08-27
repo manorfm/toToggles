@@ -47,7 +47,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
     
     private val httpClient = HttpClient(config)
     private val cache = ToggleCache()
-    private val strategyFactory = StrategyFactory()
+    private val strategyFactory = StrategyFactory(config.timeZone)
     
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "ToToggle-Refresh-${config.applicationName}").apply {
@@ -127,11 +127,15 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 return false
             }
             
-            // Evaluate activation rules if present
-            val result = if (toggle.hasActivationRule) {
-                val ruleResult = strategyFactory.evaluate(toggle.activationRule, parameter)
-                logger.debug("Activation rule evaluation: path='{}', rule='{}/{}', result={}", 
-                    path, toggle.activationRule.type, toggle.activationRule.value, ruleResult)
+            // Evaluate activation rules if present. `hasActivationRule` is the only trustworthy
+            // signal (matches the server-side and frontend convention) — `activationRule` itself
+            // can be null even when the flag is true in principle, so guard defensively rather
+            // than force-unwrap.
+            val rule = toggle.activationRule
+            val result = if (toggle.hasActivationRule && rule != null) {
+                val ruleResult = strategyFactory.evaluate(rule, parameter)
+                logger.debug("Activation rule evaluation: path='{}', rule='{}/{}', result={}",
+                    path, rule.type, rule.value, ruleResult)
                 ruleResult
             } else {
                 logger.debug("No activation rules for toggle: {}", path)
@@ -167,8 +171,9 @@ class ToToggleClient(private val config: ToToggleConfig) {
             }
             
             // Check activation rules for parents too
-            if (ancestor.hasActivationRule) {
-                val ruleResult = strategyFactory.evaluate(ancestor.activationRule)
+            val ancestorRule = ancestor.activationRule
+            if (ancestor.hasActivationRule && ancestorRule != null) {
+                val ruleResult = strategyFactory.evaluate(ancestorRule)
                 if (!ruleResult) {
                     logger.debug("Parent toggle '{}' failed activation rule, blocking child '{}'", ancestor.path, path)
                     return false

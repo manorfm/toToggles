@@ -72,7 +72,24 @@ class ParameterStrategyTest {
     @Test
     fun `should handle empty parameter vs empty rule`() {
         val rule = ActivationRule("parameter", "")
-        
+
         assertThat(strategy.evaluate(rule, "")).isFalse() // blank rule value returns false
+    }
+
+    @Test
+    fun `should match any value in a comma-separated allowlist`() {
+        val rule = ActivationRule("parameter", "premium,enterprise")
+
+        assertThat(strategy.evaluate(rule, "premium")).isTrue()
+        assertThat(strategy.evaluate(rule, "enterprise")).isTrue()
+        assertThat(strategy.evaluate(rule, "basic")).isFalse()
+    }
+
+    @Test
+    fun `should trim spaces around comma-separated values`() {
+        val rule = ActivationRule("parameter", "premium, enterprise , vip")
+
+        assertThat(strategy.evaluate(rule, "enterprise")).isTrue()
+        assertThat(strategy.evaluate(rule, "vip")).isTrue()
     }
 }

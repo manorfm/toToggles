@@ -50,7 +50,8 @@ toToogle/
 ### Client Library Features
 - **Simple API**: Easy-to-use interface for checking feature toggle status
 - **Cascading Validation**: Automatic validation of parent toggles
-- **Activation Strategies**: Support for percentage and parameter-based rules
+- **Activation Strategies**: Support for all 7 server-defined rule types — percentage (consistent
+  per-key hashing), parameter, user ID, IP address/CIDR, country, time window, and canary
 - **Caching & Resilience**: Efficient caching with offline mode support
 - **Thread-Safe**: Designed for concurrent use
 - **Comprehensive Logging**: Configurable logging levels
@@ -115,7 +116,7 @@ curl -H "X-API-Key: sk_your_secret_key" http://localhost:8081/api/toggles
         "parent_id": null,
         "app_id": "01K2RABG03N3FHCGH7PAVASWGA",
         "has_activation_rule": false,
-        "activation_rule": {"type": "", "value": ""}
+        "activation_rule": null
       },
       {
         "id": "01K2SN62P1W50TEV6BA156R9XQ",
@@ -241,6 +242,10 @@ val config = ToToggleConfig.builder()
     .connectionTimeout(Duration.ofSeconds(10))
     .enableOfflineMode(true)
     .logLevel(LogLevel.INFO)
+    // Zone used to evaluate "time" activation rules — defaults to the JVM's zone; set this
+    // explicitly if it doesn't match the server's, since a client SDK has no way to know that
+    // on its own.
+    .timeZone(ZoneId.of("America/Sao_Paulo"))
     .build()
 ```
 

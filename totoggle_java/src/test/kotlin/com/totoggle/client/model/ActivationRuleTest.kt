@@ -37,11 +37,14 @@ class ActivationRuleTest {
     
     @Test
     fun `should have correct rule type constants`() {
+        // Matches server/internal/app/domain/entity/activation_rule.go's ActivationRuleType
+        // constants exactly (the server is the source of truth for what these strings are).
         assertThat(ActivationRule.TYPE_PERCENTAGE).isEqualTo("percentage")
         assertThat(ActivationRule.TYPE_PARAMETER).isEqualTo("parameter")
         assertThat(ActivationRule.TYPE_USER_ID).isEqualTo("user_id")
-        assertThat(ActivationRule.TYPE_IP_ADDRESS).isEqualTo("ip_address")
+        assertThat(ActivationRule.TYPE_IP).isEqualTo("ip")
         assertThat(ActivationRule.TYPE_COUNTRY).isEqualTo("country")
         assertThat(ActivationRule.TYPE_TIME).isEqualTo("time")
+        assertThat(ActivationRule.TYPE_CANARY).isEqualTo("canary")
     }
 }

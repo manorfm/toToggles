@@ -79,15 +79,42 @@ class PercentageStrategyTest {
     }
     
     @Test
-    fun `should work with parameter (parameter is ignored)`() {
+    fun `should return a valid boolean whether or not a parameter is given`() {
         val rule = ActivationRule("percentage", "50")
-        
-        // Parameter should be ignored for percentage strategy
+
         val result1 = strategy.evaluate(rule, "some-param")
         val result2 = strategy.evaluate(rule, null)
-        
-        // Both should return valid boolean values
+
         assertThat(result1).isIn(true, false)
         assertThat(result2).isIn(true, false)
+    }
+
+    @Test
+    fun `should return the same result for the same parameter every time (consistent hashing)`() {
+        val rule = ActivationRule("percentage", "50")
+
+        val results = (1..20).map { strategy.evaluate(rule, "user-42") }
+
+        assertThat(results.toSet()).hasSize(1)
+    }
+
+    @Test
+    fun `should return different results for different parameters, statistically matching the threshold`() {
+        val rule = ActivationRule("percentage", "25")
+
+        val trueCount = (1..1000).count { strategy.evaluate(rule, "user-$it") }
+        val actualPercentage = (trueCount.toDouble() / 1000) * 100
+
+        // Same tolerance as the random-distribution test above (±10%)
+        assertThat(actualPercentage).isBetween(15.0, 35.0)
+    }
+
+    @Test
+    fun `should still vary across repeated calls when there is no parameter to key on`() {
+        val rule = ActivationRule("percentage", "50")
+
+        val results = (1..30).map { strategy.evaluate(rule, null) }.toSet()
+
+        assertThat(results).hasSize(2)
     }
 }

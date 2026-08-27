@@ -22,9 +22,10 @@ data class ActivationRule(
         const val TYPE_PERCENTAGE = "percentage"
         const val TYPE_PARAMETER = "parameter"
         const val TYPE_USER_ID = "user_id"
-        const val TYPE_IP_ADDRESS = "ip_address"
+        const val TYPE_IP = "ip"
         const val TYPE_COUNTRY = "country"
         const val TYPE_TIME = "time"
+        const val TYPE_CANARY = "canary"
         
         /**
          * Creates an empty activation rule (no rule applied).

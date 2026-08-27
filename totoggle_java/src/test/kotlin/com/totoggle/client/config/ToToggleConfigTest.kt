@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import java.time.Duration
+import java.time.ZoneId
 
 class ToToggleConfigTest {
     
@@ -23,8 +24,21 @@ class ToToggleConfigTest {
         assertThat(config.readTimeout).isEqualTo(Duration.ofSeconds(30))
         assertThat(config.enableOfflineMode).isTrue()
         assertThat(config.logLevel).isEqualTo(LogLevel.INFO)
+        assertThat(config.timeZone).isEqualTo(ZoneId.systemDefault())
     }
-    
+
+    @Test
+    fun `should allow overriding the time zone used by the 'time' activation rule`() {
+        val config = ToToggleConfig(
+            applicationName = "test-app",
+            serverUrl = "https://example.com",
+            secretKey = "sk_test_key",
+            timeZone = ZoneId.of("America/Sao_Paulo")
+        )
+
+        assertThat(config.timeZone).isEqualTo(ZoneId.of("America/Sao_Paulo"))
+    }
+
     @Test
     fun `should validate application name`() {
         assertThatThrownBy {
@@ -150,8 +164,9 @@ class ToToggleConfigTest {
             .readTimeout(Duration.ofSeconds(15))
             .enableOfflineMode(false)
             .logLevel(LogLevel.DEBUG)
+            .timeZone(ZoneId.of("America/Sao_Paulo"))
             .build()
-        
+
         assertThat(config.applicationName).isEqualTo("test-app")
         assertThat(config.serverUrl).isEqualTo("https://example.com")
         assertThat(config.secretKey).isEqualTo("sk_test_key")
@@ -160,6 +175,7 @@ class ToToggleConfigTest {
         assertThat(config.readTimeout).isEqualTo(Duration.ofSeconds(15))
         assertThat(config.enableOfflineMode).isFalse()
         assertThat(config.logLevel).isEqualTo(LogLevel.DEBUG)
+        assertThat(config.timeZone).isEqualTo(ZoneId.of("America/Sao_Paulo"))
     }
     
     @Test

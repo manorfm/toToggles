@@ -1,6 +1,7 @@
 package com.totoggle.client.config
 
 import java.time.Duration
+import java.time.ZoneId
 
 /**
  * Configuration for the ToToggle client.
@@ -13,6 +14,10 @@ import java.time.Duration
  * @property readTimeout HTTP read timeout
  * @property enableOfflineMode Whether to continue working when server is unreachable
  * @property logLevel Logging level for the client
+ * @property timeZone Zone used to evaluate "time" activation rules ("09:00-18:00" windows).
+ *   The rule is documented as "24h time window in server timezone", but a client SDK has no way
+ *   to know the server's zone on its own — defaults to the JVM's zone and should be overridden
+ *   explicitly when it doesn't match the server's.
  */
 data class ToToggleConfig(
     val applicationName: String,
@@ -22,7 +27,8 @@ data class ToToggleConfig(
     val connectionTimeout: Duration = Duration.ofSeconds(10),
     val readTimeout: Duration = Duration.ofSeconds(30),
     val enableOfflineMode: Boolean = true,
-    val logLevel: LogLevel = LogLevel.INFO
+    val logLevel: LogLevel = LogLevel.INFO,
+    val timeZone: ZoneId = ZoneId.systemDefault()
 ) {
     
     init {
@@ -62,7 +68,8 @@ data class ToToggleConfig(
         private var readTimeout: Duration = Duration.ofSeconds(30)
         private var enableOfflineMode: Boolean = true
         private var logLevel: LogLevel = LogLevel.INFO
-        
+        private var timeZone: ZoneId = ZoneId.systemDefault()
+
         fun applicationName(applicationName: String) = apply { this.applicationName = applicationName }
         fun serverUrl(serverUrl: String) = apply { this.serverUrl = serverUrl }
         fun secretKey(secretKey: String) = apply { this.secretKey = secretKey }
@@ -71,7 +78,8 @@ data class ToToggleConfig(
         fun readTimeout(readTimeout: Duration) = apply { this.readTimeout = readTimeout }
         fun enableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
         fun logLevel(logLevel: LogLevel) = apply { this.logLevel = logLevel }
-        
+        fun timeZone(timeZone: ZoneId) = apply { this.timeZone = timeZone }
+
         fun build(): ToToggleConfig {
             return ToToggleConfig(
                 applicationName = applicationName,
@@ -81,7 +89,8 @@ data class ToToggleConfig(
                 connectionTimeout = connectionTimeout,
                 readTimeout = readTimeout,
                 enableOfflineMode = enableOfflineMode,
-                logLevel = logLevel
+                logLevel = logLevel,
+                timeZone = timeZone
             )
         }
     }

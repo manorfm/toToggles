@@ -3,22 +3,33 @@ package com.totoggle.client.strategy
 import com.totoggle.client.exception.StrategyNotFoundException
 import com.totoggle.client.model.ActivationRule
 import org.slf4j.LoggerFactory
+import java.time.Clock
+import java.time.ZoneId
 
 /**
  * Factory for creating activation strategy instances based on rule types.
- * This factory implements the Strategy pattern and Factory pattern to 
+ * This factory implements the Strategy pattern and Factory pattern to
  * handle different types of activation rules.
+ *
+ * Registers a strategy for all 7 rule types the server supports
+ * (server/internal/app/domain/entity/activation_rule.go#GetRuleTypeOptions) — a previous
+ * version only registered percentage/parameter, silently failing closed (always `false`) for
+ * user_id/ip/country/time/canary.
  */
-class StrategyFactory {
-    
+class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
+
     private val logger = LoggerFactory.getLogger(StrategyFactory::class.java)
     private val strategies = mutableMapOf<String, ActivationStrategy>()
-    
+
     init {
-        // Register default strategies
         registerStrategy(PercentageStrategy())
         registerStrategy(ParameterStrategy())
-        
+        registerStrategy(UserIdStrategy())
+        registerStrategy(IpStrategy())
+        registerStrategy(CountryStrategy())
+        registerStrategy(TimeStrategy(Clock.system(timeZone)))
+        registerStrategy(CanaryStrategy())
+
         logger.info("StrategyFactory initialized with {} strategies", strategies.size)
     }
     

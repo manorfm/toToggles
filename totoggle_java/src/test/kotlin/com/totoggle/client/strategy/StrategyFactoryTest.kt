@@ -17,10 +17,12 @@ class StrategyFactoryTest {
     }
     
     @Test
-    fun `should initialize with default strategies`() {
+    fun `should initialize with a strategy for all 7 server-supported rule types`() {
         val registeredTypes = factory.getRegisteredRuleTypes()
-        
-        assertThat(registeredTypes).contains("percentage", "parameter")
+
+        assertThat(registeredTypes).containsExactlyInAnyOrder(
+            "percentage", "parameter", "user_id", "ip", "country", "time", "canary"
+        )
     }
     
     @Test

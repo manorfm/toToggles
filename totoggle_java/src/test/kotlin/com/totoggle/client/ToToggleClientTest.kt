@@ -120,7 +120,17 @@ class ToToggleClientTest {
         assertThat(resultWithoutMatch).isFalse()
         assertThat(resultWithoutParam).isFalse()
     }
-    
+
+    @Test
+    fun `should evaluate user_id activation rules end to end (previously unregistered, always false)`() {
+        mockResponseWithUserIdRule()
+        client.start()
+
+        assertThat(client.isActive("user.payments.view-table", "48")).isTrue()
+        assertThat(client.isActive("user.payments.view-table", "999")).isFalse()
+        assertThat(client.isActive("user.payments.view-table")).isFalse()
+    }
+
     @Test
     fun `should handle network errors gracefully when offline mode enabled`() {
         mockSuccessfulResponse()
@@ -199,7 +209,7 @@ class ToToggleClientTest {
                             "parent_id": null,
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-2",
@@ -210,7 +220,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-1",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-3",
@@ -221,7 +231,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-2",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         }
                     ]
                 }
@@ -250,7 +260,7 @@ class ToToggleClientTest {
                             "parent_id": null,
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-2",
@@ -261,7 +271,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-1",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         }
                     ]
                 }
@@ -290,7 +300,7 @@ class ToToggleClientTest {
                             "parent_id": null,
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-2",
@@ -301,7 +311,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-1",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-3",
@@ -312,7 +322,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-2",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         }
                     ]
                 }
@@ -341,7 +351,7 @@ class ToToggleClientTest {
                             "parent_id": null,
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-2",
@@ -352,7 +362,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-1",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-3",
@@ -392,7 +402,7 @@ class ToToggleClientTest {
                             "parent_id": null,
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-2",
@@ -403,7 +413,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-1",
                             "app_id": "app-123",
                             "has_activation_rule": false,
-                            "activation_rule": {"type": "", "value": ""}
+                            "activation_rule": null
                         },
                         {
                             "id": "toggle-3",
@@ -421,6 +431,35 @@ class ToToggleClientTest {
             }
         """.trimIndent()
         
+        mockServer.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setBody(responseBody)
+            .setHeader("Content-Type", "application/json"))
+    }
+
+    private fun mockResponseWithUserIdRule() {
+        val responseBody = """
+            {
+                "application": {
+                    "id": "app-123",
+                    "name": "Test App",
+                    "toggles": [
+                        {
+                            "id": "toggle-1",
+                            "path": "user.payments.view-table",
+                            "value": "view-table",
+                            "enabled": true,
+                            "level": 0,
+                            "parent_id": null,
+                            "app_id": "app-123",
+                            "has_activation_rule": true,
+                            "activation_rule": {"type": "user_id", "value": "12,48,103"}
+                        }
+                    ]
+                }
+            }
+        """.trimIndent()
+
         mockServer.enqueue(MockResponse()
             .setResponseCode(200)
             .setBody(responseBody)
