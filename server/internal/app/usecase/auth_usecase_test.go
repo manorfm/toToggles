@@ -1,6 +1,9 @@
 package usecase
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,13 +12,17 @@ import (
 )
 
 func newTestAuthUseCase() (*AuthUseCase, *MockUserRepository, *MockSessionRepository) {
+	return newTestAuthUseCaseWithRootPasswordFile("")
+}
+
+func newTestAuthUseCaseWithRootPasswordFile(path string) (*AuthUseCase, *MockUserRepository, *MockSessionRepository) {
 	userRepo := NewMockUserRepository()
 	sessionRepo := NewMockSessionRepository()
 
 	authManager := auth.NewAuthManager()
 	authManager.RegisterStrategy("local", auth.NewLocalAuthStrategy(userRepo))
 
-	return NewAuthUseCase(userRepo, authManager, sessionRepo), userRepo, sessionRepo
+	return NewAuthUseCase(userRepo, authManager, sessionRepo, path), userRepo, sessionRepo
 }
 
 func seedActiveUser(t *testing.T, userRepo *MockUserRepository, id, username, password string) *entity.User {
@@ -274,5 +281,99 @@ func TestAuthUseCase_ChangePasswordFirstTime_InvalidatesExistingSessions(t *test
 
 	if len(sessionRepo.Sessions) != 0 {
 		t.Errorf("expected all sessions for user-1 to be invalidated, found %d", len(sessionRepo.Sessions))
+	}
+}
+
+// The initial root password must never reach stdout/logs (a container log commonly ends up in
+// an aggregator, which would be close to publishing it) — it's written to a file instead, with
+// owner-only permissions, and that file is deleted the moment it's no longer needed (see
+// TestAuthUseCase_ChangePasswordFirstTime_DeletesRootPasswordFile below).
+func TestAuthUseCase_InitializeRootUser_WritesPasswordToAFileWithRestrictedPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "initial-root-password.txt")
+	uc, userRepo, _ := newTestAuthUseCaseWithRootPasswordFile(path)
+
+	if err := uc.InitializeRootUser(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	root, err := userRepo.GetByUsername("root")
+	if err != nil {
+		t.Fatalf("expected a root user to be created: %v", err)
+	}
+	if !root.MustChangePassword {
+		t.Error("expected the root user to require a password change on first login")
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("expected the password file to exist: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("expected file permissions 0600, got %o", perm)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("unexpected error reading password file: %v", err)
+	}
+	password := strings.TrimSpace(string(content))
+	if password == "" {
+		t.Fatal("expected a non-empty password in the file")
+	}
+	if !root.CheckPassword(password) {
+		t.Error("expected the password in the file to actually match the root user's password")
+	}
+}
+
+func TestAuthUseCase_InitializeRootUser_DoesNothingIfUsersAlreadyExist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "initial-root-password.txt")
+	uc, userRepo, _ := newTestAuthUseCaseWithRootPasswordFile(path)
+	userRepo.Users["existing"] = &entity.User{ID: "existing", Username: "someone"}
+
+	if err := uc.InitializeRootUser(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("expected no password file to be written when a root wasn't actually created")
+	}
+}
+
+func TestAuthUseCase_ChangePasswordFirstTime_DeletesRootPasswordFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "initial-root-password.txt")
+	uc, userRepo, _ := newTestAuthUseCaseWithRootPasswordFile(path)
+
+	root := seedActiveUser(t, userRepo, "root-1", "root", "initial-password")
+	root.Role = entity.UserRoleRoot
+	root.MustChangePassword = true
+	if err := os.WriteFile(path, []byte("initial-password\n"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := uc.ChangePasswordFirstTime("root-1", "new-password"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("expected the initial root password file to be deleted after the password change")
+	}
+}
+
+func TestAuthUseCase_ChangePasswordFirstTime_NonRootDoesNotTouchRootPasswordFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "initial-root-password.txt")
+	uc, userRepo, _ := newTestAuthUseCaseWithRootPasswordFile(path)
+
+	user := seedActiveUser(t, userRepo, "user-1", "alice", "old-password")
+	user.MustChangePassword = true
+	if err := os.WriteFile(path, []byte("root-password\n"), 0o600); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := uc.ChangePasswordFirstTime("user-1", "new-password"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Error("a non-root user's password change must not touch the root's password file")
 	}
 }

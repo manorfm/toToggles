@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"path/filepath"
+
 	"github.com/gin-gonic/gin"
+	"github.com/manorfm/totoogle/internal/app/config"
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/infrastructure/database"
@@ -43,7 +46,11 @@ func InitHandlers(db *gorm.DB) {
 	// Inicializa use cases
 	appUseCase := usecase.NewApplicationUseCase(appRepo, toggleRepo)
 	toggleUseCase := usecase.NewToggleUseCase(toggleRepo, appRepo)
-	authUseCase := usecase.NewAuthUseCase(userRepo, authManager, sessionRepo)
+	// A senha inicial do root vai pra um arquivo ao lado do banco (nunca stdout — ver o
+	// comentário em AuthUseCase.InitializeRootUser), lida uma vez via `cat` e apagada assim que
+	// a troca de senha obrigatória é concluída.
+	rootPasswordFilePath := filepath.Join(filepath.Dir(config.DBPath()), "initial-root-password.txt")
+	authUseCase := usecase.NewAuthUseCase(userRepo, authManager, sessionRepo, rootPasswordFilePath)
 	userUseCase := usecase.NewUserUseCase(userRepo, sessionRepo)
 	teamUseCase := usecase.NewTeamUseCase(teamRepo, userRepo, appRepo)
 	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)

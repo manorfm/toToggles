@@ -218,7 +218,40 @@ assinatura sem nenhum ganho real de "stateless".
 `router.go`, enquanto `server/Dockerfile`/`docker-compose.yml` expunham `8081`, um mismatch que
 tornava o deploy via Docker inalcançável na porta mapeada; corrigido nos dois lados),
 `DB_PATH` (default `./db/toggles.db` — antes hardcoded em `db.go`, apesar do README já documentar
-essa env var como se existisse), `COOKIE_SECURE`, `CORS_ALLOWED_ORIGINS` (ambas acima).
+essa env var como se existisse), `COOKIE_SECURE`, `CORS_ALLOWED_ORIGINS` (ambas acima),
+`TLS_CERT_FILE`/`TLS_KEY_FILE` (ver "TLS" abaixo).
+
+### Senha inicial do root — arquivo, não stdout
+`AuthUseCase.InitializeRootUser()` (`internal/app/usecase/auth_usecase.go`) parava de imprimir a
+senha gerada com 5 `println(...)` — um log de container facilmente acaba num agregador
+(CloudWatch/Datadog/etc.), então isso era quase publicar a senha do root. Agora escreve num
+arquivo (`<diretório de DB_PATH>/initial-root-password.txt`, permissão `0600`, injetado via um
+novo parâmetro `rootPasswordFilePath` em `NewAuthUseCase` — calculado em `handler/init.go` a
+partir de `config.DBPath()`, não lido direto de `config` dentro do usecase, pra manter a camada
+de usecase sem dependência de infra). Mesma ideia do Jenkins (senha inicial num arquivo dentro do
+volume persistente, lida uma vez via `docker exec ... cat ...`), mas fecha a fresta que o próprio
+Jenkins deixa aberta (ele também ecoa no console): aqui é só arquivo, nunca stdout. O arquivo tem
+vida curta e determinística — `ChangePasswordFirstTime` o apaga (best-effort, `os.IsNotExist` não
+é erro) assim que a troca de senha obrigatória do root é concluída, não "até alguém lembrar de
+apagar". Documentado no README raiz e em `totoggle_java/README.md` (seção "First boot").
+
+### Log estruturado (JSON)
+`internal/app/config/logger.go` reescrito por dentro com `log/slog` (stdlib desde Go 1.21, sem
+dependência nova) — mantém a mesma API pública (`Debug/Info/Warn/Error` + variantes `f`) que os
+~6 call sites já usavam, então nenhum precisou mudar. O `prefix` de `NewLogger(prefix)`, que antes
+virava um prefixo de texto solto (`"DEBUG: ..."`), agora é o campo estruturado `"component"` em
+cada linha JSON — o que uma ferramenta de agregação de log consegue de fato indexar/filtrar.
+`newLoggerWithWriter(prefix, io.Writer)` (não exportado) existe só pra permitir capturar e
+inspecionar o JSON gerado em teste, já que `NewLogger` sempre escreve em `os.Stdout` em produção.
+
+### TLS
+`internal/app/router/router.go#Initialize` — `TLS_CERT_FILE`+`TLS_KEY_FILE` ligam
+`router.RunTLS(...)` em vez de `router.Run(...)` (HTTP puro, comportamento de sempre — continua
+válido pra quem já roda atrás de um proxy reverso que termina TLS). `config.HasTLSConfig()`
+distingue 3 casos: nenhum dos dois setado (HTTP puro, intencional), os dois setados (liga TLS), e
+**só um dos dois setado** — tratado como erro de configuração que falha alto no boot (log
+`ERROR`, servidor não sobe), em vez de cair silenciosamente pra HTTP quando a intenção real era
+HTTPS.
 
 ### Achados de empacotamento Docker (não corrigidos — fora do escopo da auditoria de segurança)
 Testando o build da imagem depois das correções acima: (1) o `builder` stage faz cross-compile
@@ -381,6 +414,15 @@ go test ./...                           # Todos os testes
 go test ./internal/app/domain/entity    # Testes de entidades
 go test -coverprofile=coverage.out ./...  # Com coverage
 ```
+
+### CI
+Não existia pipeline nenhum antes — `.github/workflows/` (raiz do monorepo, fora de `server/`)
+ganhou 3 workflows independentes, cada um só disparando quando arquivos do seu diretório mudam
+(`paths:`): `server-go.yml` (`go build ./... && go test ./... -cover`),
+`totoggle-java.yml` (`./gradlew build`, Temurin 21 — o Wrapper 8.7 do projeto não sobe em JDKs
+mais novos, ver memória `env-gradle-needs-jdk21`), `frontend-web.yml` (`npm ci && npm test && npm
+run build` em `server/web`). Badges nos dois READMEs (raiz e `totoggle_java/README.md`)
+substituíram um badge estático fictício ("build: passing" hardcoded, nunca ligado a CI nenhum).
 
 ## Configuração e Inicialização
 

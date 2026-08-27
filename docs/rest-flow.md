@@ -90,7 +90,9 @@ forced-first-login flow) is invalidated on logout and on password change.
 > HTTP-only development; the `auth_token`/`password_change_token` cookies won't be sent by the
 > browser over plain HTTP when this is `true`), `CORS_ALLOWED_ORIGINS` (comma-separated, default
 > empty — no cross-origin credentialed request is allowed unless a frontend is genuinely hosted on
-> a different origin from this API).
+> a different origin from this API), `TLS_CERT_FILE`/`TLS_KEY_FILE` (both optional, but must be set
+> together — the server terminates HTTPS itself when both are present, stays on plain HTTP
+> otherwise, and refuses to boot if only one is set). Logs are structured JSON on stdout.
 
 The public toggle-read endpoint uses a different credential instead of a session:
 

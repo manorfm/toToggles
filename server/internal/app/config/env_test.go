@@ -61,3 +61,50 @@ func TestDBPath_ReadsEnvVar(t *testing.T) {
 		t.Errorf("expected '/tmp/custom.db', got %s", DBPath())
 	}
 }
+
+func TestHasTLSConfig_NeitherSet_ReturnsFalseNoError(t *testing.T) {
+	has, err := HasTLSConfig()
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if has {
+		t.Error("expected HasTLSConfig to be false when neither var is set")
+	}
+}
+
+func TestHasTLSConfig_BothSet_ReturnsTrue(t *testing.T) {
+	t.Setenv("TLS_CERT_FILE", "/etc/tls/cert.pem")
+	t.Setenv("TLS_KEY_FILE", "/etc/tls/key.pem")
+
+	has, err := HasTLSConfig()
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if !has {
+		t.Error("expected HasTLSConfig to be true when both vars are set")
+	}
+	if TLSCertFile() != "/etc/tls/cert.pem" || TLSKeyFile() != "/etc/tls/key.pem" {
+		t.Errorf("unexpected values: cert=%s key=%s", TLSCertFile(), TLSKeyFile())
+	}
+}
+
+func TestHasTLSConfig_OnlyCertSet_FailsLoudInsteadOfSilentlyFallingBackToHTTP(t *testing.T) {
+	t.Setenv("TLS_CERT_FILE", "/etc/tls/cert.pem")
+
+	has, err := HasTLSConfig()
+	if err == nil {
+		t.Fatal("expected an error for an incomplete TLS config (only cert set)")
+	}
+	if has {
+		t.Error("expected HasTLSConfig to be false alongside the error")
+	}
+}
+
+func TestHasTLSConfig_OnlyKeySet_FailsLoud(t *testing.T) {
+	t.Setenv("TLS_KEY_FILE", "/etc/tls/key.pem")
+
+	_, err := HasTLSConfig()
+	if err == nil {
+		t.Fatal("expected an error for an incomplete TLS config (only key set)")
+	}
+}

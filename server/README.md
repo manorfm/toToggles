@@ -1,6 +1,16 @@
 # ToToogle
 
+[![server-go](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml)
+
 A comprehensive feature toggle management platform built with Go and modern web technologies, designed for enterprise-scale feature flag management with robust user access controls and team collaboration.
+
+> ⚠️ Several examples below (`http://localhost:8081`, the `admin / admin` credentials, and API
+> paths without an `/api` prefix) are **stale** — the real port defaults to `3056`
+> (`SERVER_PORT`), there's no fixed default account (see "First boot" below), and the whole
+> session/secret-key API moved under `/api/*` (e.g. `/api/auth/login`, `/api/applications`) —
+> see [totoggle_java/README.md](../totoggle_java/README.md) and `CLAUDE.md`'s "Separação API vs
+> SPA" section for the current contract. Not fully rewritten in this pass — flagged rather than
+> silently left wrong.
 
 ## 🚀 Features
 
@@ -112,10 +122,15 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    ```
 
 5. **Access the application**
-   - Web UI: http://localhost:8081 (requires login)
-   - Login Page: http://localhost:8081/login
-   - API: http://localhost:8081/applications (requires authentication)
-   - Default credentials: `admin / admin`
+   - Web UI: http://localhost:3056 (requires login — override the port with `SERVER_PORT`)
+   - Login Page: http://localhost:3056/login
+   - API: http://localhost:3056/api/applications (requires authentication)
+   - **No fixed default account.** On first boot a `root` user is created with a random
+     password written to `<directory of DB_PATH>/initial-root-password.txt` (owner-only
+     readable, never logged) — `cat` it, log in as `root`, and the server forces an immediate
+     password change; the file is deleted automatically once that's done. See
+     [totoggle_java/README.md](../totoggle_java/README.md#first-boot-getting-the-initial-root-password)
+     for the full flow.
 
 ### Manual Setup
 
@@ -144,8 +159,10 @@ The application follows Clean Architecture and Hexagonal Architecture principles
 ### Initial Setup
 
 1. **First Run**
-   - Access http://localhost:8081/login
-   - Use default credentials: `admin / admin`
+   - Access http://localhost:3056/login
+   - Read the initial `root` password from `<directory of DB_PATH>/initial-root-password.txt`
+     (see the "Access the application" step above) and log in — you'll be forced to set a real
+     password immediately
    - Root user has access to all features including user management
 
 ### User Management (Root Users Only)
@@ -477,6 +494,22 @@ docker-compose logs -f
 # Stop services
 docker-compose down
 ```
+
+## ⚙️ Configuration
+
+All optional, safe defaults — nothing here is required to start the server:
+
+```bash
+SERVER_PORT=3056           # HTTP(S) listen port
+DB_PATH=./db/toggles.db    # SQLite file path
+COOKIE_SECURE=true         # `Secure` flag on session cookies; only set false for local HTTP-only dev
+CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # comma-separated; empty = no cross-origin credentialed access
+TLS_CERT_FILE=/etc/totoggle/tls/cert.pem  # set BOTH to terminate HTTPS directly in the binary —
+TLS_KEY_FILE=/etc/totoggle/tls/key.pem    # setting only one fails the server at boot, on purpose
+```
+
+Logs are written as structured JSON to stdout (one object per line: `time`, `level`, `msg`,
+`component`) — pipe into whatever log aggregator you use.
 
 ## 🔧 Development
 

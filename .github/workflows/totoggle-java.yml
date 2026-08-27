@@ -1,0 +1,32 @@
+name: totoggle-java
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "totoggle_java/**"
+      - ".github/workflows/totoggle-java.yml"
+  pull_request:
+    paths:
+      - "totoggle_java/**"
+      - ".github/workflows/totoggle-java.yml"
+
+defaults:
+  run:
+    working-directory: totoggle_java
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gradle Wrapper 8.7 (this project's version) doesn't support newer JDKs — Temurin 21 is
+      # the same version this project's tests were run with locally this session.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build (compiles, runs the full test suite, and the jacoco/check tasks)
+        run: ./gradlew build --no-daemon

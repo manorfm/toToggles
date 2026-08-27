@@ -1,5 +1,8 @@
 # ToToggle - Complete Feature Flag Management Platform
 
+[![server-go](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml)
+[![totoggle-java](https://github.com/manorfm/toToggles/actions/workflows/totoggle-java.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-java.yml)
+
 A comprehensive feature toggle management platform consisting of a Go-based server and a Java/Kotlin client library. This solution provides enterprise-scale feature flag management with robust user access controls, team collaboration, and client libraries for easy integration.
 
 ## 🏗️ Project Structure
@@ -68,10 +71,34 @@ toToogle/
 ```bash
 cd server
 go mod tidy
+make migrate-up   # applies the goose migrations — not automatic, must run before first start
 make dev
 ```
 
-The server will start on http://localhost:8081 with default credentials: `admin / admin`
+The server starts on http://localhost:3056 (override with `SERVER_PORT`).
+
+#### First boot: getting the initial `root` password
+
+There's no fixed default account. On first boot (when the `users` table is empty), the server
+creates a `root` user with a random password and writes it — **only to a file, never to
+stdout/logs** (a container log commonly ends up in a log aggregator, which would be close to
+publishing the password) — at `<directory of DB_PATH>/initial-root-password.txt`, owner-only
+readable (`0600`). Same idea as Jenkins' initial admin password, minus the part where Jenkins
+also echoes it to the console.
+
+```bash
+# Running the binary directly (default DB_PATH=./db/toggles.db):
+cat db/initial-root-password.txt
+
+# Running via Docker:
+docker exec <container> cat /root/db/initial-root-password.txt   # path matches your DB_PATH
+```
+
+Log in as `root` with that password — the server forces an immediate password change
+(`must_change_password: true` in the login response), and **that file is deleted automatically**
+as soon as the change succeeds. If the file is missing and you don't have the password, there's no
+recovery path other than resetting the database (this account exists purely to bootstrap real
+users/teams — create an admin and stop using `root` day-to-day).
 
 ### 2. Client Library Usage
 
@@ -236,6 +263,12 @@ export DB_PATH=./db/toggles.db
 export SERVER_PORT=3056
 export COOKIE_SECURE=true                              # default; only set to false for local HTTP-only dev
 export CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # only needed for a cross-origin frontend
+
+# TLS (optional) — set BOTH to terminate HTTPS directly in the binary instead of behind a reverse
+# proxy. Setting only one of the two fails the server at boot with a clear error, rather than
+# silently falling back to plain HTTP when HTTPS was actually intended.
+export TLS_CERT_FILE=/etc/totoggle/tls/cert.pem
+export TLS_KEY_FILE=/etc/totoggle/tls/key.pem
 ```
 
 ### Client Configuration

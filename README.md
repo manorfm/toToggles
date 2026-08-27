@@ -1,7 +1,8 @@
 # ToToggle
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Test Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
+[![server-go](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml)
+[![totoggle-java](https://github.com/manorfm/toToggles/actions/workflows/totoggle-java.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-java.yml)
+[![frontend-web](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml)
 ![Kotlin](https://img.shields.io/badge/kotlin-1.9+-blue)
 ![Java](https://img.shields.io/badge/java-17+-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -52,10 +53,17 @@ A lightweight, thread-safe client library that:
 
 ```bash
 cd server
+make migrate-up   # applies the goose migrations — not automatic, must run before first start
 go run main.go
 ```
 
-The server will start on `http://localhost:8080` by default.
+The server starts on `http://localhost:3056` by default (override with `SERVER_PORT`).
+
+On first boot, a `root` user is created with a random password written to
+`<directory of DB_PATH>/initial-root-password.txt` (owner-only readable, never logged to
+stdout — see [totoggle_java/README.md](totoggle_java/README.md#first-boot-getting-the-initial-root-password)
+for the full first-login flow). That file is deleted automatically once the forced first-login
+password change is completed.
 
 #### 2. Add Client Library to Your Project
 
@@ -166,13 +174,18 @@ val config = ToToggleConfig.builder()
     .build()
 ```
 
-### Environment Variables
+### Server Environment Variables
+
+The client library is configured purely programmatically (via `ToToggleConfig.builder()` above —
+there's no env var reading built into it). These are the server's:
 
 ```bash
-TOTOGGLE_APPLICATION_NAME=my-app
-TOTOGGLE_SERVER_URL=https://toggle.company.com
-TOTOGGLE_SECRET_KEY=sk_live_...
-TOTOGGLE_LOG_LEVEL=INFO
+SERVER_PORT=3056           # default
+DB_PATH=./db/toggles.db    # default
+COOKIE_SECURE=true         # default; only set to false for local HTTP-only dev
+CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # only needed for a cross-origin frontend
+TLS_CERT_FILE=/etc/totoggle/tls/cert.pem  # optional — set both to terminate HTTPS in the binary
+TLS_KEY_FILE=/etc/totoggle/tls/key.pem
 ```
 
 ## 🧪 Testing

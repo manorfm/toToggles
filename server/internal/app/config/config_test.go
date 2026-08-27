@@ -1,6 +1,9 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -71,4 +74,62 @@ func TestLoggerMethods(t *testing.T) {
 	logger.Infof("info message: %s", "test")
 	logger.Warnf("warning message: %s", "test")
 	logger.Errorf("error message: %s", "test")
+}
+
+func TestLogger_WritesValidJSONWithLevelMessageAndComponent(t *testing.T) {
+	var buf bytes.Buffer
+	logger := newLoggerWithWriter("my-component", &buf)
+
+	logger.Info("hello world")
+
+	var entry map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("expected valid JSON output, got %q: %v", buf.String(), err)
+	}
+	if entry["msg"] != "hello world" {
+		t.Errorf("expected msg='hello world', got %v", entry["msg"])
+	}
+	if entry["level"] != "INFO" {
+		t.Errorf("expected level='INFO', got %v", entry["level"])
+	}
+	if entry["component"] != "my-component" {
+		t.Errorf("expected component='my-component', got %v", entry["component"])
+	}
+}
+
+func TestLogger_FormattedVariantsInterpolateBeforeLogging(t *testing.T) {
+	var buf bytes.Buffer
+	logger := newLoggerWithWriter("test", &buf)
+
+	logger.Errorf("failed for user %s: %v", "alice", "boom")
+
+	var entry map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("expected valid JSON output: %v", err)
+	}
+	if entry["msg"] != "failed for user alice: boom" {
+		t.Errorf("expected the format string to be interpolated, got %v", entry["msg"])
+	}
+	if entry["level"] != "ERROR" {
+		t.Errorf("expected level='ERROR', got %v", entry["level"])
+	}
+}
+
+func TestLogger_EachCallProducesOneJSONLine(t *testing.T) {
+	var buf bytes.Buffer
+	logger := newLoggerWithWriter("test", &buf)
+
+	logger.Debug("one")
+	logger.Warn("two")
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), buf.String())
+	}
+	for _, line := range lines {
+		var entry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Errorf("expected each line to be valid JSON on its own, line %q: %v", line, err)
+		}
+	}
 }

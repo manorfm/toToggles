@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
@@ -21,13 +22,19 @@ type AuthUseCase struct {
 	userRepo    repository.UserRepository
 	authManager *auth.AuthManager
 	sessionRepo repository.SessionRepository
+	// rootPasswordFilePath is where InitializeRootUser writes the one-time initial root
+	// password (see the doc comment there) — injected rather than read from config directly,
+	// so this layer doesn't need to know about the config package. Empty means "don't write a
+	// file" (used by tests that don't care about this).
+	rootPasswordFilePath string
 }
 
-func NewAuthUseCase(userRepo repository.UserRepository, authManager *auth.AuthManager, sessionRepo repository.SessionRepository) *AuthUseCase {
+func NewAuthUseCase(userRepo repository.UserRepository, authManager *auth.AuthManager, sessionRepo repository.SessionRepository, rootPasswordFilePath string) *AuthUseCase {
 	return &AuthUseCase{
-		userRepo:    userRepo,
-		authManager: authManager,
-		sessionRepo: sessionRepo,
+		userRepo:             userRepo,
+		authManager:          authManager,
+		sessionRepo:          sessionRepo,
+		rootPasswordFilePath: rootPasswordFilePath,
 	}
 }
 
@@ -60,7 +67,15 @@ func (uc *AuthUseCase) createSession(userID string, purpose entity.SessionPurpos
 	return rawToken, nil
 }
 
-// InitializeRootUser cria o usuário root padrão se não existir
+// InitializeRootUser cria o usuário root padrão se não existir.
+//
+// A senha gerada nunca vai pro log/stdout — um container log frequentemente acaba num agregador
+// (CloudWatch/Datadog/etc.), então logar a senha ali é praticamente publicá-la. Em vez disso,
+// segue o mesmo mecanismo do Jenkins (senha inicial num arquivo dentro do volume persistente,
+// lida uma vez via `docker exec ... cat ...`) mas fecha a fresta que o próprio Jenkins deixa
+// aberta (ele também ecoa no console) — aqui é só arquivo, nunca stdout, e o arquivo tem vida
+// curta e determinística: ChangePasswordFirstTime o apaga assim que a troca de senha obrigatória
+// (MustChangePassword, já setado abaixo) é concluída, não "até alguém lembrar de apagar".
 func (uc *AuthUseCase) InitializeRootUser() error {
 	// Verificar se já existe um usuário root
 	existingUsers, err := uc.userRepo.GetAll()
@@ -97,12 +112,12 @@ func (uc *AuthUseCase) InitializeRootUser() error {
 		return err
 	}
 
-	// Log da senha inicial (só para desenvolvimento - em produção deve ser enviada de forma segura)
-	println("=== USUÁRIO ROOT CRIADO ===")
-	println("Username: root")
-	println("Password:", randomPassword)
-	println("IMPORTANTE: Faça a troca da senha no primeiro login!")
-	println("============================")
+	if uc.rootPasswordFilePath != "" {
+		// 0600: só o dono do processo lê — a senha em si é sensível enquanto o arquivo existe.
+		if err := os.WriteFile(uc.rootPasswordFilePath, []byte(randomPassword+"\n"), 0o600); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -196,6 +211,15 @@ func (uc *AuthUseCase) ChangePasswordFirstTime(userID, newPassword string) error
 	// Salvar no banco
 	if err := uc.userRepo.Update(user); err != nil {
 		return err
+	}
+
+	// A senha inicial do root só tem sentido até essa troca acontecer — ver o comentário em
+	// InitializeRootUser. Best-effort: um IsNotExist aqui é o caso normal (arquivo já não
+	// existe, ou nunca existiu porque este não é o boot inicial) e não deve falhar a troca.
+	if user.IsRoot() && uc.rootPasswordFilePath != "" {
+		if err := os.Remove(uc.rootPasswordFilePath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
 
 	// Defesa em profundidade: qualquer sessão pré-existente do usuário (incluindo o próprio
