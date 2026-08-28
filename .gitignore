@@ -54,6 +54,11 @@ docs/swagger.yaml
 *.db
 *.sqlite
 
+# Plaintext initial-root-password file (server/internal/app/usecase/auth_usecase.go) — can appear
+# anywhere DB_PATH's directory resolves to (a real deploy, local `make dev`, or a `go test` run
+# that exercises full app init) — never allow it to slip into a commit.
+initial-root-password.txt
+
 # OS generated files
 Thumbs.db
 .DS_Store

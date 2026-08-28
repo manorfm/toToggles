@@ -253,15 +253,51 @@ distingue 3 casos: nenhum dos dois setado (HTTP puro, intencional), os dois seta
 `ERROR`, servidor não sobe), em vez de cair silenciosamente pra HTTP quando a intenção real era
 HTTPS.
 
-### Achados de empacotamento Docker (não corrigidos — fora do escopo da auditoria de segurança)
-Testando o build da imagem depois das correções acima: (1) o `builder` stage faz cross-compile
-`GOARCH=amd64` com cgo a partir de uma imagem `golang:1.23-alpine` — falha em host arm64
-(`gcc: unrecognized command-line option '-m64'`), builda normalmente só quando `GOARCH` bate com o
-host; (2) `RUN ls -la totoogle && file totoogle` falha porque a imagem alpine do builder não tem o
-binário `file` instalado; (3) a `production` stage roda como `USER 65534:65534` (nobody) mas não
-cria `/db` com permissão de escrita pra esse usuário — o binário falha ao tentar criar
-`./db/toggles.db` (`permission denied`). Nenhum dos três tem relação com autenticação — são bugs
-de empacotamento pré-existentes, encontrados incidentalmente ao validar a correção de porta.
+### Empacotamento Docker e schema do banco — corrigidos numa auditoria de produção posterior
+Uma auditoria de "está pronto pra produção?" encontrou e corrigiu, todos verificados ao vivo
+contra a imagem real buildada (`docker build --target production` + `docker run`, não só lidos no
+código):
+
+- **Cross-compile arm64**: o `builder` stage tinha `GOARCH=amd64` hardcoded com cgo a partir de
+  `golang:1.23-alpine` — falhava em host arm64 (`gcc: unrecognized command-line option '-m64'`).
+  Corrigido com `ARG TARGETOS`/`ARG TARGETARCH` **sem valor default** (`Dockerfile`) — BuildKit
+  preenche esses dois automaticamente com a plataforma real de build/target (inclusive em
+  `docker build` comum, sem `--platform`/buildx explícito), então isso vira compilação NATIVA
+  (gcc local válido pro CGO), não cross-compile de verdade. Achado ao vivo: dar um valor default
+  explícito ao `ARG` (`=amd64`) faz o BuildKit usar esse literal em vez do valor real detectado —
+  reproduziu o bug de novo até o default ser removido.
+- **Binário `file` ausente**: `RUN ls -la totoogle && file totoogle` falhava porque a imagem
+  alpine do builder não tinha esse pacote. Corrigido adicionando `file` ao `apk add` já existente.
+- **`/db` sem permissão de escrita**: a `production` stage roda como `USER 65534:65534` (nobody)
+  mas o `COPY --from=assets /assets/db/migrations /db/migrations` (sem `--chown`) deixava `/db`
+  dono de root — o binário falhava criando `./db/toggles.db` (`permission denied`) no primeiro
+  boot com config default. Corrigido com `COPY --chown=65534:65534` (aplica tanto aos arquivos
+  quanto ao diretório `/db` criado pela própria cópia). **Ressalva que o Dockerfile sozinho não
+  resolve**: um volume bind-mounted (caso do `docker-compose.yml`, `./db:/root/db`) herda o dono
+  do diretório do HOST, não o `--chown` da imagem — documentado em `docker-compose.yml` como
+  `chown 65534:65534 ./db` no host antes do primeiro `docker compose up`.
+- **Achado bem mais sério durante a validação ao vivo da correção acima**: mesmo com o `/db`
+  gravável, o primeiro login falhava com `no such table: users` — a imagem `production` (FROM
+  `scratch`) nunca tinha como aplicar o schema. Migrations só existiam como CLI externa (`goose`
+  via `make migrate-up`), e nem o CLI nem qualquer runner programático existiam dentro da imagem
+  scratch (sem shell, sem goose). O binário (`config/db.go`) só criava um arquivo SQLite VAZIO —
+  zero tabelas. Corrigido embutindo as migrations no próprio binário:
+  `db/migrations/embed.go` (novo pacote `migrations`, `//go:embed *.sql`) +
+  `github.com/pressly/goose/v3` como dependência real (pinado em `v3.20.0` deliberadamente — a
+  `@latest` bumpava `go.mod` de `go 1.23.0` pra `go 1.25.7`, o que quebraria o `builder` stage
+  fixado em `golang:1.23-alpine`; confirmado que builds normais quebram nessa combinação antes de
+  fixar a versão). `config.InitializeDB()` chama `goose.Up(sqlDB, ".")` contra o `embed.FS` a cada
+  boot — idempotente (só aplica o que falta), então não conflita com quem ainda roda
+  `make migrate-up` manualmente no fluxo de dev local. O `Dockerfile` builder stage precisou
+  ganhar `COPY db/migrations/ ./db/migrations/` (antes só existia pro stage `assets`, que nunca
+  compila nada — o `go:embed` precisa do diretório presente no stage que roda `go build`).
+  Verificado ao vivo, fim a fim: build → run com volume real → schema criado (10 migrations
+  aplicadas) → `initial-root-password.txt` gerado e legível → login com essa senha real devolve
+  `200`/`must_change_password: true`. Também achado e corrigido no mesmo fio de investigação:
+  `verifyDbFile` (`config/db.go`) tinha `os.MkdirAll("./db", ...)` hardcoded, ignorando o
+  `DB_PATH` real configurado — inofensivo no default (`./db/toggles.db`, onde "./db" já é a pasta
+  certa), mas quebrava silenciosamente o caso do `docker-compose.yml`
+  (`DB_PATH=/root/db/toggles.db`, uma pasta diferente). Corrigido pra `filepath.Dir(dbPath)`.
 
 ## API e Rotas
 

@@ -9,6 +9,12 @@ services:
       - "3056:3056"
     volumes:
       - ./db:/root/db
+    # O container roda como UID 65534 (USER 65534:65534 na production stage do Dockerfile).
+    # Um bind mount herda o dono do diretório do HOST, não o `--chown` do Dockerfile (esse só
+    # afeta o conteúdo baked-in da imagem) — sem isso, `./db` no host normalmente pertence ao seu
+    # usuário local, e o processo 65534 não consegue escrever nele (falha silenciosa no primeiro
+    # boot). Rode uma vez antes do primeiro `docker compose up`:
+    #   mkdir -p ./db && chown 65534:65534 ./db
     environment:
       - GIN_MODE=release
       # O volume acima monta em /root/db — sem isso, o binário grava no default

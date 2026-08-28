@@ -3,6 +3,8 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -43,6 +45,50 @@ func TestVerifyDbFile(t *testing.T) {
 	}
 }
 
+// verifyDbFile must create the configured path's OWN parent directory — not a hardcoded "./db"
+// — otherwise a DB_PATH outside "./db/" (e.g. docker-compose.yml's DB_PATH=/root/db/toggles.db,
+// pointed at a mounted volume) creates the wrong directory and os.Create on the real path fails.
+func TestVerifyDbFile_CreatesTheGivenPathsOwnParentDirectory(t *testing.T) {
+	GetLogger("test") // verifyDbFile logs via the package-level logger; ensure it's initialized
+
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "nested", "sub", "toggles.db")
+
+	if err := verifyDbFile(dbPath); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		t.Fatalf("expected the db file to exist at %s, got %v", dbPath, err)
+	}
+	if info.IsDir() {
+		t.Fatalf("expected %s to be a file, not a directory", dbPath)
+	}
+}
+
+func TestVerifyDbFile_LeavesAnExistingFileUntouched(t *testing.T) {
+	GetLogger("test")
+
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "toggles.db")
+	if err := os.WriteFile(dbPath, []byte("existing-data"), 0o600); err != nil {
+		t.Fatalf("failed to seed existing file: %v", err)
+	}
+
+	if err := verifyDbFile(dbPath); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	data, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("expected to read back the file, got %v", err)
+	}
+	if string(data) != "existing-data" {
+		t.Fatalf("expected the existing file to be left untouched, got contents %q", data)
+	}
+}
+
 func TestInitializeDB(t *testing.T) {
 	// Testa a inicialização do banco de dados
 	db, err := InitializeDB()
@@ -51,6 +97,36 @@ func TestInitializeDB(t *testing.T) {
 	}
 	if db == nil {
 		t.Error("Expected database to be initialized, got nil")
+	}
+}
+
+// InitializeDB must apply the embedded goose migrations itself — the production Docker image
+// (FROM scratch) has no goose CLI and nothing else runs `make migrate-up` inside it, so without
+// this the binary starts against a schema-less SQLite file and every query fails with
+// "no such table: ...". Confirmed live against a real built image before this fix existed.
+func TestInitializeDB_AppliesEmbeddedMigrations(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DB_PATH", filepath.Join(tmp, "migrated.db"))
+
+	db, err := InitializeDB()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying sql.DB: %v", err)
+	}
+
+	for _, table := range []string{"users", "sessions", "applications", "toggles", "teams"} {
+		var count int
+		row := sqlDB.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table)
+		if err := row.Scan(&count); err != nil {
+			t.Fatalf("query failed for table %s: %v", table, err)
+		}
+		if count != 1 {
+			t.Errorf("expected table %q to exist after InitializeDB (migrations applied), it does not", table)
+		}
 	}
 }
 

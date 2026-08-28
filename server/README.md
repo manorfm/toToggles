@@ -4,14 +4,6 @@
 
 A comprehensive feature toggle management platform built with Go and modern web technologies, designed for enterprise-scale feature flag management with robust user access controls and team collaboration.
 
-> ⚠️ Several examples below (`http://localhost:8081`, the `admin / admin` credentials, and API
-> paths without an `/api` prefix) are **stale** — the real port defaults to `3056`
-> (`SERVER_PORT`), there's no fixed default account (see "First boot" below), and the whole
-> session/secret-key API moved under `/api/*` (e.g. `/api/auth/login`, `/api/applications`) —
-> see [totoggle_java/README.md](../totoggle_java/README.md) and `CLAUDE.md`'s "Separação API vs
-> SPA" section for the current contract. Not fully rewritten in this pass — flagged rather than
-> silently left wrong.
-
 ## 🚀 Features
 
 ### Core Toggle Management
@@ -232,15 +224,19 @@ The application follows Clean Architecture and Hexagonal Architecture principles
 
 #### Authentication
 
+Auth is session-based (an HTTP-only cookie), not a Bearer token — `-c`/`-b` write and replay
+that cookie jar. Use the real credentials from "First boot" above (or any admin/root account you
+created) instead of the placeholder here.
+
 ```bash
 # Login to get session cookie
-curl -X POST http://localhost:8081/auth/login \
+curl -X POST http://localhost:3056/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin"}' \
+  -d '{"username": "root", "password": "{password from initial-root-password.txt}"}' \
   -c cookies.txt
 
 # Logout
-curl -X POST http://localhost:8081/auth/logout \
+curl -X POST http://localhost:3056/api/auth/logout \
   -b cookies.txt
 ```
 
@@ -248,87 +244,87 @@ curl -X POST http://localhost:8081/auth/logout \
 
 ```bash
 # Create application (requires authentication)
-curl -X POST http://localhost:8081/applications \
+curl -X POST http://localhost:3056/api/applications \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {token}" \
+  -b cookies.txt \
   -d '{"name": "My Application"}'
 
 # List applications (requires authentication)
-curl http://localhost:8081/applications \
-  -H "Authorization: Bearer {token}"
+curl http://localhost:3056/api/applications \
+  -b cookies.txt
 
 # Get application by ID (requires authentication)
-curl http://localhost:8081/applications/{app_id} \
-  -H "Authorization: Bearer {token}"
+curl http://localhost:3056/api/applications/{app_id} \
+  -b cookies.txt
 
 # Update application (requires authentication)
-curl -X PUT http://localhost:8081/applications/{app_id} \
+curl -X PUT http://localhost:3056/api/applications/{app_id} \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {token}" \
+  -b cookies.txt \
   -d '{"name": "Updated Name"}'
 
 # Delete application (requires authentication)
-curl -X DELETE http://localhost:8081/applications/{app_id} \
-  -H "Authorization: Bearer {token}"
+curl -X DELETE http://localhost:3056/api/applications/{app_id} \
+  -b cookies.txt
 ```
 
 #### Secret Key Management
 
 ```bash
 # Generate secret key for application (requires authentication)
-curl -X POST http://localhost:8081/applications/{app_id}/generate-secret \
+curl -X POST http://localhost:3056/api/applications/{app_id}/generate-secret \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {token}" \
+  -b cookies.txt \
   -d '{"name": "Production Key"}'
 
 # List secret keys for application (requires authentication)
-curl http://localhost:8081/applications/{app_id}/secret-keys \
-  -H "Authorization: Bearer {token}"
+curl http://localhost:3056/api/applications/{app_id}/secret-keys \
+  -b cookies.txt
 
 # Delete secret key (requires authentication)
-curl -X DELETE http://localhost:8081/secret-keys/{secret_key_id} \
-  -H "Authorization: Bearer {token}"
+curl -X DELETE http://localhost:3056/api/secret-keys/{secret_key_id} \
+  -b cookies.txt
 
 # Get toggles using secret key (public API)
-curl -H "X-API-Key: {secret_key}" http://localhost:8081/api/toggles
+curl -H "X-API-Key: {secret_key}" http://localhost:3056/api/toggles
 ```
 
 #### Feature Toggles
 
 ```bash
 # Create toggle (requires authentication)
-curl -X POST http://localhost:8081/applications/{app_id}/toggles \
+curl -X POST http://localhost:3056/api/applications/{app_id}/toggles \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {token}" \
+  -b cookies.txt \
   -d '{"toggle": "feature.new.dashboard"}'
 
 # List all toggles (flat, default) (requires authentication)
-curl http://localhost:8081/applications/{app_id}/toggles \
-  -H "Authorization: Bearer {token}"
+curl http://localhost:3056/api/applications/{app_id}/toggles \
+  -b cookies.txt
 
 # List all toggles as hierarchy (requires authentication)
-curl "http://localhost:8081/applications/{app_id}/toggles?hierarchy=true" \
-  -H "Authorization: Bearer {token}"
+curl "http://localhost:3056/api/applications/{app_id}/toggles?hierarchy=true" \
+  -b cookies.txt
 
 # Get toggle status by ID (requires authentication)
-curl http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
-  -H "Authorization: Bearer {token}"
+curl http://localhost:3056/api/applications/{app_id}/toggles/{toggle_id} \
+  -b cookies.txt
 
 # Update toggle by ID (requires authentication)
-curl -X PUT http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
+curl -X PUT http://localhost:3056/api/applications/{app_id}/toggles/{toggle_id} \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {token}" \
+  -b cookies.txt \
   -d '{"enabled": false}'
 
 # Update toggle recursively (requires authentication)
-curl -X PUT http://localhost:8081/applications/{app_id}/toggle/{toggle_id} \
+curl -X PUT http://localhost:3056/api/applications/{app_id}/toggle/{toggle_id} \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer {token}" \
+  -b cookies.txt \
   -d '{"enabled": false}'
 
 # Delete toggle by ID (requires authentication)
-curl -X DELETE http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
-  -H "Authorization: Bearer {token}"
+curl -X DELETE http://localhost:3056/api/applications/{app_id}/toggles/{toggle_id} \
+  -b cookies.txt
 ```
 
 - Quando `hierarchy=true` é passado, a resposta será uma árvore de toggles (com filhos aninhados).
@@ -338,7 +334,7 @@ curl -X DELETE http://localhost:8081/applications/{app_id}/toggles/{toggle_id} \
 
 ```bash
 # Get toggles using secret key (no authentication required)
-curl -H "X-API-Key: sk_1234567890abcdef..." http://localhost:8081/api/toggles
+curl -H "X-API-Key: sk_1234567890abcdef..." http://localhost:3056/api/toggles
 
 # Response includes application info and all toggles
 {

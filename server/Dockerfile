@@ -3,8 +3,18 @@
 # =============================================================================
 FROM golang:1.23-alpine AS builder
 
-# Instalar dependências necessárias para build
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# Instalar dependências necessárias para build (inclui `file`, usado só pra verificação abaixo)
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev file
+
+# TARGETOS/TARGETARCH são preenchidos automaticamente pelo BuildKit (inclusive em `docker build`
+# comum, sem buildx/--platform explícito — nesse caso default pro host) e casam com a imagem base
+# golang:1.23-alpine já selecionada pra essa plataforma, então isso é compilação NATIVA (gcc local
+# válido pro CGO), não cross-compile de verdade — corrige o build falhando em host arm64 com
+# GOARCH=amd64 hardcoded. IMPORTANTE: nada de `=amd64`/`=linux` de default aqui — dar um valor
+# default explícito faz o BuildKit usar esse literal em vez do valor real detectado da
+# plataforma (confirmado ao vivo: só reproduziu o bug arm64 de novo com os defaults presentes).
+ARG TARGETOS
+ARG TARGETARCH
 
 # Definir diretório de trabalho
 WORKDIR /build
@@ -18,9 +28,12 @@ RUN go mod download && go mod verify
 # Copiar apenas arquivos de código necessários
 COPY main.go ./
 COPY internal/ ./internal/
+# db/migrations é compilado no binário via go:embed (internal/app/config/db.go) — não é só um
+# asset estático copiado depois pro stage `assets`, precisa estar presente aqui pro `go build`.
+COPY db/migrations/ ./db/migrations/
 
 # Build otimizado da aplicação
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -ldflags='-w -s -extldflags "-static"' \
     -a -installsuffix cgo \
     -o totoogle main.go
@@ -80,7 +93,12 @@ COPY --from=builder /build/totoogle /totoogle
 
 # Copiar assets otimizados
 COPY --from=assets /assets/static /static
-COPY --from=assets /assets/db/migrations /db/migrations
+# --chown: o binário roda como USER 65534:65534 (abaixo) e cria o arquivo SQLite dentro de /db em
+# tempo de execução (config.DBPath() default "./db/toggles.db", CWD "/" nesse stage já que não há
+# WORKDIR aqui) — sem --chown, COPY cria /db como root:root e o processo não-root não consegue
+# escrever nele (falha "permission denied" no primeiro boot). --chown aplica tanto aos arquivos
+# copiados quanto ao diretório /db criado pela própria cópia.
+COPY --from=assets --chown=65534:65534 /assets/db/migrations /db/migrations
 
 # Definir timezone padrão
 ENV TZ=UTC
