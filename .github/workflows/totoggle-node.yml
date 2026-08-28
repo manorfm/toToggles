@@ -1,0 +1,39 @@
+name: totoggle-node
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "totoggle_node/**"
+      - ".github/workflows/totoggle-node.yml"
+  pull_request:
+    paths:
+      - "totoggle_node/**"
+      - ".github/workflows/totoggle-node.yml"
+
+defaults:
+  run:
+    working-directory: totoggle_node
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: totoggle_node/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test -- --coverage
+
+      - name: Build
+        run: npm run build
