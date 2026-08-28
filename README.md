@@ -43,7 +43,7 @@ A lightweight, thread-safe client library that:
 
 ### Prerequisites
 
-- **Server**: Go 1.19+
+- **Server**: Go 1.23+
 - **Client**: Java 17+ or Kotlin 1.9+
 - **Build Tool**: Gradle 8.7+
 
@@ -53,9 +53,14 @@ A lightweight, thread-safe client library that:
 
 ```bash
 cd server
-make migrate-up   # applies the goose migrations — not automatic, must run before first start
 go run main.go
 ```
+
+The binary applies its own database migrations at startup (embedded via `go:embed`, using
+[goose](https://github.com/pressly/goose) under the hood) — no separate step required, including
+inside the production Docker image, which has no external migration tool available.
+`make migrate-up`/`make migrate-down`/`make migrate-status` still exist for manual control (e.g.
+rolling back, or checking status without starting the server).
 
 The server starts on `http://localhost:3056` by default (override with `SERVER_PORT`).
 
