@@ -194,16 +194,24 @@ assinatura sem nenhum ganho real de "stateless".
 - **Localização**: `internal/app/middleware/security.go`, `internal/app/middleware/login_rate_limiter.go`
 - **`SecurityHeaders()`**: CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
   Permissions-Policy, `Cache-Control: no-store` em toda `/api/*`.
-- **`CORSHeaders()` — CORS restrito por allowlist, corrigido na mesma auditoria.** Antes ecoava de
-  volta **qualquer** `Origin` recebido com `Access-Control-Allow-Credentials: true` (comentário no
-  próprio código: "In production, restrict this to specific domains" — nunca implementado). Como
-  o app é same-origin por arquitetura (frontend servido pelo próprio binário), isso não tinha
-  motivo real de existir tão permissivo — qualquer site conseguiria disparar requisições
-  autenticadas via `Authorization` header (o cookie de sessão é `SameSite=Strict` e não seria
-  enviado cross-site de qualquer forma, mas o header Bearer não tem essa proteção). Agora só ecoa
-  `Access-Control-Allow-Origin`/liga `Allow-Credentials` se a origem estiver em
-  `config.AllowedOrigins()` (env var `CORS_ALLOWED_ORIGINS`, vazia por padrão — nenhuma origem
-  cross-site ganha acesso credenciado a menos que configurado explicitamente).
+- **CORS removido por completo numa auditoria posterior — não existe mais `CORSHeaders()`,
+  `config.AllowedOrigins()`, nem a env var `CORS_ALLOWED_ORIGINS`.** Corrigido pra allowlist numa
+  auditoria anterior (antes ecoava de volta **qualquer** `Origin` recebido com
+  `Access-Control-Allow-Credentials: true`), mas uma investigação posterior (pedida pelo usuário:
+  "o cors precisa mesmo?") achou que a allowlist só protegia uma coisa real: um fallback
+  `Authorization: Bearer <token>` em `ValidateToken()` ("for API compatibility") — o cookie de
+  sessão (`SameSite=Strict`) já é bloqueado cross-site pelo próprio navegador, independente de
+  CORS, e a API pública de secret key nunca foi afetada por CORS (mecanismo só de navegador;
+  chamadores server-to-server, que é o que toda client library é, não são sujeitos a ele).
+  Confirmado por grep no monorepo inteiro que esse fallback não tinha chamador real (frontend usa
+  `credentials: "include"`, nunca um header Authorization) nem cobertura de teste — removido como
+  código morto (`TestValidateToken_OnlyAcceptsCookie_NotAuthorizationHeaderFallback`, TDD,
+  vermelho confirmado antes da remoção provando que o fallback de fato autenticava). Com o
+  fallback fora, CORS não protegia mais nada real — removido junto (`CORSHeaders()`,
+  `isAllowedOrigin()`, `config.AllowedOrigins()`, a env var, os testes que cobriam esse
+  comportamento). Decisão viável porque este serviço é interno, sem exposição à internet
+  (confirmado pelo usuário) — um serviço que precisasse suportar um frontend legítimo hospedado
+  numa origem diferente precisaria reintroduzir isso.
 - **Cookies `Secure` configuráveis** (`config.CookieSecure()`, env var `COOKIE_SECURE`, default
   `true`) — antes `false` hardcoded em toda chamada `SetCookie` (5 lugares), com o próprio
   comentário admitindo "set to true in production". Nunca era.
@@ -218,8 +226,9 @@ assinatura sem nenhum ganho real de "stateless".
 `router.go`, enquanto `server/Dockerfile`/`docker-compose.yml` expunham `8081`, um mismatch que
 tornava o deploy via Docker inalcançável na porta mapeada; corrigido nos dois lados),
 `DB_PATH` (default `./db/toggles.db` — antes hardcoded em `db.go`, apesar do README já documentar
-essa env var como se existisse), `COOKIE_SECURE`, `CORS_ALLOWED_ORIGINS` (ambas acima),
-`TLS_CERT_FILE`/`TLS_KEY_FILE` (ver "TLS" abaixo).
+essa env var como se existisse), `COOKIE_SECURE` (acima; `CORS_ALLOWED_ORIGINS` existiu aqui mas
+foi removida — ver "Middleware de Segurança" acima), `TLS_CERT_FILE`/`TLS_KEY_FILE` (ver "TLS"
+abaixo).
 
 ### Senha inicial do root — arquivo, não stdout
 `AuthUseCase.InitializeRootUser()` (`internal/app/usecase/auth_usecase.go`) parava de imprimir a
@@ -346,6 +355,18 @@ código):
 ### API Pública (Secret Key)
 - `GET /api/toggles` - Buscar toggles por secret key (Header: X-API-Key) — já vivia sob `/api`
   antes da reestruturação, serviu de modelo pra ela.
+- `POST /api/toggles/disable` - **Kill switch**, mesma secret key acima. Escopo mínimo de
+  propósito: só desliga um toggle por `path` (nunca liga, nunca mexe em regra de ativação), pra
+  uso por sistemas externos de alerta/monitoramento. Reusa `ToggleUseCase.UpdateToggle(path,
+  false, appID)` (`usecase/toggle_usecase.go` — já existia, sem rota chamando antes), escopado por
+  `app_id` da própria chave (`ToggleRepository.GetByPath`), então uma chave nunca desliga um
+  toggle de outra aplicação mesmo sabendo o path exato — confirmado ao vivo (duas apps com toggle
+  de mesmo path, a chave de uma nunca afeta a outra). Idempotente, rate-limitado por chave (30/5
+  min, `middleware/killswitch_rate_limiter.go`, mesmo tipo genérico de janela deslizante do login
+  agora extraído em `middleware/rate_limiter.go`). Registrada no mesmo nível de `GET
+  /api/toggles` (fora de `protected`/approval) — bypass deliberado do approval workflow, ver
+  `docs/rest-flow.md` §8.1. Reusa a MESMA secret key da leitura (trade-off aceito, não uma
+  credencial nova — ver a mesma seção da doc pro raciocínio completo).
 
 ### Frontend (Protegido)
 - `GET /` - Interface principal
@@ -476,8 +497,7 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
   - `db.go` - Setup do banco de dados (caminho via `env.go#DBPath()`)
   - `logger.go` - Configuração de logs
   - `env.go` - Env vars com fallback pro comportamento anterior hardcoded: `SERVER_PORT`,
-    `DB_PATH`, `COOKIE_SECURE`, `CORS_ALLOWED_ORIGINS` (detalhes na seção "Sistema de Autenticação
-    e Autorização")
+    `DB_PATH`, `COOKIE_SECURE` (detalhes na seção "Sistema de Autenticação e Autorização")
 
 ## Frontend
 

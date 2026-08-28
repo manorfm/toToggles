@@ -45,9 +45,136 @@ func setupSecretKeyTestRouter() (*gin.Engine, *gorm.DB) {
 	}
 
 	router.GET("/api/toggles", GetTogglesBySecret)
+	router.POST("/api/toggles/disable", DisableToggleBySecret)
 	router.DELETE("/secret-keys/:id", DeleteSecretKey)
 
 	return router, db
+}
+
+func disableToggleRequest(path, apiKey string) *http.Request {
+	body := strings.NewReader(`{"path": "` + path + `"}`)
+	req, _ := http.NewRequest("POST", "/api/toggles/disable", body)
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+	return req
+}
+
+func TestDisableToggleBySecret_MissingHeader(t *testing.T) {
+	router, _ := setupSecretKeyTestRouter()
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, disableToggleRequest("feature.toggle1", ""))
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status 401, got %d", w.Code)
+	}
+}
+
+func TestDisableToggleBySecret_InvalidSecret(t *testing.T) {
+	router, _ := setupSecretKeyTestRouter()
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, disableToggleRequest("feature.toggle1", "invalid-secret"))
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+func TestDisableToggleBySecret_UnknownPath(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+
+	app := &entity.Application{ID: "app-a", Name: "App A"}
+	db.Create(app)
+	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	plainKey, _ := secretKey.SetSecretKey()
+	db.Create(secretKey)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, disableToggleRequest("does.not.exist", plainKey))
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
+	}
+}
+
+// Security-critical: a secret key must never be able to disable a toggle belonging to a
+// DIFFERENT application, even knowing its exact path. Enforced by ToggleUseCase.UpdateToggle
+// scoping GetByPath to the key's own ApplicationID — this test proves that scoping actually
+// holds at the HTTP boundary, not just in the usecase's own unit tests.
+func TestDisableToggleBySecret_CrossApplicationPath_NotFound(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+
+	appA := &entity.Application{ID: "app-a", Name: "App A"}
+	appB := &entity.Application{ID: "app-b", Name: "App B"}
+	db.Create(appA)
+	db.Create(appB)
+
+	keyA := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	plainKeyA, _ := keyA.SetSecretKey()
+	db.Create(keyA)
+
+	toggleB := &entity.Toggle{ID: "toggle-b", Path: "feature.shared-name", Enabled: true, AppID: "app-b", Value: "shared-name", Level: 1}
+	db.Create(toggleB)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, disableToggleRequest("feature.shared-name", plainKeyA))
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404 (cross-application path must not resolve), got %d", w.Code)
+	}
+
+	var reloaded entity.Toggle
+	db.First(&reloaded, "id = ?", "toggle-b")
+	if !reloaded.Enabled {
+		t.Error("toggle in the other application must not have been disabled")
+	}
+}
+
+func TestDisableToggleBySecret_Success(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+
+	app := &entity.Application{ID: "app-a", Name: "App A"}
+	db.Create(app)
+	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	plainKey, _ := secretKey.SetSecretKey()
+	db.Create(secretKey)
+	toggle := &entity.Toggle{ID: "toggle-a", Path: "feature.rollout", Enabled: true, AppID: "app-a", Value: "rollout", Level: 1}
+	db.Create(toggle)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, disableToggleRequest("feature.rollout", plainKey))
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	var reloaded entity.Toggle
+	db.First(&reloaded, "id = ?", "toggle-a")
+	if reloaded.Enabled {
+		t.Error("expected the toggle to be disabled")
+	}
+}
+
+func TestDisableToggleBySecret_IdempotentWhenAlreadyDisabled(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+
+	app := &entity.Application{ID: "app-a", Name: "App A"}
+	db.Create(app)
+	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	plainKey, _ := secretKey.SetSecretKey()
+	db.Create(secretKey)
+	toggle := &entity.Toggle{ID: "toggle-a", Path: "feature.rollout", Enabled: false, AppID: "app-a", Value: "rollout", Level: 1}
+	db.Create(toggle)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, disableToggleRequest("feature.rollout", plainKey))
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 (idempotent) for an already-disabled toggle, got %d", w.Code)
+	}
 }
 
 func TestGenerateSecretKey(t *testing.T) {

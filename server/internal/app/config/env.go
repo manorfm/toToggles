@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -29,25 +28,6 @@ func CookieSecure() bool {
 	return secure
 }
 
-// AllowedOrigins devolve a allowlist de CORS a partir de CORS_ALLOWED_ORIGINS (separado por
-// vírgula). Vazio por padrão — nenhuma requisição cross-origin com credenciais é permitida a
-// menos que configurado explicitamente.
-func AllowedOrigins() []string {
-	value := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if value == "" {
-		return nil
-	}
-
-	parts := strings.Split(value, ",")
-	origins := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			origins = append(origins, p)
-		}
-	}
-	return origins
-}
 
 // ServerPort devolve a porta em que o servidor HTTP deve escutar (SERVER_PORT), com o mesmo
 // default (3056) que já estava hardcoded em router.go.

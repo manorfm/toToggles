@@ -8,9 +8,13 @@ import (
 )
 
 func Init(router *gin.Engine) {
-	// Middlewares de segurança globais
+	// Middlewares de segurança globais. Sem CORS: este serviço não é acessado por navegadores
+	// de origem diferente (frontend servido same-origin por este mesmo binário; nenhum acesso
+	// à internet) — nem o cookie de sessão (SameSite=Strict) nem a API pública de secret key
+	// (server-to-server, nunca sujeita a CORS) dependiam dele. Removido junto com o fallback
+	// de Authorization header em ValidateToken(), a única coisa que CORS ainda protegia de
+	// verdade.
 	router.Use(middleware.SecurityHeaders())
-	router.Use(middleware.CORSHeaders())
 	router.Use(middleware.RequestID())
 
 	// Health check endpoints (no authentication required for k8s probes)
@@ -32,6 +36,10 @@ func Init(router *gin.Engine) {
 	{
 		// Rota pública da API (acesso por secret key via header X-API-Key)
 		api.GET("/toggles", handler.GetTogglesBySecret)
+
+		// Kill switch — mesma secret key acima, só desliga um toggle por path, nunca liga.
+		// Deliberadamente fora de `protected`/approval: ver docs/rest-flow.md.
+		api.POST("/toggles/disable", handler.DisableToggleBySecret)
 
 		// Rotas públicas de autenticação
 		auth := api.Group("/auth")

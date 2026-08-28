@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/manorfm/totoogle/internal/app/config"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -41,43 +40,6 @@ func SecurityHeaders() gin.HandlerFunc {
 
 		c.Next()
 	}
-}
-
-// CORSHeaders adiciona headers CORS — só pra uma origem que estiver na allowlist
-// (config.AllowedOrigins, via CORS_ALLOWED_ORIGINS). O app é same-origin por arquitetura
-// (frontend servido pelo próprio binário), então a allowlist fica vazia por padrão: nenhuma
-// origem cross-site ganha acesso credenciado. Antes isso ecoava de volta QUALQUER Origin
-// recebido com Access-Control-Allow-Credentials: true — qualquer site conseguia disparar
-// requisições autenticadas (via Authorization header, já que o cookie de sessão é
-// SameSite=Strict e não seria enviado cross-site de qualquer forma).
-func CORSHeaders() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		if origin != "" && isAllowedOrigin(origin) {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Credentials", "true")
-			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-			c.Header("Access-Control-Expose-Headers", "Content-Length")
-		}
-
-		// Responder a preflight requests
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
-}
-
-func isAllowedOrigin(origin string) bool {
-	for _, allowed := range config.AllowedOrigins() {
-		if allowed == origin {
-			return true
-		}
-	}
-	return false
 }
 
 // RequestID adiciona um ID único para cada requisição

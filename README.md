@@ -2,50 +2,67 @@
 
 [![server-go](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/server-go.yml)
 [![totoggle-java](https://github.com/manorfm/toToggles/actions/workflows/totoggle-java.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-java.yml)
+[![totoggle-go](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml)
+[![totoggle-node](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml)
 [![frontend-web](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml)
-![Kotlin](https://img.shields.io/badge/kotlin-1.9+-blue)
-![Java](https://img.shields.io/badge/java-17+-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-A robust, high-performance feature flag system consisting of a Go server and Java/Kotlin client library. ToToggle provides cascading validation, multiple activation strategies, and enterprise-grade resilience features.
+A feature flag (feature toggle) management platform: a Go server with a role-based admin UI, team
+management, and an optional approval workflow for sensitive changes, plus 3 official client
+libraries (Kotlin/Java, Go, Node/TypeScript) that fetch and cache toggles locally and evaluate
+them with cascading validation and 7 activation rule types.
 
 ## 🎯 What is ToToggle?
 
-ToToggle is a feature flag (feature toggle) management system that allows you to:
+**Server capabilities:**
+- **Hierarchical toggles** (`service.feature.flag`) with cascading validation — a disabled parent
+  disables every descendant, regardless of the child's own state
+- **7 activation rule types**: percentage rollout (consistent per-key hashing), parameter,
+  user ID, IP/CIDR, country, time window, and canary
+- **Role-based access control**: `root`/`admin`/`user`, with teams scoping which applications an
+  admin can manage
+- **Optional approval workflow**: gate selected mutation types (toggle delete, rule changes,
+  application/secret-key create/delete, etc.) behind a propose → approve → execute flow
+- **Public secret-key API** (`GET /api/toggles`, `X-API-Key` header) for external services/client
+  libraries to fetch an application's toggles — no session/cookie involved
+- **Production-ready by default**: structured JSON logging, optional TLS, a Jenkins-style
+  initial-root-password flow (file-only, never stdout/logs), self-applying database migrations
+  (no external tool needed even in the minimal production Docker image)
 
-- **Control feature rollouts** without deploying new code
-- **A/B test features** with percentage-based activation
-- **Gradually release features** using parameter-based rules
-- **Organize features hierarchically** with cascading validation
-- **Maintain high availability** with intelligent caching and offline mode
+**Client library capabilities** (all 3 — see each one's own README for the language-specific API):
+- Fetch and cache toggles locally — evaluation never blocks on the network
+- Evaluate all 7 activation rule types, with cascading validation matching the server's semantics
+- Background refresh with configurable interval, and offline mode (keep serving cached data if
+  the server becomes unreachable)
+- Observability hooks (refresh success/failure, evaluation events) and health/staleness getters
 
 ## 🏗️ Architecture
 
-The system consists of two main components:
-
 ```
-toToogle/
-├── server/          # Go-based ToToggle server
-└── totoggle_java/   # Java/Kotlin client library
+toToggles/
+├── server/           # Go server: REST API + role-based admin UI (React/Vite), same-origin,
+│                      # single SQLite-backed binary — see server/README.md and server/CLAUDE.md
+├── totoggle_java/     # Kotlin/Java client library (Gradle)
+├── totoggle_go/       # Go client library (go get github.com/manorfm/toToggles/totoggle_go)
+├── totoggle_node/     # Node.js/TypeScript client library (npm)
+├── stress-tests/      # Gatling/Kotlin load tests against the server's public toggle API
+└── docs/
+    └── rest-flow.md   # Full REST API contract — source of truth for any integration
 ```
 
-### Server (Go)
-The ToToggle server manages feature flag configurations, provides REST APIs, and handles authentication.
-
-### Client Library (Java/Kotlin)
-A lightweight, thread-safe client library that:
-- Fetches and caches feature flags
-- Evaluates activation rules locally
-- Provides cascading validation
-- Handles network failures gracefully
+The server is a single Go binary: it serves both the REST API and the built admin frontend from
+the same origin (no separate frontend process, no CORS needed for the browser UI under normal
+deployment — see "Security" below). Each client library is fully independent — its own module,
+own tests, own CI workflow — and only talks to the server over the public secret-key API.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - **Server**: Go 1.23+
-- **Client**: Java 17+ or Kotlin 1.9+
-- **Build Tool**: Gradle 8.7+
+- **Kotlin/Java client**: Java 17+ or Kotlin 1.9+, Gradle 8.7+
+- **Go client**: Go 1.23+
+- **Node/TypeScript client**: Node.js 20+
 
 ### Installation
 
@@ -95,7 +112,7 @@ import com.totoggle.client.config.ToToggleConfig
 // Configure the client
 val config = ToToggleConfig.builder()
     .applicationName("my-awesome-app")
-    .serverUrl("http://localhost:8080")
+    .serverUrl("http://localhost:3056")
     .secretKey("sk_your_secret_key_here")
     .refreshInterval(Duration.ofMinutes(5))
     .enableOfflineMode(true)
@@ -112,6 +129,15 @@ val isTableViewEnabled = client.isActive("user.payments.view-table", "premium")
 // Clean up
 client.shutdown()
 ```
+
+### Other Client Libraries
+
+The Kotlin/Java example above is the original client; **Go and Node/TypeScript are equally
+complete** (same cascading-validation semantics, all 7 rule types, offline mode, observability
+hooks) — see each one's own README for its language-idiomatic API and a full usage example:
+
+- **Go**: [`totoggle_go/README.md`](totoggle_go/README.md) — `go get github.com/manorfm/toToggles/totoggle_go`
+- **Node/TypeScript**: [`totoggle_node/README.md`](totoggle_node/README.md) — `npm install totoggle-node`
 
 ## 🌟 Key Features
 
@@ -149,18 +175,33 @@ Activates when the provided parameter matches the configured values.
 
 ### 🛡️ Resilience & Performance
 
-- **Local Caching**: Reduces server load and improves response times
-- **Offline Mode**: Continues operating with cached data during network issues
-- **Background Refresh**: Updates cache without blocking application threads
-- **Circuit Breaker**: Prevents cascading failures
-- **Thread Safety**: Fully concurrent operations
+- **Local Caching**: evaluation never touches the network — every client reads from its own
+  in-memory cache
+- **Offline Mode**: keeps serving the last successfully fetched data if the server becomes
+  unreachable, instead of failing closed
+- **Background Refresh**: updates the cache on a configurable interval without blocking callers
+- **Thread Safety**: safe for concurrent use in all 3 client libraries
 
 ### 🔐 Security
 
-- **API Key Authentication**: Secure server communication
-- **Input Validation**: Prevents injection attacks
-- **Rate Limiting**: Built-in protection against abuse
-- **Audit Logging**: Comprehensive operation tracking
+- **Session auth (admin UI)**: opaque, server-side-validated session tokens in an `HttpOnly`,
+  `SameSite=Strict` cookie (not JWT — see `server/CLAUDE.md` for why), cookie-only — no
+  `Authorization` header alternative. No CORS configuration either: the cookie's
+  `SameSite=Strict` already blocks cross-site use regardless, the admin UI is served same-origin
+  by this same binary, and this deployment has no separately-hosted frontend or internet exposure
+  to protect against — see `server/CLAUDE.md` if that ever changes.
+- **Public API auth (external services/client libraries)**: a `sk_`-prefixed, 256-bit
+  `crypto/rand` secret key, stored **only as its SHA-256 hash** (never plaintext), looked up by an
+  indexed hash column — not session/cookie-based, and never subject to CORS in the first place (a
+  browser-only mechanism; every client library is a server-to-server caller). Regenerating a key
+  deletes the prior one (real rotation, not additive).
+- **Login rate limiting**: `POST /api/auth/login` is capped per IP (in-memory sliding window,
+  resets on success) — not yet extended to the public secret-key endpoint, though its 256-bit
+  keyspace makes brute force impractical regardless.
+- **TLS**: optional, terminated directly in the binary (`TLS_CERT_FILE`/`TLS_KEY_FILE`) —
+  half-configured TLS fails the boot loudly rather than silently falling back to plain HTTP.
+- **Structured JSON logging**, and a Jenkins-style initial-root-password flow (file-only, `0600`,
+  auto-deleted after first login — never printed to stdout/logs).
 
 ## 📋 Configuration Options
 
@@ -188,40 +229,26 @@ there's no env var reading built into it). These are the server's:
 SERVER_PORT=3056           # default
 DB_PATH=./db/toggles.db    # default
 COOKIE_SECURE=true         # default; only set to false for local HTTP-only dev
-CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # only needed for a cross-origin frontend
 TLS_CERT_FILE=/etc/totoggle/tls/cert.pem  # optional — set both to terminate HTTPS in the binary
 TLS_KEY_FILE=/etc/totoggle/tls/key.pem
 ```
 
 ## 🧪 Testing
 
-### Run Client Tests
-
 ```bash
-cd totoggle_java
-./gradlew test
+cd server && go test ./...              # Go server
+cd totoggle_java && ./gradlew test      # Kotlin/Java client
+cd totoggle_go && go test ./...         # Go client
+cd totoggle_node && npm test            # Node/TypeScript client
 ```
 
-### Run Server Tests
-
-```bash
-cd server
-go test ./...
-```
-
-### Current Test Results
-- **128 tests** passing
-- **100% success rate**
-- **Full coverage** of core functionality
-
-## 📊 Performance
-
-- **Cache hit ratio**: >95% in typical workloads
-- **Response time**: <1ms for cached lookups
-- **Memory usage**: ~10MB baseline + ~1KB per feature
-- **Network requests**: Configurable refresh interval (default: 5 minutes)
+Each component's CI badge above reflects its current, real test status — no test count is
+hardcoded here, since it goes stale the moment any suite grows.
 
 ## 🔧 Advanced Usage
+
+*(Kotlin/Java client examples below — see [`totoggle_go/README.md`](totoggle_go/README.md) and
+[`totoggle_node/README.md`](totoggle_node/README.md) for the equivalent Go/TypeScript APIs.)*
 
 ### Custom Strategies
 
@@ -302,16 +329,17 @@ val config = ToToggleConfig.builder()
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourorg/totoggle.git
-cd totoggle
+git clone https://github.com/manorfm/toToggles.git
+cd toToggles
 
 # Setup server
 cd server
 go mod tidy
 
-# Setup client
-cd ../totoggle_java
-./gradlew build
+# Setup a client library (pick one)
+cd ../totoggle_java && ./gradlew build
+cd ../totoggle_go && go build ./...
+cd ../totoggle_node && npm install && npm run build
 ```
 
 ## 📄 License

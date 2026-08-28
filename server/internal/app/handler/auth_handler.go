@@ -273,17 +273,13 @@ func (h *AuthHandler) CheckFirstAccess(c *gin.Context) {
 // ValidateToken middleware para validar tokens
 func (h *AuthHandler) ValidateToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Try to get token from cookie first (secure method)
+		// Session auth is cookie-only — no Authorization-header fallback. One existed here
+		// historically ("for API compatibility") but had no real caller anywhere in this
+		// monorepo and no test ever exercised it; removed as dead/unverified code (see
+		// TestValidateToken_OnlyAcceptsCookie_NotAuthorizationHeaderFallback).
 		token, err := c.Cookie("auth_token")
-		if err != nil || token == "" {
-			// Fallback to Authorization header for API compatibility
-			authHeader := c.GetHeader("Authorization")
-			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-				token = authHeader[7:]
-			}
-		}
 
-		if token == "" {
+		if err != nil || token == "" {
 			// Clear any invalid cookie
 			c.SetCookie("auth_token", "", -1, "/", "", config.CookieSecure(), true)
 

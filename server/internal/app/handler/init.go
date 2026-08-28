@@ -178,6 +178,10 @@ func GetTogglesBySecret(c *gin.Context) {
 	secretKeyHandler.GetTogglesBySecret(c)
 }
 
+func DisableToggleBySecret(c *gin.Context) {
+	secretKeyHandler.DisableToggleBySecret(c)
+}
+
 func GetSecretKeys(c *gin.Context) {
 	secretKeyHandler.GetSecretKeys(c)
 }

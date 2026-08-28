@@ -503,7 +503,6 @@ All optional, safe defaults — nothing here is required to start the server:
 SERVER_PORT=3056           # HTTP(S) listen port
 DB_PATH=./db/toggles.db    # SQLite file path
 COOKIE_SECURE=true         # `Secure` flag on session cookies; only set false for local HTTP-only dev
-CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # comma-separated; empty = no cross-origin credentialed access
 TLS_CERT_FILE=/etc/totoggle/tls/cert.pem  # set BOTH to terminate HTTPS directly in the binary —
 TLS_KEY_FILE=/etc/totoggle/tls/key.pem    # setting only one fails the server at boot, on purpose
 ```

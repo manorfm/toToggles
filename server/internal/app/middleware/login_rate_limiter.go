@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,49 +11,13 @@ import (
 // (processo único, sem dependência nova, no mesmo espírito minimalista do resto do projeto).
 // Não é uma defesa distribuída/multi-instância; é o primeiro degrau razoável contra força bruta
 // agora que o login realmente verifica a senha de verdade (antes da correção do bypass de
-// autenticação, "login" nem era um alvo de força bruta que importasse).
-type loginRateLimiter struct {
-	mu       sync.Mutex
-	attempts map[string]*loginAttempt
-	limit    int
-	window   time.Duration
-}
-
-type loginAttempt struct {
-	count      int
-	windowFrom time.Time
-}
+// autenticação, "login" nem era um alvo de força bruta que importasse). Alias do tipo genérico
+// compartilhado (rate_limiter.go) — KillSwitchRateLimit usa o mesmo mecanismo, chaveado por
+// secret key em vez de IP.
+type loginRateLimiter = slidingWindowLimiter
 
 func newLoginRateLimiter(limit int, window time.Duration) *loginRateLimiter {
-	return &loginRateLimiter{
-		attempts: make(map[string]*loginAttempt),
-		limit:    limit,
-		window:   window,
-	}
-}
-
-func (l *loginRateLimiter) allow(key string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := time.Now()
-	a, exists := l.attempts[key]
-	if !exists || now.Sub(a.windowFrom) > l.window {
-		l.attempts[key] = &loginAttempt{count: 1, windowFrom: now}
-		return true
-	}
-
-	if a.count >= l.limit {
-		return false
-	}
-	a.count++
-	return true
-}
-
-func (l *loginRateLimiter) reset(key string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	delete(l.attempts, key)
+	return newSlidingWindowLimiter(limit, window)
 }
 
 var defaultLoginRateLimiter = newLoginRateLimiter(10, 15*time.Minute)

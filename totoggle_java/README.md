@@ -262,7 +262,6 @@ export GIN_MODE=release
 export DB_PATH=./db/toggles.db
 export SERVER_PORT=3056
 export COOKIE_SECURE=true                              # default; only set to false for local HTTP-only dev
-export CORS_ALLOWED_ORIGINS=https://your-frontend.example.com  # only needed for a cross-origin frontend
 
 # TLS (optional) — set BOTH to terminate HTTPS directly in the binary instead of behind a reverse
 # proxy. Setting only one of the two fails the server at boot with a clear error, rather than

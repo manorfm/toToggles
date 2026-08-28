@@ -58,12 +58,12 @@ Main vocabulary:
 
 IDs are ULIDs serialized as strings (26 uppercase alphanumeric characters, e.g. `01ARZ3NDEKTSV4RRFFQ69G5FAV`).
 
-Most routes require a session token, sent either as an HTTP-only cookie (`auth_token`, set automatically by
-`POST /api/auth/login`) or as a bearer header for API clients that cannot use cookies:
-
-```http
-Authorization: Bearer <token>
-```
+Most routes require a session token, sent as an HTTP-only cookie (`auth_token`, set automatically by
+`POST /api/auth/login`). **Cookie-only** — an `Authorization: Bearer <token>` fallback existed here
+historically ("for API compatibility") but was removed: nothing in this monorepo ever used it (the
+frontend always sends `credentials: "include"`, never that header), it had no test coverage, and
+`POST /api/auth/login`'s JSON response never populated a `token` field anyway, so it was never
+actually usable as a real alternative to the cookie.
 
 The token is a 256-bit random value (32 bytes, hex-encoded — `entity.Session`/`entity.NewSession`), issued
 server-side on successful login and stored, hashed (SHA-256, never the raw value), in a `sessions` table. It
@@ -74,23 +74,22 @@ who knew a user's ID. That was a real authentication bypass, fixed by replacing 
 mechanism described above; every session (and the separate, single-use `password_change` token issued by the
 forced-first-login flow) is invalidated on logout and on password change.
 
-> **Cross-origin caveat:** the `auth_token` cookie is set with `SameSite=Strict`
-> (`auth_handler.go`), so browsers will never send it on requests originating from a different
-> origin than the API — same-origin only (e.g. a frontend served from this server's own
-> `static/` bundle). The Bearer alternative is **not actually usable as a substitute today**:
-> `POST /api/auth/login`'s JSON response never populates its `token` field on a successful login —
-> the token only ever reaches the client via the cookie. Practically, this means a frontend
-> hosted on its own origin/dev-server (typical for a separately built SPA) currently has **no
-> working way to authenticate** against this API. Building such a frontend requires either
-> serving it from the same origin as the API, or a backend change (return the token in the
-> login response body, and/or relax `SameSite`) before a Bearer-based flow is possible.
+> **Cross-origin caveat, and why there's no CORS config:** the `auth_token` cookie is set with
+> `SameSite=Strict` (`auth_handler.go`), so browsers will never send it on requests originating
+> from a different origin than the API — same-origin only (e.g. a frontend served from this
+> server's own `static/` bundle, which is how this app is actually deployed). Since session auth
+> is cookie-only (above) and the public secret-key API below is never subject to CORS at all (a
+> browser-only mechanism; server-to-server callers, which is what every client library is, ignore
+> it entirely), there was nothing left for CORS to meaningfully protect — the `CORSHeaders()`
+> middleware and `CORS_ALLOWED_ORIGINS` env var were removed. A deployment that genuinely needs a
+> separately-hosted frontend against this API would need to reintroduce CORS (and likely relax
+> `SameSite`, and have login return the token in the response body) — not a supported
+> configuration today.
 
 > **Deployment env vars** (all optional, safe defaults): `SERVER_PORT` (default `3056`), `DB_PATH`
 > (default `./db/toggles.db`), `COOKIE_SECURE` (default `true` — only set to `false` for local
 > HTTP-only development; the `auth_token`/`password_change_token` cookies won't be sent by the
-> browser over plain HTTP when this is `true`), `CORS_ALLOWED_ORIGINS` (comma-separated, default
-> empty — no cross-origin credentialed request is allowed unless a frontend is genuinely hosted on
-> a different origin from this API), `TLS_CERT_FILE`/`TLS_KEY_FILE` (both optional, but must be set
+> browser over plain HTTP when this is `true`), `TLS_CERT_FILE`/`TLS_KEY_FILE` (both optional, but must be set
 > together — the server terminates HTTPS itself when both are present, stays on plain HTTP
 > otherwise, and refuses to boot if only one is set). Logs are structured JSON on stdout.
 
@@ -878,6 +877,47 @@ X-API-Key: sk_9f1c...
 Note this endpoint returns each toggle's own `enabled` value, not the hierarchy-resolved effective value —
 consumers that need cascading behavior must apply it client-side (parent disabled ⇒ treat descendants as
 disabled), matching the client library's documented cascading-validation behavior.
+
+### 8.1 Kill switch — disable a toggle by path
+
+```http
+POST /api/toggles/disable
+X-API-Key: sk_9f1c...
+Content-Type: application/json
+
+{"path": "user.payments.view-table"}
+```
+
+Minimal-scope endpoint for external monitoring/alerting systems to disable a single feature
+immediately — **only disables, never enables, never touches activation rules, never reads
+anything beyond what's needed to validate the key.** Re-enabling a toggle still requires the
+regular admin-session-authenticated endpoints (`PUT /api/applications/:id/toggles/:toggleId` or
+the recursive `.../toggle/:toggleId`) — deliberately asymmetric, so a leaked key can only ever
+turn things off.
+
+- Uses the **same** secret key as `GET /api/toggles` above — no separate credential. A real
+  trade-off worth knowing: a leaked key that could only read toggles before can now also disable
+  any of them (within its own application only — see scoping below). Accepted here because this
+  key is already a high-value, per-application credential and the deployment isn't
+  internet-facing; a setup with a different threat model might prefer a second, disable-only key
+  type instead.
+- Scoped to the calling key's own application: the toggle is looked up by `path` **within that
+  application only** (`ToggleUseCase.UpdateToggle`, `internal/app/usecase/toggle_usecase.go`) — a
+  key can never disable a same-named path belonging to a different application, even if it knows
+  the exact string.
+- **Deliberately bypasses the approval workflow** (§9 below) — registered outside the
+  session/approval middleware chain entirely (same route group as the public `GET /api/toggles`).
+  A kill switch that has to wait for human approval isn't a kill switch. (Note: as of this
+  writing, `toggle_disable` isn't actually produced as a distinct approval action type by any
+  session-authenticated route either — see the note under §9.1 on `getActionType` — so this isn't
+  bypassing a protection that otherwise existed for disabling via the admin UI.)
+- Idempotent: disabling an already-disabled toggle returns `200`, not an error.
+- Rate-limited per secret key (30 requests / 5 minutes) — `429` past that, independent of any
+  other key's usage.
+
+Responses: `200 {"path": "...", "enabled": false}` on success; `401` missing `X-API-Key` header;
+`404` unknown/invalid key, or the path doesn't resolve within that key's application; `429` rate
+limit exceeded.
 
 ## 9. Approval Workflow
 

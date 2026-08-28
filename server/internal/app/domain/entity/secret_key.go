@@ -62,13 +62,6 @@ func (sk *SecretKey) SetSecretKey() (string, error) {
 	return secretKey, nil
 }
 
-// VerifySecretKey verifica se a chave fornecida corresponde ao hash armazenado
-func (sk *SecretKey) VerifySecretKey(secretKey string) bool {
-	hash := sha256.Sum256([]byte(secretKey))
-	providedHash := hex.EncodeToString(hash[:])
-	return sk.KeyHash == providedHash
-}
-
 // Validate valida os dados da secret key
 func (sk *SecretKey) Validate() error {
 	if sk.Name == "" {
@@ -88,9 +81,4 @@ func (sk *SecretKey) Validate() error {
 	}
 
 	return nil
-}
-
-// GetMaskedKey retorna uma versão mascarada da chave para exibição
-func (sk *SecretKey) GetMaskedKey() string {
-	return "sk_****...****"
 }

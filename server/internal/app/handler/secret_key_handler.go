@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/middleware"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 )
 
@@ -135,6 +136,70 @@ func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
 			"name":    application.Name,
 			"toggles": simplifiedToggles,
 		},
+	})
+}
+
+// DisableToggleRequest representa o request do kill switch
+type DisableToggleRequest struct {
+	Path string `json:"path" binding:"required"`
+}
+
+// DisableToggleBySecret desliga um único toggle, identificado por path, dentro da aplicação da
+// secret key apresentada — "kill switch" de escopo mínimo pra uso por sistemas externos de
+// alerta/monitoramento: só desliga (nunca liga, nunca lê nada além do necessário pra validar a
+// chave, nunca mexe em regra de ativação). Reaproveita a mesma secret key da leitura pública
+// (GET /api/toggles) — não introduz um tipo de credencial novo. Idempotente: desligar um toggle
+// já desligado continua devolvendo 200. Sem middleware de sessão/approval nesta rota de
+// propósito — ver docs/rest-flow.md.
+// POST /api/toggles/disable - Header: X-API-Key
+func (h *SecretKeyHandler) DisableToggleBySecret(c *gin.Context) {
+	secretKey := c.GetHeader("X-API-Key")
+	if secretKey == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "X-API-Key header is required",
+		})
+		return
+	}
+
+	key, err := h.secretKeyUseCase.ValidateSecretKey(secretKey)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Invalid or expired secret key",
+		})
+		return
+	}
+
+	if !middleware.AllowKillSwitchRequest(key.ID) {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error": "Too many kill-switch requests for this secret key. Try again later.",
+		})
+		return
+	}
+
+	var req DisableToggleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "path is required",
+		})
+		return
+	}
+
+	if err := h.toggleUseCase.UpdateToggle(req.Path, false, key.ApplicationID); err != nil {
+		if appErr, ok := err.(*entity.AppError); ok && appErr.Code == entity.ErrCodeNotFound {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Toggle not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to disable toggle: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"path":    req.Path,
+		"enabled": false,
 	})
 }
 

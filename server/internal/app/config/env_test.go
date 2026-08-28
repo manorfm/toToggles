@@ -22,20 +22,6 @@ func TestCookieSecure_InvalidValueFailsSafeToTrue(t *testing.T) {
 	}
 }
 
-func TestAllowedOrigins_DefaultsToEmpty(t *testing.T) {
-	if origins := AllowedOrigins(); len(origins) != 0 {
-		t.Errorf("expected no allowed origins by default, got %v", origins)
-	}
-}
-
-func TestAllowedOrigins_ParsesCommaSeparatedList(t *testing.T) {
-	t.Setenv("CORS_ALLOWED_ORIGINS", "https://a.example.com, https://b.example.com")
-	origins := AllowedOrigins()
-	if len(origins) != 2 || origins[0] != "https://a.example.com" || origins[1] != "https://b.example.com" {
-		t.Errorf("unexpected origins: %v", origins)
-	}
-}
-
 func TestServerPort_DefaultsTo3056(t *testing.T) {
 	if ServerPort() != "3056" {
 		t.Errorf("expected default port 3056, got %s", ServerPort())
