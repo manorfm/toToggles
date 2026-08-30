@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TeamMembersSection } from "./TeamMembersSection";
+import { ToastProvider } from "./ToastProvider";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -15,7 +16,7 @@ describe("TeamMembersSection", () => {
   it("shows an empty state when the team has no members", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: [] })));
 
-    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />);
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
 
     expect(await screen.findByText(/no members yet/i)).toBeInTheDocument();
   });
@@ -38,7 +39,7 @@ describe("TeamMembersSection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />);
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
     await screen.findByText(/no members yet/i);
 
     await user.click(screen.getByRole("button", { name: /add member/i }));
@@ -65,7 +66,7 @@ describe("TeamMembersSection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />);
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
     await screen.findByText("alice");
 
     await user.click(screen.getByRole("button", { name: /remove member/i }));
@@ -87,7 +88,7 @@ describe("TeamMembersSection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />);
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
     await screen.findByText("alice");
 
     await user.click(screen.getByRole("switch"));
@@ -111,7 +112,7 @@ describe("TeamMembersSection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />);
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
     await screen.findByText("alice");
 
     await user.click(screen.getByRole("switch"));

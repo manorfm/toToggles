@@ -119,6 +119,9 @@ func (r *ApplicationRepositoryImpl) Exists(id string) (bool, error) {
 func (r *ApplicationRepositoryImpl) GetAllWithToggleCounts() ([]*entity.ApplicationWithCounts, error) {
 	var results []*entity.ApplicationWithCounts
 
+	// has_secret_key via EXISTS subquery, não JOIN direto com secret_keys: um LEFT JOIN
+	// multiplicaria as linhas de toggles por chave (uma app pode ter mais de uma secret key),
+	// inflando COUNT/SUM acima mesmo com GROUP BY.
 	err := r.db.Table("applications").
 		Select(`
 			applications.id,
@@ -127,7 +130,8 @@ func (r *ApplicationRepositoryImpl) GetAllWithToggleCounts() ([]*entity.Applicat
 			applications.updated_at,
 			COUNT(toggles.id) as total_toggles,
 			SUM(CASE WHEN toggles.enabled = 1 THEN 1 ELSE 0 END) as enabled_toggles,
-			SUM(CASE WHEN toggles.enabled = 0 THEN 1 ELSE 0 END) as disabled_toggles
+			SUM(CASE WHEN toggles.enabled = 0 THEN 1 ELSE 0 END) as disabled_toggles,
+			EXISTS(SELECT 1 FROM secret_keys sk WHERE sk.application_id = applications.id) as has_secret_key
 		`).
 		Joins("LEFT JOIN toggles ON applications.id = toggles.app_id").
 		Group("applications.id, applications.name, applications.created_at, applications.updated_at").

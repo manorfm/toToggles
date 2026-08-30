@@ -1,5 +1,6 @@
 // Espelha entity.ApplicationWithCounts (server/internal/app/domain/entity/application.go) —
-// GET /applications não traz time/secret-key, só contagens (docs/rest-flow.md §6).
+// GET /applications não traz nome de time, só contagens + presença de secret key
+// (docs/rest-flow.md §6).
 export interface Application {
   id: string;
   name: string;
@@ -8,6 +9,7 @@ export interface Application {
   toggles_total: number;
   toggles_enabled: number;
   toggles_disabled: number;
+  has_secret_key: boolean;
 }
 
 // GET /applications/:id (entity.Application) — id/name/created_at/updated_at + teams associados.

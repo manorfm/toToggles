@@ -621,10 +621,13 @@ applications belonging to a team they are a member of. Response items are `Appli
     "updated_at": "2026-08-19T10:00:00Z",
     "toggles_total": 12,
     "toggles_enabled": 9,
-    "toggles_disabled": 3
+    "toggles_disabled": 3,
+    "has_secret_key": true
   }
 ]
 ```
+
+`has_secret_key` is `true` when the application has at least one secret key row (`secret_keys.application_id`), regardless of how many — the API only ever exposes presence, never a count or the key material itself (§7 below).
 
 ```http
 GET /api/applications/:id

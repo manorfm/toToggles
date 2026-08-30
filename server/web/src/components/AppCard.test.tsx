@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { AppCard } from "./AppCard";
 import type { Application } from "../types/application";
@@ -13,6 +13,7 @@ const app: Application = {
   toggles_total: 12,
   toggles_enabled: 9,
   toggles_disabled: 3,
+  has_secret_key: false,
 };
 
 describe("AppCard", () => {
@@ -73,5 +74,45 @@ describe("AppCard", () => {
     );
 
     expect(screen.queryByRole("button", { name: /edit application/i })).not.toBeInTheDocument();
+  });
+
+  it("shows 'No service key' and a Generate CTA when has_secret_key is false", () => {
+    render(
+      <MemoryRouter>
+        <AppCard application={{ ...app, has_secret_key: false }} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("No service key")).toBeInTheDocument();
+    expect(screen.getByText("Generate")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("shows 'Service key active' and a Manage CTA when has_secret_key is true", () => {
+    render(
+      <MemoryRouter>
+        <AppCard application={{ ...app, has_secret_key: true }} />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Service key active")).toBeInTheDocument();
+    expect(screen.getByText("Manage")).toBeInTheDocument();
+    expect(screen.getByText("Key")).toBeInTheDocument();
+  });
+
+  it("navigates straight to the service key section, not just the application root", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<AppCard application={{ ...app, has_secret_key: true }} />} />
+          <Route path="/applications/:id" element={<div>detail screen</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(screen.getByTitle("Manage service key"));
+
+    expect(await screen.findByText("detail screen")).toBeInTheDocument();
   });
 });

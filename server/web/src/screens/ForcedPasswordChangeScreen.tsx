@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { ChangePasswordForm } from "../components/ChangePasswordForm";
+import { useToast } from "../components/ToastProvider";
 import { changePasswordFirstTime } from "../api/auth";
 
 const SESSION_KEY = "password_change_user"; // mesma chave gravada em LoginScreen
@@ -26,6 +27,7 @@ function readPendingUser(): PendingUser | null {
 // temporário setado pelo login). Casca visual igual à de LoginScreen.
 export function ForcedPasswordChangeScreen() {
   const navigate = useNavigate();
+  const toast = useToast();
   const pending = readPendingUser();
 
   return (
@@ -46,6 +48,7 @@ export function ForcedPasswordChangeScreen() {
                 newPassword,
               });
               sessionStorage.removeItem(SESSION_KEY);
+              toast("Password updated");
               navigate("/login", { replace: true });
             }}
           />

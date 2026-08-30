@@ -190,6 +190,42 @@ func TestApplicationRepository_Exists(t *testing.T) {
 	}
 }
 
+func TestApplicationRepository_GetAllWithToggleCounts_HasSecretKey(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewApplicationRepository(db)
+
+	withKey := entity.NewApplication("With Key")
+	if err := repo.Create(withKey); err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	withoutKey := entity.NewApplication("Without Key")
+	if err := repo.Create(withoutKey); err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+
+	key := &entity.SecretKey{Name: "prod", ApplicationID: withKey.ID, CreatedBy: "user-1", KeyHash: "hash"}
+	if err := db.Create(key).Error; err != nil {
+		t.Fatalf("failed to create secret key: %v", err)
+	}
+
+	results, err := repo.GetAllWithToggleCounts()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	byID := map[string]*entity.ApplicationWithCounts{}
+	for _, r := range results {
+		byID[r.ID] = r
+	}
+
+	if !byID[withKey.ID].HasSecretKey {
+		t.Errorf("expected HasSecretKey=true for application with a secret key")
+	}
+	if byID[withoutKey.ID].HasSecretKey {
+		t.Errorf("expected HasSecretKey=false for application without a secret key")
+	}
+}
+
 func TestApplicationRepository_DeleteWithCascade(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewApplicationRepository(db)

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { Application } from "../types/application";
 import { applicationAccent, applicationGlyph } from "../lib/applicationAccent";
 import { Icon } from "./Icon";
@@ -10,13 +10,16 @@ interface AppCardProps {
 }
 
 // Adaptado do AppCard real do protótipo (decodificado do bundle comprimido embutido em
-// docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método). Time (`app.team`) e o
-// terceiro stat "Key" continuam de fora: `GET /applications` (entity.ApplicationWithCounts) não
-// traz nome de time nem indicador de secret key nenhum dos dois — exigiria uma query nova no
-// backend (join com times/secret_keys), não só um ajuste de frontend; registrado como gap
-// conhecido em server/CLAUDE.md.
+// docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método). Nome do time
+// (`app.team`) continua de fora: `GET /applications` não traz nome de time, exigiria uma query
+// nova no backend (join com times) sem relação com o indicador de chave abaixo; registrado como
+// gap conhecido em server/CLAUDE.md. O 3º stat "Key" e a faixa `.app-key-row` (indicador real de
+// presença de secret key) usam `has_secret_key`, que veio de uma query nova no backend
+// (EXISTS sobre secret_keys, ver application_repository.go#GetAllWithToggleCounts).
 export function AppCard({ application, canEdit = false, onEdit }: AppCardProps) {
   const { accent, soft } = applicationAccent(application.id);
+  const navigate = useNavigate();
+  const hasKey = application.has_secret_key;
 
   return (
     <Link
@@ -55,7 +58,24 @@ export function AppCard({ application, canEdit = false, onEdit }: AppCardProps) 
           <div className="v accent">{application.toggles_enabled}</div>
           <div className="k">Active</div>
         </div>
+        <div className="app-stat">
+          <div className={"v" + (hasKey ? " accent" : "")}>{hasKey ? "1" : "—"}</div>
+          <div className="k">Key</div>
+        </div>
       </div>
+      <button
+        className={"app-key-row" + (hasKey ? " has" : "")}
+        title={hasKey ? "Manage service key" : "Generate a service key for this application"}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigate(`/applications/${application.id}#service-key-section`);
+        }}
+      >
+        <Icon name={hasKey ? "lock" : "key"} size={13} />
+        <span className="akr-label">{hasKey ? "Service key active" : "No service key"}</span>
+        <span className="akr-cta">{hasKey ? "Manage" : "Generate"}</span>
+      </button>
     </Link>
   );
 }

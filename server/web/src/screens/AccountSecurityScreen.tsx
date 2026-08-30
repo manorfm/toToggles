@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { ChangePasswordForm } from "../components/ChangePasswordForm";
+import { useToast } from "../components/ToastProvider";
 import { changeOwnPassword } from "../api/profile";
 
 // Rota aninhada em AppShell (usuário já autenticado, trocando a senha por
@@ -7,6 +8,7 @@ import { changeOwnPassword } from "../api/profile";
 // wrapper diferentes (ver ForcedPasswordChangeScreen).
 export function AccountSecurityScreen() {
   const navigate = useNavigate();
+  const toast = useToast();
 
   return (
     <div className="page">
@@ -20,6 +22,7 @@ export function AccountSecurityScreen() {
         <ChangePasswordForm
           onSubmit={async ({ currentPassword, newPassword }) => {
             await changeOwnPassword({ currentPassword, newPassword });
+            toast("Password updated");
             navigate("/");
           }}
         />

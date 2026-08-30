@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { deleteSecretKey, generateSecretKey, listSecretKeys } from "../api/secretKeys";
 import { ApiError } from "../api/client";
 import { GeneratedKeyModal } from "./GeneratedKeyModal";
+import { useToast } from "./ToastProvider";
 import type { SecretKey } from "../types/secretKey";
 
 interface SecretKeySectionProps {
@@ -24,6 +25,7 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
   const [state, setState] = useState<State>({ status: "loading" });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   const load = useCallback(() => {
     listSecretKeys(applicationId)
@@ -66,6 +68,7 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
         return;
       }
       load();
+      toast("Service key revoked");
     } catch (err) {
       setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível remover a chave." });
     } finally {

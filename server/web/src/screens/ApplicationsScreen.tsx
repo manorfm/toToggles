@@ -5,6 +5,7 @@ import { AppCard } from "../components/AppCard";
 import { AppModal } from "../components/AppModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Icon } from "../components/Icon";
+import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
 import type { Application } from "../types/application";
 
@@ -20,6 +21,7 @@ type LoadState =
 // direto da grade também agora.
 export function ApplicationsScreen() {
   const user = useAppUser();
+  const toast = useToast();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Application | null>(null);
@@ -55,11 +57,13 @@ export function ApplicationsScreen() {
       const result = await deleteApplication(deleting.id);
       if (result.kind === "pending_approval") {
         setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
+        toast("Action submitted for approval");
       } else {
         setPendingNotice(null);
         setState((prev) =>
           prev.status === "loaded" ? { status: "loaded", applications: prev.applications.filter((a) => a.id !== deleting.id) } : prev
         );
+        toast("Application deleted");
       }
       setDeleting(null);
     } catch (err) {
@@ -112,13 +116,21 @@ export function ApplicationsScreen() {
             setPendingNotice(null);
             setState((prev) =>
               prev.status === "loaded"
-                ? { status: "loaded", applications: [...prev.applications, { ...application, toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }] }
+                ? {
+                    status: "loaded",
+                    applications: [
+                      ...prev.applications,
+                      { ...application, toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0, has_secret_key: false },
+                    ],
+                  }
                 : prev
             );
+            toast("Application created");
           }}
           onUpdated={() => {}}
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de criar a aplicação.");
+            toast("Action submitted for approval");
           }}
         />
       )}
@@ -136,9 +148,11 @@ export function ApplicationsScreen() {
                 ? { status: "loaded", applications: prev.applications.map((a) => (a.id === updated.id ? { ...a, name: updated.name } : a)) }
                 : prev
             );
+            toast("Application updated");
           }}
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de atualizar a aplicação.");
+            toast("Action submitted for approval");
           }}
           onDeleteRequest={
             canDelete

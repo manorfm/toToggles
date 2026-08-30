@@ -4,6 +4,7 @@ import { deleteUser, listUsers, resetUserPassword, setUserStatus } from "../api/
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Icon } from "../components/Icon";
 import { TempPasswordModal } from "../components/TempPasswordModal";
+import { useToast } from "../components/ToastProvider";
 import { UserModal } from "../components/UserModal";
 import { UserRow } from "../components/UserRow";
 import { useAppUser } from "../hooks/useAppUser";
@@ -19,6 +20,7 @@ type LoadState = { status: "loading" } | { status: "loaded"; users: User[] } | {
 // pra evitar esse nome de rota não existe mais.
 export function UserManagementScreen() {
   const currentUser = useAppUser();
+  const toast = useToast();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
@@ -54,8 +56,10 @@ export function UserManagementScreen() {
   async function handleToggleStatus(user: User) {
     setError(null);
     try {
-      await setUserStatus(user.id, user.status === "disabled");
+      const activating = user.status === "disabled";
+      await setUserStatus(user.id, activating);
       load();
+      toast(activating ? "User reactivated" : "User deactivated");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível atualizar o status do usuário.");
     }
@@ -67,6 +71,7 @@ export function UserManagementScreen() {
       await deleteUser(deletingUser.id);
       setError(null);
       setState((prev) => (prev.status === "loaded" ? { status: "loaded", users: prev.users.filter((u) => u.id !== deletingUser.id) } : prev));
+      toast("User deleted");
       setDeletingUser(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Não foi possível apagar o usuário.");

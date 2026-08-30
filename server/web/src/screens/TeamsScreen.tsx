@@ -6,6 +6,7 @@ import { CreateTeamModal } from "../components/CreateTeamModal";
 import { Icon } from "../components/Icon";
 import { TeamMembersSection } from "../components/TeamMembersSection";
 import { TeamRow } from "../components/TeamRow";
+import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
 import type { TeamWithCounts } from "../types/team";
 
@@ -18,6 +19,7 @@ type LoadState =
 // fatia (ver TeamMembersSection sobre troca de role ser global, não por time).
 export function TeamsScreen() {
   const user = useAppUser();
+  const toast = useToast();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [creating, setCreating] = useState(false);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
@@ -49,6 +51,7 @@ export function TeamsScreen() {
       setState((prev) =>
         prev.status === "loaded" ? { status: "loaded", teams: prev.teams.filter((t) => t.id !== deletingTeamId) } : prev
       );
+      toast("Team deleted");
       setDeletingTeamId(null);
     } catch (err) {
       setDeleteError(err instanceof ApiError ? err.message : "Não foi possível apagar o time.");
@@ -93,6 +96,7 @@ export function TeamsScreen() {
                 ? { status: "loaded", teams: [...prev.teams, { ...team, user_count: 0, application_count: 0 }] }
                 : prev
             );
+            toast("Team created");
           }}
         />
       )}

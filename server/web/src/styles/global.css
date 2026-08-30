@@ -469,6 +469,43 @@ input[type="checkbox"] {
   margin-top: 4px;
 }
 
+/* --- Toasts (feedback transitório de mutações — ver components/ToastProvider.tsx) --- */
+.toast-wrap {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 16px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border-hi);
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  animation: toastin 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes toastin {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.toast svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+}
+
 /* --- Cards (applications, ...) --- */
 .card {
   background: var(--surface);
@@ -529,6 +566,50 @@ input[type="checkbox"] {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-top: 2px;
+}
+.app-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: calc(100% + var(--pad) * 2);
+  margin: 16px calc(var(--pad) * -1) calc(var(--pad) * -1);
+  padding: 12px var(--pad);
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-4);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 var(--radius) var(--radius);
+  transition: background 0.16s, color 0.16s;
+}
+.app-key-row:hover {
+  background: oklch(1 0 0 / 0.035);
+  color: var(--ink-2);
+}
+.app-key-row.has {
+  color: var(--accent);
+}
+.app-key-row svg {
+  flex-shrink: 0;
+}
+.akr-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.akr-cta {
+  font-weight: 600;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.app-key-row:hover .akr-cta {
+  color: var(--ink);
 }
 
 /* --- User menu --- */
@@ -1691,5 +1772,14 @@ input[type="checkbox"] {
   }
   .temp-pw-value {
     font-size: 19px;
+  }
+
+  .toast-wrap {
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    width: calc(100% - 28px);
+  }
+  .toast {
+    width: 100%;
+    justify-content: center;
   }
 }

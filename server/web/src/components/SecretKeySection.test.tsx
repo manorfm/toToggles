@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SecretKeySection } from "./SecretKeySection";
+import { ToastProvider } from "./ToastProvider";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -15,7 +16,7 @@ describe("SecretKeySection", () => {
   it("shows an empty state and a Generate button when there is no key yet (canManage)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
 
-    render(<SecretKeySection applicationId="app1" canManage />);
+    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
 
     expect(await screen.findByText(/nenhuma chave/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate key/i })).toBeInTheDocument();
@@ -24,7 +25,7 @@ describe("SecretKeySection", () => {
   it("hides management actions when canManage is false", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
 
-    render(<SecretKeySection applicationId="app1" canManage={false} />);
+    render(<SecretKeySection applicationId="app1" canManage={false} />, { wrapper: ToastProvider });
 
     await screen.findByText(/nenhuma chave/i);
     expect(screen.queryByRole("button", { name: /generate key/i })).not.toBeInTheDocument();
@@ -41,7 +42,7 @@ describe("SecretKeySection", () => {
       )
     );
 
-    render(<SecretKeySection applicationId="app1" canManage />);
+    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
 
     expect(await screen.findByText("API Access Key")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /regenerate/i })).toBeInTheDocument();
@@ -65,7 +66,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage />);
+    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
     await screen.findByText(/nenhuma chave/i);
 
     await user.click(screen.getByRole("button", { name: /generate key/i }));
@@ -90,7 +91,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage />);
+    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
     await screen.findByText("API Access Key");
 
     await user.click(screen.getByRole("button", { name: /delete/i }));
@@ -110,7 +111,7 @@ describe("SecretKeySection", () => {
     );
     const onKeyPresenceChange = vi.fn();
 
-    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />);
+    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
     await screen.findByText("API Access Key");
 
     expect(onKeyPresenceChange).toHaveBeenCalledWith(true);
@@ -120,7 +121,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
     const onKeyPresenceChange = vi.fn();
 
-    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />);
+    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
     await screen.findByText(/nenhuma chave/i);
 
     expect(onKeyPresenceChange).toHaveBeenCalledWith(false);
@@ -137,7 +138,7 @@ describe("SecretKeySection", () => {
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />);
+    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
     await screen.findByText(/nenhuma chave/i);
 
     await user.click(screen.getByRole("button", { name: /generate key/i }));
@@ -162,7 +163,7 @@ describe("SecretKeySection", () => {
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />);
+    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
     await screen.findByText("API Access Key");
 
     await user.click(screen.getByRole("button", { name: /delete/i }));

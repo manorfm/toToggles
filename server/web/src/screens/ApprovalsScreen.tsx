@@ -3,6 +3,7 @@ import { ApprovalRow } from "../components/ApprovalRow";
 import { ApprovalSettingsPanel } from "../components/ApprovalSettingsPanel";
 import { Icon } from "../components/Icon";
 import { RejectApprovalModal } from "../components/RejectApprovalModal";
+import { useToast } from "../components/ToastProvider";
 import { ApiError } from "../api/client";
 import {
   approveApproval,
@@ -36,6 +37,7 @@ type SettingsState =
 // o componente sendo renderizado inline quando tab === "settings".
 export function ApprovalsScreen() {
   const user = useAppUser();
+  const toast = useToast();
   const isRoot = user.role === "root";
   const [tab, setTab] = useState<Tab>("pending");
 
@@ -99,6 +101,7 @@ export function ApprovalsScreen() {
           return next;
         });
         loadRequests();
+        toast("Approved — action executed");
       } catch (err) {
         setNeedsExecuteRetry((prev) => new Set(prev).add(id));
         setRowErrors((prev) => ({
@@ -124,6 +127,7 @@ export function ApprovalsScreen() {
       });
       clearRowError(id);
       loadRequests();
+      toast("Approved — action executed");
     } catch (err) {
       setRowErrors((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível aplicar a mudança." }));
     } finally {
@@ -136,8 +140,10 @@ export function ApprovalsScreen() {
     setSettingsBusy(true);
     setSettingsError(null);
     try {
-      const updated = await updateApprovalSettings({ approvalEnabled: !settingsState.settings.approval_enabled });
+      const enabling = !settingsState.settings.approval_enabled;
+      const updated = await updateApprovalSettings({ approvalEnabled: enabling });
       setSettingsState({ status: "loaded", settings: updated });
+      toast(enabling ? "Approval system enabled" : "Approval system disabled");
     } catch (err) {
       setSettingsError(err instanceof ApiError ? err.message : "Não foi possível atualizar.");
     } finally {
@@ -171,6 +177,7 @@ export function ApprovalsScreen() {
     try {
       const updated = await updateApprovalSettings({ defaultExpirationDays: days });
       setSettingsState({ status: "loaded", settings: updated });
+      toast("Changes saved");
     } catch (err) {
       setSettingsError(err instanceof ApiError ? err.message : "Não foi possível atualizar.");
     } finally {
@@ -292,7 +299,16 @@ export function ApprovalsScreen() {
         </div>
       )}
 
-      {rejecting && <RejectApprovalModal request={rejecting} onClose={() => setRejecting(null)} onRejected={loadRequests} />}
+      {rejecting && (
+        <RejectApprovalModal
+          request={rejecting}
+          onClose={() => setRejecting(null)}
+          onRejected={() => {
+            loadRequests();
+            toast("Request rejected");
+          }}
+        />
+      )}
     </div>
   );
 }

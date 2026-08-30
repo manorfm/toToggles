@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountSecurityScreen } from "./AccountSecurityScreen";
+import { ToastProvider } from "../components/ToastProvider";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -10,12 +11,14 @@ function jsonResponse(status: number, body: unknown) {
 
 function renderScreen() {
   return render(
-    <MemoryRouter initialEntries={["/account/security"]}>
-      <Routes>
-        <Route path="/account/security" element={<AccountSecurityScreen />} />
-        <Route path="/" element={<div>Applications content</div>} />
-      </Routes>
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter initialEntries={["/account/security"]}>
+        <Routes>
+          <Route path="/account/security" element={<AccountSecurityScreen />} />
+          <Route path="/" element={<div>Applications content</div>} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>
   );
 }
 

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationsScreen } from "./ApplicationsScreen";
+import { ToastProvider } from "../components/ToastProvider";
 import type { AuthenticatedUser } from "../types/auth";
 
 function jsonResponse(status: number, body: unknown) {
@@ -16,13 +17,15 @@ function FakeShell({ user }: { user: AuthenticatedUser }) {
 
 function renderScreen(user: AuthenticatedUser = { id: "1", username: "root", role: "root", must_change_password: false }) {
   return render(
-    <MemoryRouter initialEntries={["/"]}>
-      <Routes>
-        <Route element={<FakeShell user={user} />}>
-          <Route path="/" element={<ApplicationsScreen />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route element={<FakeShell user={user} />}>
+            <Route path="/" element={<ApplicationsScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>
   );
 }
 

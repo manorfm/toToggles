@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { deleteApplication, getApplication } from "../api/applications";
 import { deleteToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
@@ -9,6 +9,7 @@ import { EditToggleDrawer } from "../components/EditToggleDrawer";
 import { Icon } from "../components/Icon";
 import { SecretKeySection } from "../components/SecretKeySection";
 import { TogglePaths } from "../components/TogglePaths";
+import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
 import { buildChildrenCountMap, countToggleTree, flattenToLeaves } from "../lib/toggleLeaves";
@@ -36,6 +37,8 @@ export function ApplicationDetailScreen() {
   const applicationId = id!;
   const user = useAppUser();
   const navigate = useNavigate();
+  const location = useLocation();
+  const toast = useToast();
   const setOpenApp = useSetOpenApp();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [hasSecretKey, setHasSecretKey] = useState(false);
@@ -69,6 +72,15 @@ export function ApplicationDetailScreen() {
     load();
   }, [load]);
 
+  // AppCard.tsx navega direto pra cá com um hash (ex. #service-key-section) quando o usuário
+  // clica na faixa de chave do card, sem passar pela sub-nav da sidebar (que só existe DEPOIS
+  // de já estar nesta tela — ver AppShell.tsx). Precisa esperar `state.status === "loaded"`:
+  // a section-alvo só existe no DOM depois que os dados chegam.
+  useEffect(() => {
+    if (state.status !== "loaded" || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [state.status, location.hash]);
+
   // Confirmado no protótipo real: o breadcrumb do topbar ganha um 3º nível com o nome da
   // aplicação aberta ("Applications / {app.name} / Toggles"), e a sidebar ganha uma sub-nav
   // ("Toggles"/"Service key") — só esta tela tem esses dados (nome, total de toggles, se existe
@@ -90,9 +102,11 @@ export function ApplicationDetailScreen() {
       const result = await deleteToggle(applicationId, deletingToggle.toggleId);
       if (result.kind === "pending_approval") {
         setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar o toggle.");
+        toast("Action submitted for approval");
       } else {
         setPendingNotice(null);
         load();
+        toast("Toggle deleted");
       }
       setDeletingToggle(null);
     } catch (err) {
@@ -108,8 +122,10 @@ export function ApplicationDetailScreen() {
       const result = await deleteApplication(applicationId);
       if (result.kind === "pending_approval") {
         setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
+        toast("Action submitted for approval");
         setDeletingApp(false);
       } else {
+        toast("Application deleted");
         navigate("/");
       }
     } catch (err) {
@@ -130,6 +146,7 @@ export function ApplicationDetailScreen() {
       const result = await setToggleEnabled(applicationId, leafId, nextEnabled);
       if (result.kind === "pending_approval") {
         setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
+        toast("Action submitted for approval");
       } else {
         setPendingNotice(null);
         load();
@@ -203,6 +220,7 @@ export function ApplicationDetailScreen() {
             onKeyPresenceChange={setHasSecretKey}
             onPendingApproval={() => {
               setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança na chave.");
+              toast("Action submitted for approval");
             }}
           />
         </div>
@@ -212,12 +230,14 @@ export function ApplicationDetailScreen() {
         <CreateToggleModal
           applicationId={applicationId}
           onClose={() => setCreating(false)}
-          onCreated={() => {
+          onCreated={(result) => {
             setPendingNotice(null);
             load();
+            toast(`Created ${result.path}`);
           }}
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de criar o toggle.");
+            toast("Action submitted for approval");
           }}
         />
       )}
@@ -231,9 +251,11 @@ export function ApplicationDetailScreen() {
           onSaved={() => {
             setPendingNotice(null);
             load();
+            toast("Changes saved");
           }}
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
+            toast("Action submitted for approval");
           }}
         />
       )}

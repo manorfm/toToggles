@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AddMemberModal } from "./AddMemberModal";
 import { Icon } from "./Icon";
 import { MemberRow } from "./MemberRow";
+import { useToast } from "./ToastProvider";
 import { ApiError } from "../api/client";
 import { listTeamApprovers, removeTeamMember, setTeamApprover } from "../api/teams";
 import type { TeamApprover } from "../types/team";
@@ -21,6 +22,7 @@ export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps
   const [state, setState] = useState<State>({ status: "loading" });
   const [adding, setAdding] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(() => {
     listTeamApprovers(teamId)
@@ -38,6 +40,7 @@ export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps
     try {
       await removeTeamMember(teamId, userId);
       load();
+      toast("Member removed");
     } catch (err) {
       setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível remover o membro." });
     }
@@ -87,7 +90,10 @@ export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps
           teamName={teamName}
           existingMemberIds={state.status === "loaded" ? state.members.map((m) => m.user_id) : []}
           onClose={() => setAdding(false)}
-          onAdded={load}
+          onAdded={() => {
+            load();
+            toast("Member added");
+          }}
         />
       )}
     </div>

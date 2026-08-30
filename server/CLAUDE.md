@@ -683,6 +683,26 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     placeholder/hint mudam por tipo, em vez de campos estruturados por tipo) já batia com o
     confirmado — o backend também só valida "não vazio" pra qualquer tipo
     (`entity.ActivationRule.ValidateRule`), então não há formato obrigatório por trás.
+- ✅ **Toasts** (`components/ToastProvider.tsx`, montado uma vez em `App.tsx` envolvendo todas as
+  rotas) — sistema de feedback transitório, achado ausente numa auditoria pedida pelo usuário
+  ("o sistema atual não dá nenhum sinal, alerta quando cria, remove, etc"): antes, criar/apagar/
+  alterar algo com sucesso imediato não dava sinal nenhum (só o estado "aguardando aprovação",
+  quando aplicável, tinha um banner inline por tela — `pendingNotice`, mantido como está, ele
+  carrega mais contexto do que os 2.6s de um toast permitem ler). Port 1:1 do sistema real do
+  protótipo (`app.jsx#toast`/`.toasts`/`.toast-wrap`, decodificado do bundle comprimido — ver o
+  aviso grande no topo desta seção): pílula no rodapé central, ícone de check, 2.6s de vida, sem
+  botão de fechar, JAMAIS um tipo de erro (o protótipo nunca falha de verdade, dados em memória —
+  aqui também não wiramos toast de erro, banners inline continuam sendo a resposta certa pra
+  erro real de API). `useToast()` chamado direto onde a mutação acontece (tela ou componente),
+  sem precisar de prop nova em cascata. Cobertura mapeada 1:1 contra os `toast(...)` reais do
+  `app.jsx`, inclusive quando NÃO tem toast (ex.: gerar service key e criar usuário não tocam
+  `toast()` no protótipo — o modal que mostra a chave/senha provisória já É a confirmação;
+  replicado aqui: `SecretKeySection`/`UserModal` não disparam toast nesses dois casos, só no
+  revoke/delete). Mensagem genérica "Action submitted for approval" cobre todo caminho
+  `pending_approval` (o protótipo usa o mesmo texto único pra qualquer tipo de ação enviada pra
+  aprovação). `saveExpiration` (campo de dias de expiração em Approval Settings) não existe no
+  protótipo — toast "Changes saved" coberto por extrapolação, mesmo tom das demais mutações
+  silenciosas antes.
 - ✅ **Applications** (`/`, `screens/ApplicationsScreen.tsx`) — lista real via `GET /applications` +
   `AppModal` (root/admin; `<select>` de time via `listTeamOptions` — root vê todos os times com
   `GET /teams`, outras roles só os próprios com `GET /profile/teams`, já que `POST /applications`
@@ -705,9 +725,25 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     `entity.Application`), não `Application`/`ApplicationWithCounts` (que não tem esse endpoint).
   - **`AppCard` ganhou glifo de duas letras** (`lib/applicationAccent.ts#applicationGlyph`, port
     1:1 do algoritmo real `name.split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase() ||
-    "AP"`) — antes era só a primeira letra do nome. Nome do time (`app.team`) e o terceiro stat
-    "Key" continuam de fora: `GET /applications` não tem nem um nem outro; fechar esse gap exige
-    uma query nova no backend (join com times/secret_keys), não é um ajuste de frontend.
+    "AP"`) — antes era só a primeira letra do nome. Nome do time (`app.team`) continua de fora:
+    `GET /applications` não traz nome de time, exigiria uma query nova no backend (join com
+    times) sem relação com o indicador de chave abaixo.
+  - **3º stat "Key" e a faixa `.app-key-row` implementados** — o gap documentado antes aqui
+    ("fecharia com uma query nova no backend") foi fechado: `entity.ApplicationWithCounts` ganhou
+    `HasSecretKey bool` (`has_secret_key` no JSON), resolvido em
+    `application_repository.go#GetAllWithToggleCounts` via `EXISTS(SELECT 1 FROM secret_keys sk
+    WHERE sk.application_id = applications.id)` — um `EXISTS`, não um `LEFT JOIN` direto com
+    `secret_keys`, porque isso multiplicaria as linhas de `toggles` já juntadas (uma app pode ter
+    mais de uma secret key), inflando `COUNT`/`SUM` mesmo com `GROUP BY`. `AppCard` renderiza o
+    3º `.app-stat` ("1"/"—", cor accent quando tem chave) e a faixa `.app-key-row` (ícone
+    `lock`/`key`, "Service key active"/"No service key" + CTA "Manage"/"Generate") confirmados no
+    `AppCard` real decodificado. Clicar na faixa navega pra `/applications/:id#service-key-section`
+    (`e.preventDefault()+stopPropagation()` — é um `<button>` dentro do `<Link>` que envolve o
+    card inteiro, mesmo padrão já usado pelo botão de editar) — diferente do protótipo, que abre o
+    modal de chave direto sobre o estado em memória; aqui não há estado compartilhado entre a
+    lista e o detalhe, então a ação equivalente é ir pra `ApplicationDetailScreen` e rolar até a
+    seção real (`ApplicationDetailScreen` ganhou um `useEffect` que lê `location.hash` e
+    `scrollIntoView` depois que os dados carregam — a section só existe no DOM nesse ponto).
   - **Achado, não corrigido**: `PUT /applications/:id` é approval-aware, mas o middleware
     `getActionType` (`internal/app/middleware/approval.go`) classifica **qualquer** `PUT` em
     `/applications` como `application_create` — não existe uma constante `application_update`

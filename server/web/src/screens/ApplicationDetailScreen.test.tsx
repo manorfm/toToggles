@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationDetailScreen } from "./ApplicationDetailScreen";
+import { ToastProvider } from "../components/ToastProvider";
 import type { AuthenticatedUser } from "../types/auth";
 import type { ToggleDetail, ToggleNode } from "../types/toggle";
 
@@ -16,14 +17,16 @@ function FakeShell({ user }: { user: AuthenticatedUser }) {
 
 function renderScreen(user: AuthenticatedUser = { id: "1", username: "root", role: "root", must_change_password: false }) {
   return render(
-    <MemoryRouter initialEntries={["/applications/app1"]}>
-      <Routes>
-        <Route element={<FakeShell user={user} />}>
-          <Route path="/" element={<div>Applications list</div>} />
-          <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter initialEntries={["/applications/app1"]}>
+        <Routes>
+          <Route element={<FakeShell user={user} />}>
+            <Route path="/" element={<div>Applications list</div>} />
+            <Route path="/applications/:id" element={<ApplicationDetailScreen />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>
   );
 }
 

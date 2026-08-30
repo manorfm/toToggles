@@ -24,6 +24,7 @@ type ApplicationWithCounts struct {
 	TotalToggles    int       `json:"toggles_total"`
 	EnabledToggles  int       `json:"toggles_enabled"`
 	DisabledToggles int       `json:"toggles_disabled"`
+	HasSecretKey    bool      `json:"has_secret_key"`
 }
 
 // NewApplication cria uma nova instância de Application
