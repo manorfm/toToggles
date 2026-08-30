@@ -20,6 +20,21 @@ type TeamOptionsState = { status: "loading" } | { status: "loaded"; options: Tea
 // Divergência forçada pelo modelo de dados real: o protótipo tem "Nome completo" (separado)
 // que vira o username via slug — nosso entity.User só tem Username (sem campo de nome de
 // exibição), então aqui só existe o campo Username, digitado direto.
+//
+// Atualização confirmada na v2.2 do protótipo (get_full_jsx("UserModal")):
+// - O campo "Aprovador do time" deixou de ser montado/desmontado condicionalmente
+//   (`{isRoot && role === "admin" && (...)}`) — agora fica sempre no DOM dentro de
+//   `.toggle-field-wrap`, que só alterna a classe `.show` (animação CSS grid-template-rows
+//   0fr→1fr, ver styles/global.css) — abre/fecha suavemente em vez de aparecer/sumir abrupto.
+//   `aria-hidden` reflete o estado pra leitor de tela; `tabIndex` no switch tira ele do tab
+//   order enquanto escondido (mantido montado = precisa disso, diferente de antes). O `role=
+//   "switch"`/`aria-checked` do nosso switch são mantidos mesmo não aparecendo no JSX do
+//   protótipo — não vamos regredir acessibilidade só porque a fonte não tem mais isso.
+// - A dica do switch agora nomeia o time selecionado ("...outros membros do time {team}."),
+//   antes era um texto genérico sem o nome.
+// - Erro de submissão virou um banner `.notice.danger` (ícone + texto) no topo do corpo do
+//   modal, não mais um `field-hint` solto no rodapé — reusa a mesma classe `.notice` que
+//   EditToggleDrawer já usa pro aviso de cascata (aqui com a variante `.danger`, nova).
 export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
   const [teamOptionsState, setTeamOptionsState] = useState<TeamOptionsState>({ status: "loading" });
   const [username, setUsername] = useState("");
@@ -48,6 +63,7 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
 
   const teamOptions = teamOptionsState.status === "loaded" ? teamOptionsState.options : [];
   const noTeamsAvailable = teamOptionsState.status === "loaded" && teamOptions.length === 0;
+  const selectedTeamName = teamOptions.find((t) => t.id === teamId)?.name;
 
   async function submit() {
     const trimmed = username.trim();
@@ -95,6 +111,13 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
         </>
       }
     >
+      {error && (
+        <div className="notice danger">
+          <Icon name="warn" size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
       <div className="field">
         <label className="field-label" htmlFor="new-user-username">
           Username
@@ -164,28 +187,26 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
         </div>
       </div>
 
-      {isRoot && role === "admin" && (
-        <div className="field" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={isApprover}
-            aria-label="Aprovador do time"
-            className={"switch" + (isApprover ? " on" : "")}
-            onClick={() => setIsApprover((v) => !v)}
-          />
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 600 }}>Aprovador do time</div>
-            <div className="field-hint" style={{ marginTop: 2 }}>
-              Pode aprovar solicitações abertas por outros membros.
+      {isRoot && (
+        <div className={"toggle-field-wrap" + (role === "admin" ? " show" : "")} aria-hidden={role !== "admin"}>
+          <div className="toggle-field">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="toggle-field-title">Aprovador do time</div>
+              <div className="field-hint" style={{ marginTop: 3 }}>
+                Pode aprovar solicitações abertas por outros membros{selectedTeamName ? ` do time ${selectedTeamName}` : ""}.
+              </div>
             </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isApprover}
+              aria-label="Aprovador do time"
+              className={"switch" + (isApprover ? " on" : "")}
+              onClick={() => setIsApprover((v) => !v)}
+              tabIndex={role === "admin" ? 0 : -1}
+              title={isApprover ? "Remover como aprovador" : "Designar como aprovador"}
+            />
           </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
-          {error}
         </div>
       )}
     </Modal>

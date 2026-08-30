@@ -1294,6 +1294,55 @@ input[type="checkbox"] {
   color: color-mix(in oklab, var(--warn) 88%, var(--ink));
   border: 1px solid color-mix(in oklab, var(--warn) 26%, transparent);
 }
+.notice svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.notice.danger {
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  border-color: color-mix(in oklab, var(--danger) 26%, transparent);
+}
+
+/* --- Campo com switch que expande/recolhe (UserModal: "Aprovador do time") — animação
+   grid-template-rows 0fr→1fr, truque padrão pra animar altura sem conhecer o valor final em
+   px. Fica sempre montado (não condicional), só alterna a classe .show; aria-hidden reflete o
+   mesmo estado pra leitor de tela, tabIndex no controle interno tira do tab order enquanto
+   escondido. --- */
+.toggle-field-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.18s ease, margin-bottom 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  margin-bottom: 0;
+  pointer-events: none;
+}
+.toggle-field-wrap > .toggle-field {
+  overflow: hidden;
+  min-height: 0;
+}
+.toggle-field-wrap.show {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+  margin-bottom: var(--gap);
+}
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.toggle-field-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
 .rule-types {
   display: grid;
   grid-template-columns: 1fr 1fr;

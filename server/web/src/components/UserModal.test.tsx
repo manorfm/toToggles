@@ -36,17 +36,34 @@ describe("UserModal", () => {
     );
   });
 
-  it("shows the 'Aprovador do time' switch only when root selects role Admin", async () => {
+  it("keeps the 'Aprovador do time' field mounted (animated reveal) but hidden until root selects role Admin", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] })));
     const user = userEvent.setup();
 
     render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
 
-    expect(screen.queryByText("Aprovador do time")).not.toBeInTheDocument();
+    const wrapper = screen.getByText("Aprovador do time").closest(".toggle-field-wrap");
+    expect(wrapper).toHaveAttribute("aria-hidden", "true");
+    // { hidden: true }: getByRole por padrão respeita a árvore de acessibilidade, que exclui
+    // tudo dentro de aria-hidden="true" — precisa incluir explicitamente pra inspecionar o
+    // switch enquanto escondido (o próprio ponto do teste).
+    expect(screen.getByRole("switch", { name: /aprovador do time/i, hidden: true })).toHaveAttribute("tabindex", "-1");
 
     await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
-    expect(screen.getByText("Aprovador do time")).toBeInTheDocument();
+    expect(wrapper).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByRole("switch", { name: /aprovador do time/i })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("names the selected team in the 'Aprovador do time' hint", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] })));
+    const user = userEvent.setup();
+
+    render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
+    await screen.findByRole("option", { name: "Payments Squad" });
+    await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
+
+    expect(screen.getByText(/do time Payments Squad/i)).toBeInTheDocument();
   });
 
   it("never shows the approver switch for a non-root (admin) creator, even with role Admin selected", async () => {
