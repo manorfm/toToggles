@@ -389,7 +389,12 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 		// Executar alteração de regra de toggle (same as update)
 		return uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionApplicationCreate:
-		// Executar criação de aplicação
+		// Não existe application_update (docs/rest-flow.md §9.1) — PUT /applications/:id também
+		// cai neste mesmo action_type. ApplicationID só é preenchido pra esse caso (edição);
+		// numa criação de verdade a aplicação ainda não existe, então fica nil.
+		if request.ApplicationID != nil {
+			return uc.executeApplicationUpdateAction(ctx, request)
+		}
 		return uc.executeApplicationCreateAction(ctx, request)
 	case entity.ApprovalActionApplicationDelete:
 		// Executar exclusão de aplicação
@@ -535,6 +540,42 @@ func (uc *ApprovalUseCase) executeApplicationCreateAction(ctx context.Context, r
 	return nil
 }
 
+// executeApplicationUpdateAction aplica uma edição de aplicação aprovada (PUT /applications/:id,
+// mesmo action_type de criação — ver comentário no dispatch acima). Espelha exatamente o que
+// ApplicationHandler.UpdateApplication já faz fora do fluxo de aprovação: nome via
+// ApplicationUseCase.UpdateApplication, e, se um team_id novo veio no corpo, move a aplicação
+// pra esse team (remove de todos os times atuais, associa ao novo com permissão admin).
+func (uc *ApprovalUseCase) executeApplicationUpdateAction(ctx context.Context, request *entity.ApprovalRequest) error {
+	if request.ApplicationID == nil {
+		return errors.New("application ID is required for application update")
+	}
+
+	var actionData struct {
+		Name   string `json:"name"`
+		TeamID string `json:"team_id"`
+	}
+	if err := request.GetActionDataAs(&actionData); err != nil {
+		return fmt.Errorf("failed to deserialize action data: %w", err)
+	}
+
+	if actionData.Name != "" {
+		if _, err := uc.applicationUseCase.UpdateApplication(*request.ApplicationID, actionData.Name); err != nil {
+			return fmt.Errorf("failed to update application: %w", err)
+		}
+	}
+
+	if actionData.TeamID != "" {
+		if err := uc.teamUseCase.RemoveApplicationFromAllTeams(*request.ApplicationID); err != nil {
+			return fmt.Errorf("failed to remove application from current teams: %w", err)
+		}
+		if err := uc.teamUseCase.AddApplicationToTeam(actionData.TeamID, *request.ApplicationID, entity.PermissionAdmin); err != nil {
+			return fmt.Errorf("failed to associate application with new team: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (uc *ApprovalUseCase) executeApplicationDeleteAction(ctx context.Context, request *entity.ApprovalRequest) error {
 	// Verificar se a aplicação existe
 	if request.ApplicationID == nil {
@@ -610,6 +651,17 @@ func (uc *ApprovalUseCase) executeSecretKeyDeleteAction(ctx context.Context, req
 	}
 	
 	return nil
+}
+
+// GetApplicationIDForSecretKey resolve a aplicação dona de uma secret key — usado pelo middleware
+// de aprovação para escopar por team a exclusão de uma chave (a URL de DELETE só carrega o ID da
+// chave, não o da aplicação).
+func (uc *ApprovalUseCase) GetApplicationIDForSecretKey(secretKeyID string) (string, error) {
+	key, err := uc.secretKeyUseCase.GetSecretKeyByID(secretKeyID)
+	if err != nil {
+		return "", err
+	}
+	return key.ApplicationID, nil
 }
 
 // GetUserTeamForApplication obtém o primeiro team do usuário que tem acesso à aplicação específica

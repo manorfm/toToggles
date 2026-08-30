@@ -813,6 +813,42 @@ func TestToggleUseCase_DeleteToggleByID_StopsOnSibling(t *testing.T) {
 	}
 }
 
+func TestToggleUseCase_DeleteToggleByID_RefusesNodeWithChildren(t *testing.T) {
+	toggleMock := NewMockToggleRepository()
+	appMock := NewMockApplicationRepository()
+	appID := "app123"
+
+	// root -> a -> b
+	root := &entity.Toggle{ID: "root", AppID: appID, Value: "root"}
+	a := &entity.Toggle{ID: "a", AppID: appID, Value: "a", ParentID: &root.ID}
+	b := &entity.Toggle{ID: "b", AppID: appID, Value: "b", ParentID: &a.ID}
+
+	toggleMock.Toggles[root.ID] = root
+	toggleMock.Toggles[a.ID] = a
+	toggleMock.Toggles[b.ID] = b
+
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	err := useCase.DeleteToggleByID("a", appID)
+	if err == nil {
+		t.Fatal("expected error deleting a node with children, got nil")
+	}
+	appErr, ok := err.(*entity.AppError)
+	if !ok {
+		t.Fatalf("expected AppError, got %T", err)
+	}
+	if appErr.Code != entity.ErrCodeHasChildren {
+		t.Errorf("expected code %s, got %s", entity.ErrCodeHasChildren, appErr.Code)
+	}
+	// Nada deve ter sido removido
+	if _, ok := toggleMock.Toggles["a"]; !ok {
+		t.Errorf("expected 'a' to remain")
+	}
+	if _, ok := toggleMock.Toggles["b"]; !ok {
+		t.Errorf("expected child 'b' to remain")
+	}
+}
+
 func TestToggleUseCase_UpdateToggleWithRule(t *testing.T) {
 	appMock := NewMockApplicationRepository()
 	toggleMock := NewMockToggleRepository()

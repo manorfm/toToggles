@@ -11,13 +11,16 @@ interface SecretKeySectionProps {
   // aberta tem uma chave ativa — só esta seção sabe isso (dono único do fetch), então avisa o
   // pai em vez de duplicar a chamada a GET /secret-keys.
   onKeyPresenceChange?: (hasKey: boolean) => void;
+  // generate-secret/DELETE são approval-aware — mesmo mecanismo de aviso inline usado por
+  // CreateToggleModal/EditToggleDrawer via ApplicationDetailScreen#pendingNotice.
+  onPendingApproval?: (actionType: string) => void;
 }
 
 type State = { status: "loading" } | { status: "loaded"; key: SecretKey | null } | { status: "error"; message: string };
 
 // Uma aplicação tem no máximo uma secret key ativa por vez — "gerar" no servidor é
 // sempre "regerar" (apaga as anteriores primeiro), então só mostramos a mais recente.
-export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange }: SecretKeySectionProps) {
+export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange, onPendingApproval }: SecretKeySectionProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,8 +43,12 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
   async function handleGenerate() {
     setBusy(true);
     try {
-      const generated = await generateSecretKey(applicationId);
-      setRevealedKey(generated.plainKey);
+      const result = await generateSecretKey(applicationId);
+      if (result.kind === "pending_approval") {
+        onPendingApproval?.(result.actionType);
+        return;
+      }
+      setRevealedKey(result.plainKey);
       load();
     } catch (err) {
       setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível gerar a chave." });
@@ -53,7 +60,11 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
   async function handleDelete(id: string) {
     setBusy(true);
     try {
-      await deleteSecretKey(id);
+      const result = await deleteSecretKey(id);
+      if (result.kind === "pending_approval") {
+        onPendingApproval?.(result.actionType);
+        return;
+      }
       load();
     } catch (err) {
       setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível remover a chave." });

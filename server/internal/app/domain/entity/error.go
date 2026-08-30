@@ -55,4 +55,5 @@ const (
 	ErrCodeInternal      = "T0005"
 	ErrCodeInvalidPath   = "T0006"
 	ErrCodeInvalidToggle = "T0007"
+	ErrCodeHasChildren   = "T0008"
 )

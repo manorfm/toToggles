@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -109,6 +110,57 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 		
 		if err.Error() != "application ID is required for application deletion" {
 			t.Errorf("Expected specific error message, got: %s", err.Error())
+		}
+	})
+}
+
+// Achado escrevendo o e2e de "editar nome de aplicação com aprovação": PUT /applications/:id
+// mapeia pro mesmo action_type application_create (não existe application_update — ver
+// docs/rest-flow.md §9.1), mas a EXECUÇÃO da aprovação nunca soube disso — sempre tentava criar
+// uma aplicação nova, que falhava (sem team_id) toda vez que a ação real era uma edição.
+func TestApprovalUseCase_ExecuteApplicationUpdateAction(t *testing.T) {
+	t.Run("updates the application's name", func(t *testing.T) {
+		mockAppRepo := NewMockApplicationRepository()
+		appID := "app-123"
+		mockAppRepo.Applications[appID] = &entity.Application{ID: appID, Name: "Old Name"}
+
+		approvalUseCase := &ApprovalUseCase{
+			applicationUseCase: NewApplicationUseCase(mockAppRepo, NewMockToggleRepository()),
+		}
+
+		request := &entity.ApprovalRequest{
+			ID:            "request-789",
+			ActionType:    entity.ApprovalActionApplicationCreate,
+			ApplicationID: &appID,
+			ActionData:    json.RawMessage(`{"name":"New Name"}`),
+		}
+
+		if err := approvalUseCase.executeApplicationUpdateAction(context.Background(), request); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if mockAppRepo.Applications[appID].Name != "New Name" {
+			t.Errorf("expected application name to be updated to 'New Name', got %q", mockAppRepo.Applications[appID].Name)
+		}
+	})
+
+	t.Run("returns an error when application ID is missing", func(t *testing.T) {
+		approvalUseCase := &ApprovalUseCase{
+			applicationUseCase: NewApplicationUseCase(NewMockApplicationRepository(), NewMockToggleRepository()),
+		}
+
+		request := &entity.ApprovalRequest{
+			ID:         "request-000",
+			ActionType: entity.ApprovalActionApplicationCreate,
+			ActionData: json.RawMessage(`{"name":"New Name"}`),
+		}
+
+		err := approvalUseCase.executeApplicationUpdateAction(context.Background(), request)
+		if err == nil {
+			t.Fatal("expected error when application ID is missing")
+		}
+		if err.Error() != "application ID is required for application update" {
+			t.Errorf("expected specific error message, got: %s", err.Error())
 		}
 	})
 }

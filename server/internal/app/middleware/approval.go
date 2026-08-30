@@ -53,7 +53,7 @@ func ApprovalAware(approvalUseCase *usecase.ApprovalUseCase, requiredRole entity
 		}
 
 		// Sistema habilitado - verificar se a ação requer aprovação
-		actionType := getActionType(c.Request.Method, c.Request.URL.Path)
+		actionType := getActionType(c)
 		
 		required, err := approvalUseCase.RequiresApproval(ctx, actionType)
 		if err != nil {
@@ -104,23 +104,72 @@ func hasRequiredRole(userRole, requiredRole entity.UserRole) bool {
 	}
 }
 
-// getActionType mapeia o método HTTP e caminho para um tipo de ação
-func getActionType(method, path string) entity.ApprovalActionType {
+// peekJSONBody lê o corpo da requisição como JSON genérico e o restaura para leituras futuras
+// (o handler real, e createApprovalRequest, ainda precisam poder lê-lo depois).
+func peekJSONBody(c *gin.Context) map[string]interface{} {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil
+	}
+	c.Request.Body = io.NopCloser(strings.NewReader(string(body)))
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(body, &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+// getActionType mapeia método HTTP + caminho (e, quando necessário, o corpo) para um tipo de ação.
+// toggle_enable/toggle_disable (endpoint recursivo singular) e toggle_rule (endpoint plural, quando
+// a requisição mexe na regra de ativação) só podem ser distinguidos de toggle_update olhando o
+// corpo — os demais tipos são inferíveis só por método+path, como antes.
+func getActionType(c *gin.Context) entity.ApprovalActionType {
+	method := c.Request.Method
+	path := c.Request.URL.Path
+
 	switch {
+	case method == "POST" && strings.Contains(path, "/generate-secret"):
+		return entity.ApprovalActionSecretKeyCreate
+	case method == "DELETE" && strings.Contains(path, "/secret-keys/"):
+		return entity.ApprovalActionSecretKeyDelete
 	case method == "POST" && strings.Contains(path, "/applications") && !strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionApplicationCreate
 	case method == "DELETE" && strings.Contains(path, "/applications") && !strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionApplicationDelete
-	case method == "PUT" && strings.Contains(path, "/applications") && !strings.Contains(path, "/toggles"):
+	case method == "PUT" && strings.Contains(path, "/applications") && !strings.Contains(path, "/toggle"):
 		return entity.ApprovalActionApplicationCreate // PUT pode ser considerado update, mas não há constante específica
 	case method == "POST" && strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionToggleCreate
 	case method == "DELETE" && strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionToggleDelete
 	case method == "PUT" && strings.Contains(path, "/toggles"):
+		// Endpoint plural (não-recursivo): se a requisição está ligando/alterando a regra de
+		// ativação, é toggle_rule; senão é um toggle_update comum (só enabled do próprio nó).
+		// Limitação conhecida: não detecta LIMPAR uma regra pré-existente
+		// (has_activation_rule: false) como alteração de regra, pois isso exigiria ler o estado
+		// atual no banco, que este middleware não tem — mesmo trade-off de simplicidade já usado
+		// no resto desta função.
+		if body := peekJSONBody(c); body != nil {
+			if hasRule, ok := body["has_activation_rule"].(bool); ok && hasRule {
+				return entity.ApprovalActionToggleRule
+			}
+			if rule, ok := body["activation_rule"]; ok && rule != nil {
+				return entity.ApprovalActionToggleRule
+			}
+		}
 		return entity.ApprovalActionToggleUpdate
 	case method == "PUT" && strings.Contains(path, "/toggle/"):
-		return entity.ApprovalActionToggleUpdate // Bulk update considerado como update
+		// Endpoint recursivo singular: liga/desliga a subárvore inteira.
+		if body := peekJSONBody(c); body != nil {
+			if enabled, ok := body["enabled"].(bool); ok {
+				if enabled {
+					return entity.ApprovalActionToggleEnable
+				}
+				return entity.ApprovalActionToggleDisable
+			}
+		}
+		return entity.ApprovalActionToggleUpdate
 	default:
 		return entity.ApprovalActionType("unknown")
 	}
@@ -194,17 +243,30 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		description = "Delete toggle"
 		
 	case entity.ApprovalActionApplicationCreate:
-		// Usar dados da requisição
+		// PUT /applications/:id (edição) cai no mesmo action_type de criação — não existe
+		// application_update (docs/rest-flow.md §9.1). Só a presença de :id na URL distingue os
+		// dois; sem capturar applicationID aqui, a execução (ExecuteApprovedAction) não tinha
+		// como saber que era uma edição e sempre tentava criar uma aplicação nova (achado
+		// escrevendo o e2e de "editar aplicação com aprovação" — falhava sempre, por faltar
+		// team_id, já que uma edição de nome não manda esse campo).
+		if appID := c.Param("id"); appID != "" {
+			applicationID = &appID
+		}
+
 		var appData map[string]interface{}
 		if err := json.Unmarshal(body, &appData); err == nil {
 			actionData = appData
+			verb := "Create"
+			if applicationID != nil {
+				verb = "Update"
+			}
 			if name, ok := appData["name"].(string); ok {
-				description = "Create application: " + name
+				description = verb + " application: " + name
 			} else {
-				description = "Create application"
+				description = verb + " application"
 			}
 		}
-		
+
 	case entity.ApprovalActionApplicationDelete:
 		// Extrair application ID da URL
 		appID := c.Param("id")
@@ -212,7 +274,57 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 			applicationID = &appID
 		}
 		description = "Delete application"
-		
+
+	case entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable, entity.ApprovalActionToggleRule:
+		// Mesma extração de toggle_update: mesmas rotas (plural para rule, singular para enable/disable),
+		// mesmo formato de corpo.
+		appID := c.Param("id")
+		tgID := c.Param("toggleId")
+		if appID != "" {
+			applicationID = &appID
+		}
+		if tgID != "" {
+			toggleID = &tgID
+		}
+
+		var updateData map[string]interface{}
+		if err := json.Unmarshal(body, &updateData); err == nil {
+			actionData = updateData
+		}
+
+		switch actionType {
+		case entity.ApprovalActionToggleEnable:
+			description = "Enable toggle"
+		case entity.ApprovalActionToggleDisable:
+			description = "Disable toggle"
+		default:
+			description = "Configure activation rule"
+		}
+
+	case entity.ApprovalActionSecretKeyCreate:
+		// Extrair application ID da URL
+		appID := c.Param("id")
+		if appID != "" {
+			applicationID = &appID
+		}
+		actionData = map[string]interface{}{
+			"application_id": appID,
+			"regenerate":     true, // generate-secret sempre regenera, nunca há múltiplas chaves ativas
+		}
+		description = "Generate secret key"
+
+	case entity.ApprovalActionSecretKeyDelete:
+		// A URL só carrega o ID da secret key, não a aplicação — resolve via lookup pra poder
+		// escopar a solicitação por team.
+		secretKeyID := c.Param("id")
+		if appID, err := approvalUseCase.GetApplicationIDForSecretKey(secretKeyID); err == nil && appID != "" {
+			applicationID = &appID
+		}
+		actionData = map[string]interface{}{
+			"secret_key_id": secretKeyID,
+		}
+		description = "Delete secret key"
+
 	default:
 		description = "Unknown action"
 	}
@@ -243,19 +355,27 @@ func determineTeamID(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, a
 	ctx := context.Background()
 	
 	switch actionType {
-	case entity.ApprovalActionToggleCreate, entity.ApprovalActionToggleUpdate, entity.ApprovalActionToggleDelete:
+	case entity.ApprovalActionToggleCreate, entity.ApprovalActionToggleUpdate, entity.ApprovalActionToggleDelete,
+		entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable, entity.ApprovalActionToggleRule:
 		// Para ações de toggle, usar o team associado à aplicação
 		if applicationID == nil {
 			return "", entity.NewAppError(entity.ErrCodeValidation, "application ID is required for toggle actions")
 		}
-		
+
 		// Buscar qual team o usuário tem acesso nesta aplicação
 		return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
-		
+
 	case entity.ApprovalActionApplicationCreate, entity.ApprovalActionApplicationDelete:
 		// Para ações de aplicação, usar o primeiro team do usuário
 		return getFirstUserTeam(ctx, approvalUseCase, userID)
-		
+
+	case entity.ApprovalActionSecretKeyCreate, entity.ApprovalActionSecretKeyDelete:
+		// Secret keys pertencem a uma aplicação — mesmo raciocínio das ações de toggle
+		if applicationID == nil {
+			return "", entity.NewAppError(entity.ErrCodeValidation, "application ID is required for secret key actions")
+		}
+		return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
+
 	default:
 		return "", entity.NewAppError(entity.ErrCodeValidation, "unknown action type for team determination")
 	}

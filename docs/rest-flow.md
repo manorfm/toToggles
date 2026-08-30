@@ -162,7 +162,7 @@ Standard error body (most handlers; some legacy handlers use a simpler `{"error"
 ```
 
 Error codes: `T0001` validation, `T0002` not found, `T0003` already exists, `T0004` database error, `T0005`
-internal error, `T0006` invalid path, `T0007` invalid toggle.
+internal error, `T0006` invalid path, `T0007` invalid toggle, `T0008` toggle has children (delete refused).
 
 ## Quick endpoint index
 
@@ -772,12 +772,13 @@ Response: the updated `Toggle` entity.
 DELETE /api/applications/:id/toggles/:toggleId
 ```
 
-Approval-aware, minimum role `admin`. Important nuance: **a toggle with children is not deleted** — the call
-still returns `200 OK` with a success message, but the toggle silently survives if it has descendants (the
-handler has no way to signal "not deleted" back to the caller, so clients should re-fetch to confirm).
-When the toggle has no children, it is removed, and then the parent is checked recursively: if removing this
-toggle leaves its parent with no other children, the parent is deleted too (bubbling cleanup up the chain),
-and so on, until a parent with remaining children or a root is reached.
+Approval-aware, minimum role `admin`. **A toggle with children cannot be deleted directly**: the call
+returns `400` with `{"code": "T0008", "message": "toggle has children and cannot be deleted directly"}`
+and nothing is removed — delete the descendants first (or delete the application to cascade the whole
+tree). When the toggle has no children, it is removed, and then the parent is checked recursively: if
+removing this toggle leaves its parent with no other children, the parent is deleted too (bubbling
+cleanup up the chain, silently stopping — not an error — at the first ancestor that still has another
+child), and so on, until a parent with remaining children or a root is reached.
 
 ```http
 PUT /api/applications/:id/toggle/:toggleId
@@ -976,13 +977,20 @@ Root only. All fields optional — partial patch (only supplied keys are applied
 `default_expiration_days` must be between 1 and 30. Note `required_actions`, when present, is set wholesale
 (all ten booleans), so clients should send the complete config object, not just the keys they want to flip.
 
-In practice, only these action types can actually be intercepted end-to-end by the middleware today:
-`toggle_create`, `toggle_update`, `toggle_delete`, `application_create`, `application_delete` — the middleware
-that decides whether to intercept a request (`getActionType`) infers the type from the HTTP method and URL
-path and does not currently distinguish `toggle_enable`/`toggle_disable`/`toggle_rule` from `toggle_update`,
-nor does it cover `secret_key_create`/`secret_key_delete` (those endpoints are plain `RequireAdmin()`, not
-approval-aware). Configuring those unreachable flags has no observable effect through the standard REST
-handlers.
+All ten action types are now intercepted end-to-end by the middleware. `toggle_enable`/
+`toggle_disable` are distinguished from a plain `toggle_update` by the `enabled` value sent to the
+recursive endpoint (`PUT /api/applications/:id/toggle/:toggleId`); `toggle_rule` is distinguished
+from `toggle_update` on the non-recursive endpoint (`PUT /api/applications/:id/toggles/:toggleId`)
+by the presence of `has_activation_rule: true` or a non-null `activation_rule` in the request body
+— a request that only flips `enabled` on that endpoint, without touching the rule, still counts as
+`toggle_update`. `secret_key_create`/`secret_key_delete` are enforced on
+`POST /api/applications/:id/generate-secret` and `DELETE /api/secret-keys/:id`, which are now
+approval-aware routes rather than plain `RequireAdmin()`.
+
+One known limitation: the `toggle_rule` heuristic can't detect *clearing* a previously-set rule
+(sending `has_activation_rule: false` when a rule already exists) as a rule change, since that
+would require reading the toggle's current state — the middleware only looks at the request body.
+That request is classified as `toggle_update` instead.
 
 > Note: there is no separate `application_update` action type — `getActionType` maps **any** `PUT
 > /api/applications/:id` to `application_create`, same as the create route. So the single

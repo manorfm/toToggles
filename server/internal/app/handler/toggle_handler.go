@@ -211,8 +211,11 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
 			status := http.StatusBadRequest
-			if appErr.Code == entity.ErrCodeNotFound {
+			switch appErr.Code {
+			case entity.ErrCodeNotFound:
 				status = http.StatusNotFound
+			case entity.ErrCodeHasChildren:
+				status = http.StatusBadRequest
 			}
 			c.JSON(status, appErr)
 			return

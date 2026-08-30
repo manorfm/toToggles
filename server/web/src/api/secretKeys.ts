@@ -1,5 +1,10 @@
 import { apiFetch } from "./client";
-import type { GeneratedSecretKey, SecretKey } from "../types/secretKey";
+import type { DeleteSecretKeyResult, GenerateSecretKeyResult, SecretKey } from "../types/secretKey";
+
+interface ApprovalRequiredBody {
+  approval_required: true;
+  action_type: string;
+}
 
 export async function listSecretKeys(applicationId: string): Promise<SecretKey[]> {
   const body = await apiFetch<{ success: boolean; secret_keys?: SecretKey[] }>(`/applications/${applicationId}/secret-keys`);
@@ -15,11 +20,22 @@ interface GenerateSecretKeyBody {
 
 // "Gerar" é na real "regerar" — o servidor apaga toda chave existente da aplicação
 // antes de criar uma nova (docs/rest-flow.md §8). plain_key só existe aqui.
-export async function generateSecretKey(applicationId: string): Promise<GeneratedSecretKey> {
-  const body = await apiFetch<GenerateSecretKeyBody>(`/applications/${applicationId}/generate-secret`, { method: "POST" });
-  return { secretKey: body.secret_key, plainKey: body.plain_key, warning: body.warning };
+export async function generateSecretKey(applicationId: string): Promise<GenerateSecretKeyResult> {
+  const body = await apiFetch<GenerateSecretKeyBody | ApprovalRequiredBody>(`/applications/${applicationId}/generate-secret`, {
+    method: "POST",
+  });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "generated", secretKey: body.secret_key, plainKey: body.plain_key, warning: body.warning };
 }
 
-export async function deleteSecretKey(id: string): Promise<void> {
-  await apiFetch<{ success: boolean; message: string }>(`/secret-keys/${id}`, { method: "DELETE" });
+export async function deleteSecretKey(id: string): Promise<DeleteSecretKeyResult> {
+  const body = await apiFetch<{ success: boolean; message: string } | ApprovalRequiredBody>(`/secret-keys/${id}`, {
+    method: "DELETE",
+  });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "deleted" };
 }

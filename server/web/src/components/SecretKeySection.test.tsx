@@ -125,4 +125,49 @@ describe("SecretKeySection", () => {
 
     expect(onKeyPresenceChange).toHaveBeenCalledWith(false);
   });
+
+  it("calls onPendingApproval and does not open the reveal modal when generate is intercepted (202)", async () => {
+    const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "secret_key_create" }));
+      }
+      return Promise.resolve(jsonResponse(200, { success: true, secret_keys: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onPendingApproval = vi.fn();
+    const user = userEvent.setup();
+
+    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />);
+    await screen.findByText(/nenhuma chave/i);
+
+    await user.click(screen.getByRole("button", { name: /generate key/i }));
+
+    expect(onPendingApproval).toHaveBeenCalledWith("secret_key_create");
+    expect(screen.queryByText(/sk_/i)).not.toBeInTheDocument();
+  });
+
+  it("calls onPendingApproval and keeps the key visible when delete is intercepted (202)", async () => {
+    const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "secret_key_delete" }));
+      }
+      return Promise.resolve(
+        jsonResponse(200, {
+          success: true,
+          secret_keys: [{ id: "1", name: "API Access Key", application_id: "app1", created_by: "u1", created_at: "", updated_at: "" }],
+        })
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onPendingApproval = vi.fn();
+    const user = userEvent.setup();
+
+    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />);
+    await screen.findByText("API Access Key");
+
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+
+    expect(onPendingApproval).toHaveBeenCalledWith("secret_key_delete");
+    expect(screen.getByText("API Access Key")).toBeInTheDocument();
+  });
 });

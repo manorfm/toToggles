@@ -51,7 +51,18 @@ describe("generateSecretKey", () => {
     const result = await generateSecretKey("app1");
 
     expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/generate-secret", expect.objectContaining({ method: "POST" }));
-    expect(result).toEqual({ secretKey, plainKey: "sk_abc123", warning: "shown once" });
+    expect(result).toEqual({ kind: "generated", secretKey, plainKey: "sk_abc123", warning: "shown once" });
+  });
+
+  it("returns pending_approval when the server intercepts the request (202)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "secret_key_create" }))
+    );
+
+    const result = await generateSecretKey("app1");
+
+    expect(result).toEqual({ kind: "pending_approval", actionType: "secret_key_create" });
   });
 });
 
@@ -64,8 +75,20 @@ describe("deleteSecretKey", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, message: "Secret key deleted successfully" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await deleteSecretKey("1");
+    const result = await deleteSecretKey("1");
 
     expect(fetchMock).toHaveBeenCalledWith("/api/secret-keys/1", expect.objectContaining({ method: "DELETE" }));
+    expect(result).toEqual({ kind: "deleted" });
+  });
+
+  it("returns pending_approval when the server intercepts the request (202)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "secret_key_delete" }))
+    );
+
+    const result = await deleteSecretKey("1");
+
+    expect(result).toEqual({ kind: "pending_approval", actionType: "secret_key_delete" });
   });
 });

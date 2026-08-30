@@ -3,7 +3,7 @@ DB_PATH = ./db/toggles.db
 MIGRATIONS_DIR = ./db/migrations
 GOOSE = goose
 
-.PHONY: help run build test clean migrate-up migrate-down migrate-status docker-build docker-run web-install web-build web-dev web-test
+.PHONY: help run build test clean migrate-up migrate-down migrate-status docker-build docker-run web-install web-build web-dev web-test e2e
 
 help: ## Mostra esta ajuda
 	@echo "Comandos disponíveis:"
@@ -49,3 +49,6 @@ web-dev: ## Sobe o Vite dev server (proxy para :3056) — use junto com `make ru
 
 web-test: ## Executa os testes do frontend (vitest)
 	cd web && npm run test
+
+e2e: web-build ## Roda a suite Playwright (sobe o binário real via `go run`, exige o frontend buildado)
+	cd e2e && npm install && npx playwright install --with-deps chromium && npm test

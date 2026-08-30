@@ -83,10 +83,13 @@ describe("ApprovalSettingsPanel", () => {
     expect(onToggleAction).toHaveBeenCalledWith("toggle_create");
   });
 
-  it("shows a not-enforced hint next to an action the middleware never actually infers", () => {
+  it("shows every one of the 10 configurable actions, now that all are enforced", () => {
     renderPanel({ settings: settings({ approval_enabled: true }) });
 
-    expect(screen.getByText(/enabling a toggle is gated/i)).toBeInTheDocument();
+    expect(screen.getByText("Enable toggle (recursive, whole subtree)")).toBeInTheDocument();
+    expect(screen.getByText("Change activation rule")).toBeInTheDocument();
+    expect(screen.getByText("Generate secret key")).toBeInTheDocument();
+    expect(screen.getByText("Delete secret key")).toBeInTheDocument();
   });
 
   it("calls onSaveExpiration with the current expirationDays value", async () => {

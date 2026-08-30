@@ -421,6 +421,29 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedError:  "toggle does not belong to this application",
 		},
+		{
+			name:     "toggle has children",
+			appID:    "app123",
+			toggleID: "toggle123",
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				parentID := "toggle123"
+				toggleMock.Toggles["toggle123"] = &entity.Toggle{
+					ID:      "toggle123",
+					Path:    "test.feature",
+					AppID:   "app123",
+					Enabled: true,
+				}
+				toggleMock.Toggles["child456"] = &entity.Toggle{
+					ID:       "child456",
+					Path:     "test.feature.child",
+					AppID:    "app123",
+					Enabled:  true,
+					ParentID: &parentID,
+				}
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "toggle has children and cannot be deleted directly",
+		},
 	}
 
 	for _, tt := range tests {

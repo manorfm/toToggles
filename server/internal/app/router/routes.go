@@ -65,7 +65,7 @@ func Init(router *gin.Engine) {
 				applications.DELETE("/:id", handler.RequireApprovalAware(entity.UserRoleRoot), handler.DeleteApplication)
 
 				// Rotas de secret keys para aplicações (apenas admin/root)
-				applications.POST("/:id/generate-secret", handler.RequireAdmin(), handler.GenerateSecretKey)
+				applications.POST("/:id/generate-secret", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.GenerateSecretKey)
 				applications.GET("/:id/secret-keys", handler.RequireAdmin(), handler.GetSecretKeys)
 			}
 
@@ -88,7 +88,7 @@ func Init(router *gin.Engine) {
 			// Rotas de gerenciamento de secret keys (apenas admin/root)
 			secretKeys := protected.Group("/secret-keys")
 			{
-				secretKeys.DELETE("/:id", handler.RequireAdmin(), handler.DeleteSecretKey)
+				secretKeys.DELETE("/:id", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.DeleteSecretKey)
 			}
 
 			// Rotas de gestão de usuários — criar/listar: root ou admin (admin escopado aos

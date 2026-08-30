@@ -197,7 +197,14 @@ export function ApplicationDetailScreen() {
 
       {state.status === "loaded" && (
         <div id="service-key-section" style={{ marginTop: 32, paddingTop: 22, borderTop: "1px solid var(--border)" }}>
-          <SecretKeySection applicationId={applicationId} canManage={canEdit} onKeyPresenceChange={setHasSecretKey} />
+          <SecretKeySection
+            applicationId={applicationId}
+            canManage={canEdit}
+            onKeyPresenceChange={setHasSecretKey}
+            onPendingApproval={() => {
+              setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança na chave.");
+            }}
+          />
         </div>
       )}
 

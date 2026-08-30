@@ -354,8 +354,7 @@ func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error checking children")
 	}
 	if len(children) > 0 {
-		// Tem filhos, não remove nem sobe
-		return nil
+		return entity.NewAppError(entity.ErrCodeHasChildren, "toggle has children and cannot be deleted directly")
 	}
 
 	// Não tem filhos, pode remover
@@ -364,9 +363,36 @@ func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
 	}
 
-	// Se tem parent, tenta remover o pai recursivamente
+	// Se tem parent, sobe removendo ancestrais que ficaram sem filhos (stop silencioso, não é erro)
 	if toggle.ParentID != nil {
-		return uc.DeleteToggleByID(*toggle.ParentID, appID)
+		return uc.cascadeDeleteEmptyParent(*toggle.ParentID)
+	}
+	return nil
+}
+
+// cascadeDeleteEmptyParent remove um ancestral se ele ficou sem filhos após a remoção de um
+// descendente, subindo recursivamente. Ao contrário de DeleteToggleByID, encontrar um ancestral
+// que ainda tem outros filhos não é um erro — é a condição normal de parada da subida.
+func (uc *ToggleUseCase) cascadeDeleteEmptyParent(toggleID string) error {
+	toggle, err := uc.toggleRepo.GetByID(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+	}
+
+	children, err := uc.toggleRepo.GetChildren(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error checking children")
+	}
+	if len(children) > 0 {
+		return nil
+	}
+
+	if err := uc.toggleRepo.Delete(toggleID); err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
+	}
+
+	if toggle.ParentID != nil {
+		return uc.cascadeDeleteEmptyParent(*toggle.ParentID)
 	}
 	return nil
 }
