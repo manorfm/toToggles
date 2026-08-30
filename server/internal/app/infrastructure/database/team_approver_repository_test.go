@@ -241,72 +241,13 @@ func TestTeamApproverRepository_GetUserTeamsAsApprover(t *testing.T) {
 	})
 }
 
-func TestTeamApproverRepository_GetApprovableTeamsByUser(t *testing.T) {
-	db := setupTeamApproverTestDB(t)
-	user1ID, user2ID, teamID := createTestDataForTeamApprover(t, db)
-	repo := NewTeamApproverRepository(db)
-
-	// Set user1 as approver
-	err := repo.SetUserAsApprover(context.Background(), teamID, user1ID, true)
-	require.NoError(t, err)
-
-	t.Run("should get teams that user can approve for", func(t *testing.T) {
-		teamIDs, err := repo.GetApprovableTeamsByUser(context.Background(), user1ID)
-		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, len(teamIDs), 1)
-		assert.Contains(t, teamIDs, teamID)
-	})
-
-	t.Run("should return empty list for non-approver", func(t *testing.T) {
-		teamIDs, err := repo.GetApprovableTeamsByUser(context.Background(), user2ID)
-		assert.NoError(t, err)
-		assert.Len(t, teamIDs, 0)
-	})
-
-	t.Run("should return empty list for non-existent user", func(t *testing.T) {
-		teamIDs, err := repo.GetApprovableTeamsByUser(context.Background(), "non-existent-user")
-		assert.NoError(t, err)
-		assert.Len(t, teamIDs, 0)
-	})
-}
-
-func TestTeamApproverRepository_GetApproverCountByTeam(t *testing.T) {
-	db := setupTeamApproverTestDB(t)
-	user1ID, user2ID, teamID := createTestDataForTeamApprover(t, db)
-	repo := NewTeamApproverRepository(db)
-
-	t.Run("should return 0 for team with no approvers", func(t *testing.T) {
-		count, err := repo.GetApproverCountByTeam(context.Background(), teamID)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, count)
-	})
-
-	t.Run("should return correct count for team with approvers", func(t *testing.T) {
-		// Set both users as approvers
-		err := repo.SetUserAsApprover(context.Background(), teamID, user1ID, true)
-		require.NoError(t, err)
-		err = repo.SetUserAsApprover(context.Background(), teamID, user2ID, true)
-		require.NoError(t, err)
-
-		count, err := repo.GetApproverCountByTeam(context.Background(), teamID)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, count)
-	})
-
-	t.Run("should return 0 for non-existent team", func(t *testing.T) {
-		count, err := repo.GetApproverCountByTeam(context.Background(), "non-existent-team")
-		assert.NoError(t, err)
-		assert.Equal(t, 0, count)
-	})
-}
-
 func TestTeamApproverRepository_Integration(t *testing.T) {
 	t.Run("complete workflow integration test", func(t *testing.T) {
 		// Setup isolated test environment
 		db := setupTeamApproverTestDB(t)
 		user1ID, user2ID, teamID := createTestDataForTeamApprover(t, db)
 		repo := NewTeamApproverRepository(db)
-		
+
 		// 1. GetTeamApprovers lists every team member — initially none are approvers
 		members, err := repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
@@ -341,17 +282,11 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 		assert.Len(t, teamIDs, 1)
 		assert.Equal(t, teamID, teamIDs[0])
 
-		// 6. Get approvable teams
-		approvableTeamIDs, err := repo.GetApprovableTeamsByUser(context.Background(), user1ID)
-		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, len(approvableTeamIDs), 1)
-		assert.Contains(t, approvableTeamIDs, teamID)
-
-		// 7. Set user2 as approver
+		// 6. Set user2 as approver
 		err = repo.SetUserAsApprover(context.Background(), teamID, user2ID, true)
 		assert.NoError(t, err)
 
-		// 8. Verify both members are now flagged as approvers
+		// 7. Verify both members are now flagged as approvers
 		members, err = repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
 		require.Len(t, members, 2)
@@ -359,16 +294,11 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 			assert.True(t, m.IsApprover)
 		}
 
-		// 9. Get approver count
-		count, err := repo.GetApproverCountByTeam(context.Background(), teamID)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, count)
-
-		// 10. Remove user1 approver status
+		// 8. Remove user1 approver status
 		err = repo.SetUserAsApprover(context.Background(), teamID, user1ID, false)
 		assert.NoError(t, err)
 
-		// 11. Verify both are still listed as members, only user2 flagged as approver
+		// 9. Verify both are still listed as members, only user2 flagged as approver
 		members, err = repo.GetTeamApprovers(context.Background(), teamID)
 		assert.NoError(t, err)
 		require.Len(t, members, 2)
@@ -378,9 +308,5 @@ func TestTeamApproverRepository_Integration(t *testing.T) {
 		}
 		assert.False(t, byUserID[user1ID].IsApprover)
 		assert.True(t, byUserID[user2ID].IsApprover)
-
-		count, err = repo.GetApproverCountByTeam(context.Background(), teamID)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, count)
 	})
 }

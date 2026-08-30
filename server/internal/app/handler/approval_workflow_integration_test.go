@@ -91,8 +91,9 @@ func setupApprovalWorkflowTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, *enti
 }
 
 // enableApproval turns on the workflow and requires exactly the given action types, bypassing
-// HTTP (root-only) by calling the use case directly with a seeded root user.
-func enableApproval(t *testing.T, db *gorm.DB, required entity.ApprovalConfig) {
+// HTTP (root-only) by calling the use case directly with a seeded root user. Returns that root
+// user so callers can also approve/execute directly against the use case without a second seed.
+func enableApproval(t *testing.T, db *gorm.DB, required entity.ApprovalConfig) *entity.User {
 	t.Helper()
 	root := &entity.User{ID: "root-1", Username: "root1", Role: entity.UserRoleRoot}
 	if err := db.Create(root).Error; err != nil {
@@ -106,6 +107,7 @@ func enableApproval(t *testing.T, db *gorm.DB, required entity.ApprovalConfig) {
 	if err != nil {
 		t.Fatalf("failed to enable approval settings: %v", err)
 	}
+	return root
 }
 
 func TestApprovalWorkflow_SecretKeyDelete_Intercepted(t *testing.T) {
@@ -225,7 +227,7 @@ func TestApprovalWorkflow_ToggleEnableDisable_Intercepted(t *testing.T) {
 // correctly against the actionData shape createApprovalRequest now builds for this new type.
 func TestApprovalWorkflow_ToggleEnable_ApprovedAndExecuted_AppliesChange(t *testing.T) {
 	router, db, _ := setupApprovalWorkflowTestRouter(t)
-	enableApproval(t, db, entity.ApprovalConfig{ToggleEnable: true})
+	root := enableApproval(t, db, entity.ApprovalConfig{ToggleEnable: true})
 
 	toggle := &entity.Toggle{ID: "toggle-1", AppID: "app-1", Value: "feature", Path: "feature", Enabled: true}
 	if err := db.Create(toggle).Error; err != nil {
@@ -249,10 +251,10 @@ func TestApprovalWorkflow_ToggleEnable_ApprovedAndExecuted_AppliesChange(t *test
 	}
 
 	ctx := context.Background()
-	if err := globalApprovalUseCase.ApproveRequest(ctx, pending.ID, "root-1"); err != nil {
+	if err := globalApprovalUseCase.ApproveRequest(ctx, pending.ID, root); err != nil {
 		t.Fatalf("failed to approve request: %v", err)
 	}
-	if err := globalApprovalUseCase.ExecuteApprovedAction(ctx, pending.ID); err != nil {
+	if err := globalApprovalUseCase.ExecuteApprovedAction(ctx, pending.ID, root); err != nil {
 		t.Fatalf("failed to execute approved action: %v", err)
 	}
 
@@ -312,7 +314,7 @@ func TestApprovalWorkflow_ToggleRule_Intercepted(t *testing.T) {
 // erroring out.
 func TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication(t *testing.T) {
 	router, db, _ := setupApprovalWorkflowTestRouter(t)
-	enableApproval(t, db, entity.ApprovalConfig{ApplicationCreate: true})
+	root := enableApproval(t, db, entity.ApprovalConfig{ApplicationCreate: true})
 
 	req := httptest.NewRequest(http.MethodPut, "/applications/app-1", strings.NewReader(`{"name": "Renamed App"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -328,10 +330,10 @@ func TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication
 	}
 
 	ctx := context.Background()
-	if err := globalApprovalUseCase.ApproveRequest(ctx, pending.ID, "root-1"); err != nil {
+	if err := globalApprovalUseCase.ApproveRequest(ctx, pending.ID, root); err != nil {
 		t.Fatalf("failed to approve request: %v", err)
 	}
-	if err := globalApprovalUseCase.ExecuteApprovedAction(ctx, pending.ID); err != nil {
+	if err := globalApprovalUseCase.ExecuteApprovedAction(ctx, pending.ID, root); err != nil {
 		t.Fatalf("failed to execute approved action: %v", err)
 	}
 

@@ -1077,19 +1077,30 @@ Response (`201`):
 ```
 
 Reads (all wrap `ApprovalRequestWithDetails` — the request plus `requester_name`, `team_name`,
-`application_name`, `toggle_path`, `actioned_user_name`):
+`application_name`, `toggle_path`, `actioned_user_name`). **All of them are scoped by team
+membership** (`domain/policy.ApprovalAccess`, shared by every approval endpoint below): root sees
+everything unfiltered; anyone else only ever sees requests belonging to a team they are a member
+of (`team_users`, any role — not just approvers). This is enforced server-side, not just hidden in
+the UI:
 
 ```http
-GET /api/approval/requests               # all requests
-GET /api/approval/requests/pending       # status = pending only
+GET /api/approval/requests               # any status; root: every team, others: own teams only
+GET /api/approval/requests/pending       # status = pending only — root only (403 otherwise)
 GET /api/approval/requests/my            # requested_by = current user
 GET /api/approval/requests/approvable    # pending requests the current user is allowed to approve
-GET /api/approval/requests/:id           # single request
-GET /api/approval/teams/:id/requests     # requests scoped to one team
+GET /api/approval/requests/:id           # single request — 404 (not 403) if the caller isn't root
+                                          # or a member of the owning team, to avoid confirming
+                                          # the id exists to an outsider
+GET /api/approval/teams/:id/requests     # any status, scoped to one team — 403 if the caller
+                                          # isn't root or a member of that team
 ```
 
 `approvable` excludes the caller's own requests (`CanBeApprovedBy` forbids self-approval) and, for non-root
-callers, is further filtered to teams where they are marked as an approver.
+callers, is further filtered to teams where they are marked as an approver — a strictly narrower scope than
+plain membership, since acting on a request requires being a designated approver, not just a team member.
+
+`POST /api/approval/requests` also enforces this: the requester must belong to `team_id` (root exempt),
+`403` otherwise.
 
 ```http
 POST /api/approval/requests/:id/approve
@@ -1126,6 +1137,10 @@ Performs the action described by an **approved** request's `action_data`, dispat
 matching use case (create/update/delete the toggle or application, or create/delete a secret key). This is a
 separate, explicit step from approval — nothing in the API auto-executes a request the moment it is approved,
 so clients driving an approval UI must call this endpoint themselves after approval.
+
+Same authorization rule as approve/reject (`403` if the caller is not `root` and not a registered approver
+for the request's team) — this endpoint used to have **no caller check at all**, letting any authenticated
+session execute any already-approved request regardless of team.
 
 ### 9.3 Approvers
 
@@ -1178,8 +1193,8 @@ GET /api/approval/my-approver-teams
 ### 9.4 Statistics & maintenance
 
 ```http
-GET /api/approval/stats
-GET /api/approval/teams/:id/stats
+GET /api/approval/stats               # root: every team; others: own teams only
+GET /api/approval/teams/:id/stats     # one team — 403 if the caller isn't root or a member
 ```
 
 ```json

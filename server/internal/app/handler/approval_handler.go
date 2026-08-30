@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -115,15 +116,22 @@ func (h *ApprovalHandler) CreateApprovalRequest(ctx *gin.Context) {
 	})
 }
 
-// GetApprovalRequest busca uma solicitação específica
+// GetApprovalRequest busca uma solicitação específica. Um caller sem acesso ao team dono da
+// solicitação recebe 404 (não 403) — não confirmamos a um estranho que o ID existe.
 func (h *ApprovalHandler) GetApprovalRequest(ctx *gin.Context) {
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
 	requestID := ctx.Param("id")
 	if requestID == "" {
 		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "request ID is required"))
 		return
 	}
 
-	request, err := h.approvalUseCase.GetApprovalRequest(ctx.Request.Context(), requestID)
+	request, err := h.approvalUseCase.GetApprovalRequest(ctx.Request.Context(), requestID, user)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, entity.NewAppError(entity.ErrCodeNotFound, err.Error()))
 		return
@@ -135,9 +143,16 @@ func (h *ApprovalHandler) GetApprovalRequest(ctx *gin.Context) {
 	})
 }
 
-// GetAllApprovalRequests lista todas as solicitações de aprovação
+// GetAllApprovalRequests alimenta a tela de History: root vê tudo, qualquer outro role só vê as
+// solicitações dos teams dos quais é membro.
 func (h *ApprovalHandler) GetAllApprovalRequests(ctx *gin.Context) {
-	requests, err := h.approvalUseCase.GetAllApprovalRequests(ctx.Request.Context())
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
+	requests, err := h.approvalUseCase.GetAllApprovalRequests(ctx.Request.Context(), user)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, err.Error()))
 		return
@@ -163,16 +178,27 @@ func (h *ApprovalHandler) GetPendingApprovalRequests(ctx *gin.Context) {
 	})
 }
 
-// GetApprovalRequestsByTeam lista solicitações por team
+// GetApprovalRequestsByTeam lista todas as solicitações (qualquer status) de um team — requer
+// que o caller seja membro do team (ou root).
 func (h *ApprovalHandler) GetApprovalRequestsByTeam(ctx *gin.Context) {
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
 	teamID := ctx.Param("id")
 	if teamID == "" {
 		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "team ID is required"))
 		return
 	}
 
-	requests, err := h.approvalUseCase.GetApprovalRequestsByTeam(ctx.Request.Context(), teamID)
+	requests, err := h.approvalUseCase.GetApprovalRequestsByTeam(ctx.Request.Context(), teamID, user)
 	if err != nil {
+		if errors.Is(err, usecase.ErrApprovalAccessDenied) {
+			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, err.Error()))
 		return
 	}
@@ -210,13 +236,13 @@ func (h *ApprovalHandler) GetApprovableRequests(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
 		return
 	}
-	
+
 	user, ok := userInterface.(*entity.User)
 	if !ok {
 		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "invalid user context"))
 		return
 	}
-	
+
 	userID := user.ID
 
 	// Enhanced debug logging
@@ -231,7 +257,7 @@ func (h *ApprovalHandler) GetApprovableRequests(ctx *gin.Context) {
 
 	// Debug logging para identificar quando retorna vazio ou null
 	log.Printf("[DEBUG] GetApprovableRequests: UserID=%s, RequestsFound=%d, RequestsIsNil=%v", userID, len(requests), requests == nil)
-	
+
 	if requests != nil && len(requests) > 0 {
 		log.Printf("[DEBUG] GetApprovableRequests: First request ID=%s, ActionType=%s", requests[0].ID, requests[0].ActionType)
 	} else {
@@ -250,8 +276,8 @@ func (h *ApprovalHandler) GetApprovableRequests(ctx *gin.Context) {
 
 // ApproveRequest aprova uma solicitação
 func (h *ApprovalHandler) ApproveRequest(ctx *gin.Context) {
-	userID := getUserIDFromSession(ctx)
-	if userID == "" {
+	user := getUserFromSession(ctx)
+	if user == nil {
 		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
 		return
 	}
@@ -262,7 +288,7 @@ func (h *ApprovalHandler) ApproveRequest(ctx *gin.Context) {
 		return
 	}
 
-	err := h.approvalUseCase.ApproveRequest(ctx.Request.Context(), requestID, userID)
+	err := h.approvalUseCase.ApproveRequest(ctx.Request.Context(), requestID, user)
 	if err != nil {
 		if err.Error() == "user cannot approve this request" || err.Error() == "user is not an approver for this team" {
 			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
@@ -279,8 +305,8 @@ func (h *ApprovalHandler) ApproveRequest(ctx *gin.Context) {
 
 // RejectRequest rejeita uma solicitação
 func (h *ApprovalHandler) RejectRequest(ctx *gin.Context) {
-	userID := getUserIDFromSession(ctx)
-	if userID == "" {
+	user := getUserFromSession(ctx)
+	if user == nil {
 		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
 		return
 	}
@@ -300,7 +326,7 @@ func (h *ApprovalHandler) RejectRequest(ctx *gin.Context) {
 		return
 	}
 
-	err := h.approvalUseCase.RejectRequest(ctx.Request.Context(), requestID, userID, req.Reason)
+	err := h.approvalUseCase.RejectRequest(ctx.Request.Context(), requestID, user, req.Reason)
 	if err != nil {
 		if err.Error() == "user cannot reject this request" || err.Error() == "user is not an approver for this team" {
 			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
@@ -346,10 +372,10 @@ func (h *ApprovalHandler) SetTeamApprover(ctx *gin.Context) {
 	err := h.approvalUseCase.SetTeamApprover(ctx.Request.Context(), teamID, userID, req.IsApprover, actionByUserID)
 	if err != nil {
 		// Verificar se é erro de permissão
-		if strings.Contains(err.Error(), "insufficient permissions") || 
-		   strings.Contains(err.Error(), "approval system must be enabled") ||
-		   strings.Contains(err.Error(), "only root users") ||
-		   strings.Contains(err.Error(), "only admin and root users can be set as approvers") {
+		if strings.Contains(err.Error(), "insufficient permissions") ||
+			strings.Contains(err.Error(), "approval system must be enabled") ||
+			strings.Contains(err.Error(), "only root users") ||
+			strings.Contains(err.Error(), "only admin and root users can be set as approvers") {
 			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
 			return
 		}
@@ -396,13 +422,13 @@ func (h *ApprovalHandler) GetMyApproverTeams(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
 		return
 	}
-	
+
 	user, ok := userInterface.(*entity.User)
 	if !ok {
 		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "invalid user context"))
 		return
 	}
-	
+
 	userID := user.ID
 
 	teams, err := h.approvalUseCase.GetUserApproverTeams(ctx.Request.Context(), userID)
@@ -424,9 +450,16 @@ func (h *ApprovalHandler) GetMyApproverTeams(ctx *gin.Context) {
 // Estatísticas
 // ============================
 
-// GetApprovalStats retorna estatísticas gerais de aprovação
+// GetApprovalStats retorna estatísticas gerais de aprovação (root) ou escopadas aos próprios
+// teams (qualquer outro role) — mesma regra de visibilidade do History.
 func (h *ApprovalHandler) GetApprovalStats(ctx *gin.Context) {
-	stats, err := h.approvalUseCase.GetApprovalStats(ctx.Request.Context())
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
+	stats, err := h.approvalUseCase.GetApprovalStats(ctx.Request.Context(), user)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, err.Error()))
 		return
@@ -438,16 +471,27 @@ func (h *ApprovalHandler) GetApprovalStats(ctx *gin.Context) {
 	})
 }
 
-// GetApprovalStatsByTeam retorna estatísticas de aprovação por team
+// GetApprovalStatsByTeam retorna estatísticas de um team — requer que o caller seja membro do
+// team (ou root).
 func (h *ApprovalHandler) GetApprovalStatsByTeam(ctx *gin.Context) {
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
 	teamID := ctx.Param("id")
 	if teamID == "" {
 		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "team ID is required"))
 		return
 	}
 
-	stats, err := h.approvalUseCase.GetApprovalStatsByTeam(ctx.Request.Context(), teamID)
+	stats, err := h.approvalUseCase.GetApprovalStatsByTeam(ctx.Request.Context(), teamID, user)
 	if err != nil {
+		if errors.Is(err, usecase.ErrApprovalAccessDenied) {
+			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, err.Error()))
 		return
 	}
@@ -515,16 +559,27 @@ func (h *ApprovalHandler) MarkExpiredRequests(ctx *gin.Context) {
 	})
 }
 
-// ExecuteApprovedAction executa uma ação que foi aprovada
+// ExecuteApprovedAction executa uma ação que foi aprovada — mesmo portão de acesso de
+// approve/reject (root ou aprovador do team dono do request).
 func (h *ApprovalHandler) ExecuteApprovedAction(ctx *gin.Context) {
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
 	requestID := ctx.Param("id")
 	if requestID == "" {
 		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "request ID is required"))
 		return
 	}
 
-	err := h.approvalUseCase.ExecuteApprovedAction(ctx.Request.Context(), requestID)
+	err := h.approvalUseCase.ExecuteApprovedAction(ctx.Request.Context(), requestID, user)
 	if err != nil {
+		if errors.Is(err, usecase.ErrApprovalAccessDenied) {
+			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
 		return
 	}
@@ -539,19 +594,20 @@ func (h *ApprovalHandler) ExecuteApprovedAction(ctx *gin.Context) {
 // ============================
 
 func getUserIDFromSession(ctx *gin.Context) string {
-	// Primeiro, tentar pegar o objeto user do contexto (como outros handlers fazem)
+	if user := getUserFromSession(ctx); user != nil {
+		return user.ID
+	}
+	return ""
+}
+
+// getUserFromSession returns the authenticated caller set by ValidateToken(). Every
+// access-controlled approval method needs the full user (not just its ID) to run the
+// root/approver/membership check in domain/policy.
+func getUserFromSession(ctx *gin.Context) *entity.User {
 	if userInterface, exists := ctx.Get("user"); exists {
 		if user, ok := userInterface.(*entity.User); ok {
-			return user.ID
+			return user
 		}
 	}
-	
-	// Fallback: tentar pegar userID diretamente (se algum middleware definir assim)
-	if userID, exists := ctx.Get("userID"); exists {
-		if id, ok := userID.(string); ok {
-			return id
-		}
-	}
-	
-	return ""
+	return nil
 }

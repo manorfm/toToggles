@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -295,6 +296,7 @@ func (m *MockUserRepository) GetUsersByApplicationID(applicationID string) ([]*e
 // MockTeamRepository represents a mock implementation of TeamRepository
 type MockTeamRepository struct {
 	Teams        map[string]*entity.Team
+	TeamsByUser  map[string][]string // userID -> teamIDs, backs GetTeamsByUserID
 	CreateError  error
 	GetByIDError error
 	UpdateError  error
@@ -303,7 +305,8 @@ type MockTeamRepository struct {
 
 func NewMockTeamRepository() *MockTeamRepository {
 	return &MockTeamRepository{
-		Teams: make(map[string]*entity.Team),
+		Teams:       make(map[string]*entity.Team),
+		TeamsByUser: make(map[string][]string),
 	}
 }
 
@@ -372,7 +375,15 @@ func (m *MockTeamRepository) GetUsersByTeamID(teamID string) ([]*entity.User, er
 }
 
 func (m *MockTeamRepository) GetTeamsByUserID(userID string) ([]*entity.Team, error) {
-	return []*entity.Team{}, nil
+	var teams []*entity.Team
+	for _, teamID := range m.TeamsByUser[userID] {
+		if team, exists := m.Teams[teamID]; exists {
+			teams = append(teams, team)
+			continue
+		}
+		teams = append(teams, &entity.Team{ID: teamID})
+	}
+	return teams, nil
 }
 
 func (m *MockTeamRepository) AddApplicationToTeam(teamID, applicationID string, permission entity.TeamPermissionLevel) error {
@@ -469,4 +480,238 @@ func (m *MockSessionRepository) DeleteExpired() error {
 		}
 	}
 	return nil
+}
+
+// MockTeamApproverRepository represents a mock implementation of TeamApproverRepository
+type MockTeamApproverRepository struct {
+	Approvers              map[string]map[string]bool // teamID -> userID -> isApprover
+	IsUserApproverError    error
+	SetUserAsApproverError error
+}
+
+func NewMockTeamApproverRepository() *MockTeamApproverRepository {
+	return &MockTeamApproverRepository{
+		Approvers: make(map[string]map[string]bool),
+	}
+}
+
+func (m *MockTeamApproverRepository) SetUserAsApprover(ctx context.Context, teamID, userID string, isApprover bool) error {
+	if m.SetUserAsApproverError != nil {
+		return m.SetUserAsApproverError
+	}
+	if m.Approvers[teamID] == nil {
+		m.Approvers[teamID] = make(map[string]bool)
+	}
+	m.Approvers[teamID][userID] = isApprover
+	return nil
+}
+
+func (m *MockTeamApproverRepository) IsUserApprover(ctx context.Context, teamID, userID string) (bool, error) {
+	if m.IsUserApproverError != nil {
+		return false, m.IsUserApproverError
+	}
+	return m.Approvers[teamID][userID], nil
+}
+
+func (m *MockTeamApproverRepository) GetTeamApprovers(ctx context.Context, teamID string) ([]*entity.TeamUserWithApprover, error) {
+	var results []*entity.TeamUserWithApprover
+	for userID, isApprover := range m.Approvers[teamID] {
+		results = append(results, &entity.TeamUserWithApprover{TeamID: teamID, UserID: userID, IsApprover: isApprover})
+	}
+	return results, nil
+}
+
+func (m *MockTeamApproverRepository) GetUserTeamsAsApprover(ctx context.Context, userID string) ([]string, error) {
+	var teamIDs []string
+	for teamID, approvers := range m.Approvers {
+		if approvers[userID] {
+			teamIDs = append(teamIDs, teamID)
+		}
+	}
+	return teamIDs, nil
+}
+
+// MockApprovalRequestRepository represents a mock implementation of ApprovalRequestRepository
+type MockApprovalRequestRepository struct {
+	Requests             map[string]*entity.ApprovalRequest
+	CreateError          error
+	GetByIDError         error
+	UpdateError          error
+	GetRequestStatsError error
+}
+
+func NewMockApprovalRequestRepository() *MockApprovalRequestRepository {
+	return &MockApprovalRequestRepository{
+		Requests: make(map[string]*entity.ApprovalRequest),
+	}
+}
+
+func (m *MockApprovalRequestRepository) Create(ctx context.Context, request *entity.ApprovalRequest) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+	m.Requests[request.ID] = request
+	return nil
+}
+
+func (m *MockApprovalRequestRepository) GetByID(ctx context.Context, id string) (*entity.ApprovalRequest, error) {
+	if m.GetByIDError != nil {
+		return nil, m.GetByIDError
+	}
+	request, exists := m.Requests[id]
+	if !exists {
+		return nil, errors.New("approval request not found")
+	}
+	return request, nil
+}
+
+func (m *MockApprovalRequestRepository) Update(ctx context.Context, request *entity.ApprovalRequest) error {
+	if m.UpdateError != nil {
+		return m.UpdateError
+	}
+	m.Requests[request.ID] = request
+	return nil
+}
+
+func (m *MockApprovalRequestRepository) Delete(ctx context.Context, id string) error {
+	delete(m.Requests, id)
+	return nil
+}
+
+func (m *MockApprovalRequestRepository) withDetails(request *entity.ApprovalRequest) *entity.ApprovalRequestWithDetails {
+	return &entity.ApprovalRequestWithDetails{ApprovalRequest: request}
+}
+
+func (m *MockApprovalRequestRepository) GetWithDetails(ctx context.Context, id string) (*entity.ApprovalRequestWithDetails, error) {
+	request, exists := m.Requests[id]
+	if !exists {
+		return nil, errors.New("approval request not found")
+	}
+	return m.withDetails(request), nil
+}
+
+func (m *MockApprovalRequestRepository) GetAllWithDetails(ctx context.Context) ([]*entity.ApprovalRequestWithDetails, error) {
+	var results []*entity.ApprovalRequestWithDetails
+	for _, request := range m.Requests {
+		results = append(results, m.withDetails(request))
+	}
+	return results, nil
+}
+
+func (m *MockApprovalRequestRepository) GetPendingWithDetails(ctx context.Context) ([]*entity.ApprovalRequestWithDetails, error) {
+	var results []*entity.ApprovalRequestWithDetails
+	for _, request := range m.Requests {
+		if request.Status == entity.ApprovalStatusPending {
+			results = append(results, m.withDetails(request))
+		}
+	}
+	return results, nil
+}
+
+func (m *MockApprovalRequestRepository) GetByTeamIDsWithDetails(ctx context.Context, teamIDs []string) ([]*entity.ApprovalRequestWithDetails, error) {
+	var results []*entity.ApprovalRequestWithDetails
+	if len(teamIDs) == 0 {
+		return results, nil
+	}
+	wanted := make(map[string]bool, len(teamIDs))
+	for _, id := range teamIDs {
+		wanted[id] = true
+	}
+	for _, request := range m.Requests {
+		if wanted[request.TeamID] {
+			results = append(results, m.withDetails(request))
+		}
+	}
+	return results, nil
+}
+
+func (m *MockApprovalRequestRepository) GetByRequesterIDWithDetails(ctx context.Context, requesterID string) ([]*entity.ApprovalRequestWithDetails, error) {
+	var results []*entity.ApprovalRequestWithDetails
+	for _, request := range m.Requests {
+		if request.RequestedBy == requesterID {
+			results = append(results, m.withDetails(request))
+		}
+	}
+	return results, nil
+}
+
+func (m *MockApprovalRequestRepository) GetApprovableByUserID(ctx context.Context, userID string) ([]*entity.ApprovalRequestWithDetails, error) {
+	var results []*entity.ApprovalRequestWithDetails
+	for _, request := range m.Requests {
+		if request.Status == entity.ApprovalStatusPending && request.RequestedBy != userID {
+			results = append(results, m.withDetails(request))
+		}
+	}
+	return results, nil
+}
+
+func (m *MockApprovalRequestRepository) MarkExpiredRequests(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockApprovalRequestRepository) GetRequestStats(ctx context.Context, teamIDs []string) (map[entity.ApprovalStatus]int, error) {
+	if m.GetRequestStatsError != nil {
+		return nil, m.GetRequestStatsError
+	}
+	wanted := make(map[string]bool, len(teamIDs))
+	for _, id := range teamIDs {
+		wanted[id] = true
+	}
+	stats := make(map[entity.ApprovalStatus]int)
+	for _, request := range m.Requests {
+		if len(teamIDs) > 0 && !wanted[request.TeamID] {
+			continue
+		}
+		stats[request.Status]++
+	}
+	return stats, nil
+}
+
+// MockApprovalSettingsRepository represents a mock implementation of ApprovalSettingsRepository
+type MockApprovalSettingsRepository struct {
+	Settings                *entity.ApprovalSettings
+	RequiresApprovalResult  bool
+	RequiresApprovalError   error
+	IsApprovalEnabledResult bool
+}
+
+func NewMockApprovalSettingsRepository() *MockApprovalSettingsRepository {
+	return &MockApprovalSettingsRepository{}
+}
+
+func (m *MockApprovalSettingsRepository) Create(ctx context.Context, settings *entity.ApprovalSettings) error {
+	m.Settings = settings
+	return nil
+}
+
+func (m *MockApprovalSettingsRepository) Get(ctx context.Context) (*entity.ApprovalSettings, error) {
+	if m.Settings == nil {
+		return nil, errors.New("approval settings not found")
+	}
+	return m.Settings, nil
+}
+
+func (m *MockApprovalSettingsRepository) Update(ctx context.Context, settings *entity.ApprovalSettings) error {
+	m.Settings = settings
+	return nil
+}
+
+func (m *MockApprovalSettingsRepository) Delete(ctx context.Context) error {
+	m.Settings = nil
+	return nil
+}
+
+func (m *MockApprovalSettingsRepository) IsApprovalEnabled(ctx context.Context) (bool, error) {
+	return m.IsApprovalEnabledResult, nil
+}
+
+func (m *MockApprovalSettingsRepository) RequiresApproval(ctx context.Context, actionType entity.ApprovalActionType) (bool, error) {
+	if m.RequiresApprovalError != nil {
+		return false, m.RequiresApprovalError
+	}
+	return m.RequiresApprovalResult, nil
+}
+
+func (m *MockApprovalSettingsRepository) GetExpirationDays(ctx context.Context) (int, error) {
+	return 7, nil
 }

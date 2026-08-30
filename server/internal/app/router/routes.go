@@ -152,7 +152,7 @@ func Init(router *gin.Engine) {
 				// Solicitações de aprovação
 				approval.POST("/requests", handler.CreateApprovalRequest)
 				approval.GET("/requests", handler.GetAllApprovalRequests)
-				approval.GET("/requests/pending", handler.GetPendingApprovalRequests)
+				approval.GET("/requests/pending", handler.RequireRoot(), handler.GetPendingApprovalRequests)
 				approval.GET("/requests/my", handler.GetMyApprovalRequests)
 				approval.GET("/requests/approvable", handler.GetApprovableRequests)
 				approval.GET("/requests/:id", handler.GetApprovalRequest)

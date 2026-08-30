@@ -1,4 +1,4 @@
-import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import type { APIRequestContext, Browser, BrowserContext, Locator, Page } from "@playwright/test";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -90,6 +90,37 @@ export async function startStandaloneServer(port: string): Promise<StandaloneSer
       await new Promise((r) => setTimeout(r, 200));
     },
   };
+}
+
+// Cria um usuário via API (como root) e completa a dança de primeiro login + troca de senha
+// obrigatória, devolvendo um BrowserContext já autenticado como esse usuário. Extraído porque
+// approval-cross-team-isolation.spec.ts precisa disso duas vezes (um admin por team) — a mesma
+// dança que non-root-approver.spec.ts também faz inline uma única vez.
+export async function createAndLoginUser(
+  browser: Browser,
+  rootRequest: APIRequestContext,
+  opts: { username: string; teamId: string; role?: "admin" | "user"; isApprover?: boolean }
+): Promise<BrowserContext> {
+  const createRes = await rootRequest.post("/api/users", {
+    data: { username: opts.username, role: opts.role ?? "admin", team_id: opts.teamId, is_approver: opts.isApprover ?? false },
+  });
+  if (!createRes.ok()) throw new Error(`create user "${opts.username}" failed: ${createRes.status()} ${await createRes.text()}`);
+  const generatedPassword: string = (await createRes.json()).password;
+  const newPassword = `${opts.username}Temp1`;
+
+  const context = await browser.newContext();
+  const firstLogin = await context.request.post("/api/auth/login", { data: { username: opts.username, password: generatedPassword } });
+  if (!firstLogin.ok()) throw new Error(`first login for "${opts.username}" failed: ${firstLogin.status()} ${await firstLogin.text()}`);
+
+  const changeRes = await context.request.post("/api/auth/change-password-first-time", {
+    data: { current_password: generatedPassword, new_password: newPassword },
+  });
+  if (!changeRes.ok()) throw new Error(`forced password change for "${opts.username}" failed: ${changeRes.status()} ${await changeRes.text()}`);
+
+  const login = await context.request.post("/api/auth/login", { data: { username: opts.username, password: newPassword } });
+  if (!login.ok()) throw new Error(`re-login for "${opts.username}" failed: ${login.status()} ${await login.text()}`);
+
+  return context;
 }
 
 // Cria um toggle novo e dedicado (não a fixture compartilhada) via API, como root — evita que

@@ -14,26 +14,14 @@ type ApprovalRequestRepository interface {
 	Update(ctx context.Context, request *entity.ApprovalRequest) error
 	Delete(ctx context.Context, id string) error
 
-	// Busca por status
-	GetByStatus(ctx context.Context, status entity.ApprovalStatus) ([]*entity.ApprovalRequest, error)
-	GetPendingRequests(ctx context.Context) ([]*entity.ApprovalRequest, error)
-
-	// Busca por team
-	GetByTeamID(ctx context.Context, teamID string) ([]*entity.ApprovalRequest, error)
-	GetPendingByTeamID(ctx context.Context, teamID string) ([]*entity.ApprovalRequest, error)
-
-	// Busca por usuário
-	GetByRequesterID(ctx context.Context, requesterID string) ([]*entity.ApprovalRequest, error)
-	GetByApproverOrRejectorID(ctx context.Context, userID string) ([]*entity.ApprovalRequest, error)
-
-	// Busca por aplicação
-	GetByApplicationID(ctx context.Context, applicationID string) ([]*entity.ApprovalRequest, error)
-
 	// Busca com detalhes (joins)
 	GetWithDetails(ctx context.Context, id string) (*entity.ApprovalRequestWithDetails, error)
 	GetAllWithDetails(ctx context.Context) ([]*entity.ApprovalRequestWithDetails, error)
 	GetPendingWithDetails(ctx context.Context) ([]*entity.ApprovalRequestWithDetails, error)
-	GetPendingByTeamIDWithDetails(ctx context.Context, teamID string) ([]*entity.ApprovalRequestWithDetails, error)
+	// GetByTeamIDsWithDetails busca requests (qualquer status) de um conjunto de teams — usada
+	// tanto pra escopar History por membership (VisibleTeamIDs) quanto pro endpoint por team
+	// único (um slice de 1 elemento). teamIDs vazio devolve lista vazia, nunca "todos".
+	GetByTeamIDsWithDetails(ctx context.Context, teamIDs []string) ([]*entity.ApprovalRequestWithDetails, error)
 	GetByRequesterIDWithDetails(ctx context.Context, requesterID string) ([]*entity.ApprovalRequestWithDetails, error)
 
 	// Busca requests pendentes que um usuário pode aprovar
@@ -41,11 +29,10 @@ type ApprovalRequestRepository interface {
 
 	// Limpeza de requests expirados
 	MarkExpiredRequests(ctx context.Context) error
-	DeleteExpiredRequests(ctx context.Context, olderThanDays int) error
 
-	// Estatísticas
-	GetRequestStats(ctx context.Context) (map[entity.ApprovalStatus]int, error)
-	GetRequestStatsByTeam(ctx context.Context, teamID string) (map[entity.ApprovalStatus]int, error)
+	// GetRequestStats agrega por status. teamIDs vazio/nil = irrestrito (todos os teams);
+	// caso contrário, escopado a esse conjunto de teams.
+	GetRequestStats(ctx context.Context, teamIDs []string) (map[entity.ApprovalStatus]int, error)
 }
 
 // ApprovalSettingsRepository define os métodos para gerenciar configurações de aprovação
@@ -67,14 +54,8 @@ type TeamApproverRepository interface {
 	// Gerenciar aprovadores
 	SetUserAsApprover(ctx context.Context, teamID, userID string, isApprover bool) error
 	IsUserApprover(ctx context.Context, teamID, userID string) (bool, error)
-	
+
 	// Buscar aprovadores
 	GetTeamApprovers(ctx context.Context, teamID string) ([]*entity.TeamUserWithApprover, error)
 	GetUserTeamsAsApprover(ctx context.Context, userID string) ([]string, error)
-	
-	// Buscar teams que o usuário pode aprovar
-	GetApprovableTeamsByUser(ctx context.Context, userID string) ([]string, error)
-	
-	// Estatísticas
-	GetApproverCountByTeam(ctx context.Context, teamID string) (int, error)
 }

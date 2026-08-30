@@ -246,7 +246,7 @@ func TestApprovalRequestRepository_GetPendingWithDetails(t *testing.T) {
 	})
 }
 
-func TestApprovalRequestRepository_GetByTeamIDWithDetails(t *testing.T) {
+func TestApprovalRequestRepository_GetByTeamIDsWithDetails(t *testing.T) {
 	db := setupApprovalRequestTestDB(t)
 	userID, teamID, appID := createTestDataForApprovalRequest(t, db)
 	repo := NewApprovalRequestRepository(db)
@@ -270,6 +270,8 @@ func TestApprovalRequestRepository_GetByTeamIDWithDetails(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, repo.Create(context.Background(), teamRequest))
+	require.NoError(t, teamRequest.Approve("approver-123"))
+	require.NoError(t, repo.Update(context.Background(), teamRequest))
 
 	otherTeamRequest, err := entity.NewApprovalRequest(
 		entity.ApprovalActionToggleCreate,
@@ -283,65 +285,30 @@ func TestApprovalRequestRepository_GetByTeamIDWithDetails(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.Create(context.Background(), otherTeamRequest))
 
-	t.Run("should get requests for specific team", func(t *testing.T) {
-		results, err := repo.GetPendingByTeamIDWithDetails(context.Background(), teamID)
+	t.Run("should get requests for specific team, any status", func(t *testing.T) {
+		results, err := repo.GetByTeamIDsWithDetails(context.Background(), []string{teamID})
 		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, len(results), 1)
-
-		// Verify all returned requests belong to the team
-		for _, result := range results {
-			assert.Equal(t, teamID, result.TeamID)
-		}
+		require.Len(t, results, 1)
+		assert.Equal(t, teamID, results[0].TeamID)
+		assert.Equal(t, entity.ApprovalStatusApproved, results[0].Status)
 	})
-}
 
-func TestApprovalRequestRepository_GetByRequesterID(t *testing.T) {
-	db := setupApprovalRequestTestDB(t)
-	userID, teamID, appID := createTestDataForApprovalRequest(t, db)
-	repo := NewApprovalRequestRepository(db)
-
-	// Create another user
-	otherUser := &entity.User{
-		ID:       "user-other",
-		Username: "otheruser",
-		Role:     entity.UserRoleAdmin,
-	}
-	require.NoError(t, db.Create(otherUser).Error)
-
-	// Create requests by different users
-	userRequest, err := entity.NewApprovalRequest(
-		entity.ApprovalActionToggleCreate,
-		"User request",
-		userID,
-		teamID,
-		&appID,
-		nil,
-		nil,
-	)
-	require.NoError(t, err)
-	require.NoError(t, repo.Create(context.Background(), userRequest))
-
-	otherUserRequest, err := entity.NewApprovalRequest(
-		entity.ApprovalActionToggleCreate,
-		"Other user request",
-		otherUser.ID,
-		teamID,
-		&appID,
-		nil,
-		nil,
-	)
-	require.NoError(t, err)
-	require.NoError(t, repo.Create(context.Background(), otherUserRequest))
-
-	t.Run("should get requests for specific user", func(t *testing.T) {
-		results, err := repo.GetByRequesterID(context.Background(), userID)
+	t.Run("should get requests across multiple teams", func(t *testing.T) {
+		results, err := repo.GetByTeamIDsWithDetails(context.Background(), []string{teamID, otherTeam.ID})
 		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, len(results), 1)
+		assert.Len(t, results, 2)
+	})
 
-		// Verify all returned requests belong to the user
-		for _, result := range results {
-			assert.Equal(t, userID, result.RequestedBy)
-		}
+	t.Run("should return empty for an empty team list, not everything", func(t *testing.T) {
+		results, err := repo.GetByTeamIDsWithDetails(context.Background(), []string{})
+		assert.NoError(t, err)
+		assert.Empty(t, results)
+	})
+
+	t.Run("should return empty for a team with no requests", func(t *testing.T) {
+		results, err := repo.GetByTeamIDsWithDetails(context.Background(), []string{"team-with-nothing"})
+		assert.NoError(t, err)
+		assert.Empty(t, results)
 	})
 }
 
@@ -449,18 +416,20 @@ func TestApprovalRequestRepository_MarkExpiredRequests(t *testing.T) {
 	})
 }
 
-func TestApprovalRequestRepository_GetRequestStatsByTeam(t *testing.T) {
+func TestApprovalRequestRepository_GetRequestStats(t *testing.T) {
 	db := setupApprovalRequestTestDB(t)
 	userID, teamID, appID := createTestDataForApprovalRequest(t, db)
 	repo := NewApprovalRequestRepository(db)
 
-	// Create requests with different statuses
+	otherTeam := &entity.Team{ID: "team-other-stats", Name: "Other Team Stats"}
+	require.NoError(t, db.Create(otherTeam).Error)
+
+	// team A: pending, approved, rejected
 	statuses := []entity.ApprovalStatus{
 		entity.ApprovalStatusPending,
 		entity.ApprovalStatusApproved,
 		entity.ApprovalStatusRejected,
 	}
-
 	for _, status := range statuses {
 		request, err := entity.NewApprovalRequest(
 			entity.ApprovalActionToggleCreate,
@@ -485,40 +454,36 @@ func TestApprovalRequestRepository_GetRequestStatsByTeam(t *testing.T) {
 		}
 	}
 
-	t.Run("should get stats for team", func(t *testing.T) {
-		stats, err := repo.GetRequestStatsByTeam(context.Background(), teamID)
+	// team B: one pending, should never show up in team A's scoped stats
+	otherRequest, err := entity.NewApprovalRequest(
+		entity.ApprovalActionToggleCreate,
+		"Other team request",
+		userID,
+		otherTeam.ID,
+		&appID,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, repo.Create(context.Background(), otherRequest))
+
+	t.Run("scoped to a set of teams", func(t *testing.T) {
+		stats, err := repo.GetRequestStats(context.Background(), []string{teamID})
 		assert.NoError(t, err)
-		assert.NotNil(t, stats)
-		assert.GreaterOrEqual(t, stats[entity.ApprovalStatusPending], 1)
-		assert.GreaterOrEqual(t, stats[entity.ApprovalStatusApproved], 1)
-		assert.GreaterOrEqual(t, stats[entity.ApprovalStatusRejected], 1)
+		assert.Equal(t, 1, stats[entity.ApprovalStatusPending])
+		assert.Equal(t, 1, stats[entity.ApprovalStatusApproved])
+		assert.Equal(t, 1, stats[entity.ApprovalStatusRejected])
 	})
-}
 
-func TestApprovalRequestRepository_GetRequestStats(t *testing.T) {
-	db := setupApprovalRequestTestDB(t)
-	userID, teamID, appID := createTestDataForApprovalRequest(t, db)
-	repo := NewApprovalRequestRepository(db)
-
-	// Create some requests for global stats
-	for i := 0; i < 2; i++ {
-		request, err := entity.NewApprovalRequest(
-			entity.ApprovalActionToggleCreate,
-			"Global stats request",
-			userID,
-			teamID,
-			&appID,
-			nil,
-			nil,
-		)
-		require.NoError(t, err)
-		require.NoError(t, repo.Create(context.Background(), request))
-	}
-
-	t.Run("should get global stats", func(t *testing.T) {
-		stats, err := repo.GetRequestStats(context.Background())
+	t.Run("nil teamIDs is unrestricted (covers every team)", func(t *testing.T) {
+		stats, err := repo.GetRequestStats(context.Background(), nil)
 		assert.NoError(t, err)
-		assert.NotNil(t, stats)
+		assert.GreaterOrEqual(t, stats[entity.ApprovalStatusPending], 2)
+	})
+
+	t.Run("empty teamIDs is unrestricted too", func(t *testing.T) {
+		stats, err := repo.GetRequestStats(context.Background(), []string{})
+		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, stats[entity.ApprovalStatusPending], 2)
 	})
 }

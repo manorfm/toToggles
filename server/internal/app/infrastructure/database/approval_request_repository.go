@@ -28,9 +28,9 @@ func (r *approvalRequestRepository) GetByID(ctx context.Context, id string) (*en
 	// Use a simple query without preloads to avoid JSON scan issues
 	var request entity.ApprovalRequest
 	var actionDataStr string
-	
+
 	query := `SELECT id, action_type, description, requested_by, team_id, application_id, toggle_id, status, action_data, actioned_by, actioned_at, rejection_reason, expires_at, created_at, updated_at FROM approval_requests WHERE id = ?`
-	
+
 	row := r.db.WithContext(ctx).Raw(query, id).Row()
 	err := row.Scan(
 		&request.ID,
@@ -49,14 +49,14 @@ func (r *approvalRequestRepository) GetByID(ctx context.Context, id string) (*en
 		&request.CreatedAt,
 		&request.UpdatedAt,
 	)
-		
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert action data
 	convertActionData(actionDataStr, &request)
-	
+
 	return &request, nil
 }
 
@@ -68,154 +68,9 @@ func (r *approvalRequestRepository) Delete(ctx context.Context, id string) error
 	return r.db.WithContext(ctx).Delete(&entity.ApprovalRequest{}, "id = ?", id).Error
 }
 
-func (r *approvalRequestRepository) GetByStatus(ctx context.Context, status entity.ApprovalStatus) ([]*entity.ApprovalRequest, error) {
-	query := `SELECT id, action_type, description, requested_by, team_id, application_id, toggle_id, status, action_data, actioned_by, actioned_at, rejection_reason, expires_at, created_at, updated_at FROM approval_requests WHERE status = ? ORDER BY created_at DESC`
-	
-	rows, err := r.db.WithContext(ctx).Raw(query, status).Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	
-	var requests []*entity.ApprovalRequest
-	for rows.Next() {
-		var request entity.ApprovalRequest
-		var actionDataStr string
-		
-		err := rows.Scan(
-			&request.ID,
-			&request.ActionType,
-			&request.Description,
-			&request.RequestedBy,
-			&request.TeamID,
-			&request.ApplicationID,
-			&request.ToggleID,
-			&request.Status,
-			&actionDataStr,
-			&request.ActionedBy,
-			&request.ActionedAt,
-			&request.RejectionReason,
-			&request.ExpiresAt,
-			&request.CreatedAt,
-			&request.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		
-		convertActionData(actionDataStr, &request)
-		requests = append(requests, &request)
-	}
-	
-	return requests, nil
-}
-
-func (r *approvalRequestRepository) GetPendingRequests(ctx context.Context) ([]*entity.ApprovalRequest, error) {
-	return r.GetByStatus(ctx, entity.ApprovalStatusPending)
-}
-
-func (r *approvalRequestRepository) GetByTeamID(ctx context.Context, teamID string) ([]*entity.ApprovalRequest, error) {
-	query := `SELECT id, action_type, description, requested_by, team_id, application_id, toggle_id, status, action_data, actioned_by, actioned_at, rejection_reason, expires_at, created_at, updated_at FROM approval_requests WHERE team_id = ? ORDER BY created_at DESC`
-	
-	rows, err := r.db.WithContext(ctx).Raw(query, teamID).Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	
-	var requests []*entity.ApprovalRequest
-	for rows.Next() {
-		var request entity.ApprovalRequest
-		var actionDataStr string
-		
-		err := rows.Scan(
-			&request.ID,
-			&request.ActionType,
-			&request.Description,
-			&request.RequestedBy,
-			&request.TeamID,
-			&request.ApplicationID,
-			&request.ToggleID,
-			&request.Status,
-			&actionDataStr,
-			&request.ActionedBy,
-			&request.ActionedAt,
-			&request.RejectionReason,
-			&request.ExpiresAt,
-			&request.CreatedAt,
-			&request.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		
-		convertActionData(actionDataStr, &request)
-		requests = append(requests, &request)
-	}
-	
-	return requests, nil
-}
-
-func (r *approvalRequestRepository) GetPendingByTeamID(ctx context.Context, teamID string) ([]*entity.ApprovalRequest, error) {
-	var requests []*entity.ApprovalRequest
-	err := r.db.WithContext(ctx).
-		Preload("Requester").
-		Preload("Team").
-		Preload("Application").
-		Preload("Toggle").
-		Where("team_id = ? AND status = ?", teamID, entity.ApprovalStatusPending).
-		Order("created_at DESC").
-		Find(&requests).Error
-		
-	return requests, err
-}
-
-func (r *approvalRequestRepository) GetByRequesterID(ctx context.Context, requesterID string) ([]*entity.ApprovalRequest, error) {
-	var requests []*entity.ApprovalRequest
-	err := r.db.WithContext(ctx).
-		Preload("Team").
-		Preload("Application").
-		Preload("Toggle").
-		Preload("ActionedUser").
-		Where("requested_by = ?", requesterID).
-		Order("created_at DESC").
-		Find(&requests).Error
-		
-	return requests, err
-}
-
-func (r *approvalRequestRepository) GetByApproverOrRejectorID(ctx context.Context, userID string) ([]*entity.ApprovalRequest, error) {
-	var requests []*entity.ApprovalRequest
-	err := r.db.WithContext(ctx).
-		Preload("Requester").
-		Preload("Team").
-		Preload("Application").
-		Preload("Toggle").
-		Where("actioned_by = ?", userID).
-		Order("created_at DESC").
-		Find(&requests).Error
-		
-	return requests, err
-}
-
-func (r *approvalRequestRepository) GetByApplicationID(ctx context.Context, applicationID string) ([]*entity.ApprovalRequest, error) {
-	var requests []*entity.ApprovalRequest
-	err := r.db.WithContext(ctx).
-		Preload("Requester").
-		Preload("Team").
-		Preload("Application").
-		Preload("Toggle").
-		Preload("ActionedUser").
-		Where("application_id = ?", applicationID).
-		Order("created_at DESC").
-		Find(&requests).Error
-		
-	return requests, err
-}
-
 func (r *approvalRequestRepository) GetWithDetails(ctx context.Context, id string) (*entity.ApprovalRequestWithDetails, error) {
 	var result entity.ApprovalRequestWithDetails
-	
+
 	query := `
 		SELECT 
 			ar.*,
@@ -232,9 +87,9 @@ func (r *approvalRequestRepository) GetWithDetails(ctx context.Context, id strin
 		LEFT JOIN users u_actioned ON ar.actioned_by = u_actioned.id
 		WHERE ar.id = ?
 	`
-	
+
 	row := r.db.WithContext(ctx).Raw(query, id).Row()
-	
+
 	var approvalRequest entity.ApprovalRequest
 	var actionDataStr string
 	err := row.Scan(
@@ -259,11 +114,11 @@ func (r *approvalRequestRepository) GetWithDetails(ctx context.Context, id strin
 		&result.TogglePath,
 		&result.ActionedUserName,
 	)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	convertActionData(actionDataStr, &approvalRequest)
 	result.ApprovalRequest = &approvalRequest
 	return &result, nil
@@ -271,7 +126,7 @@ func (r *approvalRequestRepository) GetWithDetails(ctx context.Context, id strin
 
 func (r *approvalRequestRepository) GetAllWithDetails(ctx context.Context) ([]*entity.ApprovalRequestWithDetails, error) {
 	var results []*entity.ApprovalRequestWithDetails
-	
+
 	query := `
 		SELECT 
 			ar.id, ar.action_type, ar.description, ar.requested_by, ar.team_id, 
@@ -291,18 +146,18 @@ func (r *approvalRequestRepository) GetAllWithDetails(ctx context.Context) ([]*e
 		LEFT JOIN users u_actioned ON ar.actioned_by = u_actioned.id
 		ORDER BY ar.created_at DESC
 	`
-	
+
 	rows, err := r.db.WithContext(ctx).Raw(query).Rows()
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var result entity.ApprovalRequestWithDetails
 		var approvalRequest entity.ApprovalRequest
 		var actionDataStr string
-		
+
 		err := rows.Scan(
 			&approvalRequest.ID,
 			&approvalRequest.ActionType,
@@ -325,22 +180,22 @@ func (r *approvalRequestRepository) GetAllWithDetails(ctx context.Context) ([]*e
 			&result.TogglePath,
 			&result.ActionedUserName,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
-		
+
 		convertActionData(actionDataStr, &approvalRequest)
-	result.ApprovalRequest = &approvalRequest
+		result.ApprovalRequest = &approvalRequest
 		results = append(results, &result)
 	}
-	
+
 	return results, nil
 }
 
 func (r *approvalRequestRepository) GetPendingWithDetails(ctx context.Context) ([]*entity.ApprovalRequestWithDetails, error) {
 	var results []*entity.ApprovalRequestWithDetails
-	
+
 	query := `
 		SELECT 
 			ar.id, ar.action_type, ar.description, ar.requested_by, ar.team_id, 
@@ -361,18 +216,18 @@ func (r *approvalRequestRepository) GetPendingWithDetails(ctx context.Context) (
 		WHERE ar.status = ? AND ar.expires_at > ?
 		ORDER BY ar.created_at DESC
 	`
-	
+
 	rows, err := r.db.WithContext(ctx).Raw(query, entity.ApprovalStatusPending, time.Now()).Rows()
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var result entity.ApprovalRequestWithDetails
 		var approvalRequest entity.ApprovalRequest
 		var actionDataStr string
-		
+
 		err := rows.Scan(
 			&approvalRequest.ID,
 			&approvalRequest.ActionType,
@@ -395,27 +250,34 @@ func (r *approvalRequestRepository) GetPendingWithDetails(ctx context.Context) (
 			&result.TogglePath,
 			&result.ActionedUserName,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
-		
+
 		convertActionData(actionDataStr, &approvalRequest)
-	result.ApprovalRequest = &approvalRequest
+		result.ApprovalRequest = &approvalRequest
 		results = append(results, &result)
 	}
-	
+
 	return results, nil
 }
 
-func (r *approvalRequestRepository) GetPendingByTeamIDWithDetails(ctx context.Context, teamID string) ([]*entity.ApprovalRequestWithDetails, error) {
+// GetByTeamIDsWithDetails busca requests de qualquer status pertencentes a um conjunto de
+// teams — usada tanto pra History escopada por membership (VisibleTeamIDs, N teams) quanto pro
+// endpoint de team único (slice de 1 elemento). teamIDs vazio devolve lista vazia: não é
+// responsabilidade desta função decidir "sem filtro" — isso é GetAllWithDetails.
+func (r *approvalRequestRepository) GetByTeamIDsWithDetails(ctx context.Context, teamIDs []string) ([]*entity.ApprovalRequestWithDetails, error) {
 	var results []*entity.ApprovalRequestWithDetails
-	
+	if len(teamIDs) == 0 {
+		return results, nil
+	}
+
 	query := `
-		SELECT 
-			ar.id, ar.action_type, ar.description, ar.requested_by, ar.team_id, 
+		SELECT
+			ar.id, ar.action_type, ar.description, ar.requested_by, ar.team_id,
 			ar.application_id, ar.toggle_id, ar.status, ar.action_data,
-			ar.actioned_by, ar.actioned_at, 
+			ar.actioned_by, ar.actioned_at,
 			ar.rejection_reason, ar.expires_at, ar.created_at, ar.updated_at,
 			u_req.username as requester_name,
 			t.name as team_name,
@@ -428,21 +290,21 @@ func (r *approvalRequestRepository) GetPendingByTeamIDWithDetails(ctx context.Co
 		LEFT JOIN applications app ON ar.application_id = app.id
 		LEFT JOIN toggles tgl ON ar.toggle_id = tgl.id
 		LEFT JOIN users u_actioned ON ar.actioned_by = u_actioned.id
-		WHERE ar.team_id = ? AND ar.status = ? AND ar.expires_at > ?
+		WHERE ar.team_id IN ?
 		ORDER BY ar.created_at DESC
 	`
-	
-	rows, err := r.db.WithContext(ctx).Raw(query, teamID, entity.ApprovalStatusPending, time.Now()).Rows()
+
+	rows, err := r.db.WithContext(ctx).Raw(query, teamIDs).Rows()
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var result entity.ApprovalRequestWithDetails
 		var approvalRequest entity.ApprovalRequest
 		var actionDataStr string
-		
+
 		err := rows.Scan(
 			&approvalRequest.ID,
 			&approvalRequest.ActionType,
@@ -465,16 +327,16 @@ func (r *approvalRequestRepository) GetPendingByTeamIDWithDetails(ctx context.Co
 			&result.TogglePath,
 			&result.ActionedUserName,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
-		
+
 		convertActionData(actionDataStr, &approvalRequest)
-	result.ApprovalRequest = &approvalRequest
+		result.ApprovalRequest = &approvalRequest
 		results = append(results, &result)
 	}
-	
+
 	return results, nil
 }
 
@@ -483,19 +345,19 @@ func (r *approvalRequestRepository) GetApprovableByUserID(ctx context.Context, u
 	var pendingCount int64
 	r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM approval_requests WHERE status = 'pending'").Scan(&pendingCount)
 	log.Printf("[DEBUG] GetApprovableByUserID: Total pending requests in database: %d", pendingCount)
-	
+
 	// Primeiro verifica se o usuário é root
 	var userRole string
 	err := r.db.WithContext(ctx).Raw("SELECT role FROM users WHERE id = ?", userID).Scan(&userRole).Error
 	if err != nil {
 		return nil, err
 	}
-	
+
 	log.Printf("[DEBUG] GetApprovableByUserID: UserID=%s, Role=%s", userID, userRole)
-	
+
 	var query string
 	var queryArgs []interface{}
-	
+
 	// Se for root, pode aprovar qualquer request pendente (incluindo próprias)
 	if userRole == "root" {
 		query = `
@@ -549,24 +411,24 @@ func (r *approvalRequestRepository) GetApprovableByUserID(ctx context.Context, u
 		`
 		queryArgs = []interface{}{userID, entity.ApprovalStatusPending, time.Now(), userID}
 	}
-	
+
 	var results []*entity.ApprovalRequestWithDetails
-	
+
 	// DEBUG: Log the exact query and args being executed
 	log.Printf("[DEBUG] GetApprovableByUserID: Executing query with args: %+v", queryArgs)
 	log.Printf("[DEBUG] GetApprovableByUserID: Query: %s", query)
-	
+
 	rows, err := r.db.WithContext(ctx).Raw(query, queryArgs...).Rows()
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var result entity.ApprovalRequestWithDetails
 		var approvalRequest entity.ApprovalRequest
 		var actionDataStr string
-		
+
 		err := rows.Scan(
 			&approvalRequest.ID,
 			&approvalRequest.ActionType,
@@ -589,18 +451,18 @@ func (r *approvalRequestRepository) GetApprovableByUserID(ctx context.Context, u
 			&result.TogglePath,
 			&result.ActionedUserName,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
-		
+
 		convertActionData(actionDataStr, &approvalRequest)
-	result.ApprovalRequest = &approvalRequest
+		result.ApprovalRequest = &approvalRequest
 		results = append(results, &result)
 	}
-	
+
 	log.Printf("[DEBUG] GetApprovableByUserID: Found %d results for UserID=%s", len(results), userID)
-	
+
 	return results, nil
 }
 
@@ -626,20 +488,20 @@ func (r *approvalRequestRepository) GetByRequesterIDWithDetails(ctx context.Cont
 		WHERE ar.requested_by = ?
 		ORDER BY ar.created_at DESC
 	`
-	
+
 	var results []*entity.ApprovalRequestWithDetails
-	
+
 	rows, err := r.db.WithContext(ctx).Raw(query, requesterID).Rows()
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var result entity.ApprovalRequestWithDetails
 		var approvalRequest entity.ApprovalRequest
 		var actionDataStr string
-		
+
 		err := rows.Scan(
 			&approvalRequest.ID,
 			&approvalRequest.ActionType,
@@ -662,16 +524,16 @@ func (r *approvalRequestRepository) GetByRequesterIDWithDetails(ctx context.Cont
 			&result.TogglePath,
 			&result.ActionedUserName,
 		)
-		
+
 		if err != nil {
 			return nil, err
 		}
-		
+
 		convertActionData(actionDataStr, &approvalRequest)
-	result.ApprovalRequest = &approvalRequest
+		result.ApprovalRequest = &approvalRequest
 		results = append(results, &result)
 	}
-	
+
 	return results, nil
 }
 
@@ -682,61 +544,32 @@ func (r *approvalRequestRepository) MarkExpiredRequests(ctx context.Context) err
 		Update("status", entity.ApprovalStatusExpired).Error
 }
 
-func (r *approvalRequestRepository) DeleteExpiredRequests(ctx context.Context, olderThanDays int) error {
-	cutoffDate := time.Now().AddDate(0, 0, -olderThanDays)
-	return r.db.WithContext(ctx).
-		Where("status = ? AND expires_at <= ?", entity.ApprovalStatusExpired, cutoffDate).
-		Delete(&entity.ApprovalRequest{}).Error
-}
-
-func (r *approvalRequestRepository) GetRequestStats(ctx context.Context) (map[entity.ApprovalStatus]int, error) {
+// GetRequestStats agrega por status. teamIDs vazio/nil = irrestrito (todos os teams).
+func (r *approvalRequestRepository) GetRequestStats(ctx context.Context, teamIDs []string) (map[entity.ApprovalStatus]int, error) {
 	var results []struct {
 		Status entity.ApprovalStatus `json:"status"`
 		Count  int                   `json:"count"`
 	}
-	
-	err := r.db.WithContext(ctx).
+
+	q := r.db.WithContext(ctx).
 		Model(&entity.ApprovalRequest{}).
-		Select("status, COUNT(*) as count").
-		Group("status").
-		Find(&results).Error
-	
-	if err != nil {
+		Select("status, COUNT(*) as count")
+	if len(teamIDs) > 0 {
+		q = q.Where("team_id IN ?", teamIDs)
+	}
+
+	if err := q.Group("status").Find(&results).Error; err != nil {
 		return nil, err
 	}
-	
+
 	stats := make(map[entity.ApprovalStatus]int)
 	for _, result := range results {
 		stats[result.Status] = result.Count
 	}
-	
+
 	return stats, nil
 }
 
-func (r *approvalRequestRepository) GetRequestStatsByTeam(ctx context.Context, teamID string) (map[entity.ApprovalStatus]int, error) {
-	var results []struct {
-		Status entity.ApprovalStatus `json:"status"`
-		Count  int                   `json:"count"`
-	}
-	
-	err := r.db.WithContext(ctx).
-		Model(&entity.ApprovalRequest{}).
-		Select("status, COUNT(*) as count").
-		Where("team_id = ?", teamID).
-		Group("status").
-		Find(&results).Error
-	
-	if err != nil {
-		return nil, err
-	}
-	
-	stats := make(map[entity.ApprovalStatus]int)
-	for _, result := range results {
-		stats[result.Status] = result.Count
-	}
-	
-	return stats, nil
-}
 // Helper function to convert action data string to json.RawMessage
 func convertActionData(actionDataStr string, approvalRequest *entity.ApprovalRequest) {
 	if actionDataStr != "" {
