@@ -1,4 +1,8 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // ApprovalSettingsPanel's switches are plain <button className={"switch" + (on ? " on" : "")}>
 // (no aria-pressed/aria-checked) — writes immediately on click, no separate Save. Idempotent so
@@ -38,6 +42,54 @@ export function modalButton(page: Page, name: string, options?: { dialogTitle?: 
   const scrim = page.getByTestId("modal-scrim");
   const scope = options?.dialogTitle ? scrim.filter({ hasText: options.dialogTitle }) : scrim;
   return scope.getByRole("button", { name, exact: true });
+}
+
+export interface StandaloneServer {
+  baseURL: string;
+  dbDir: string;
+  stop(): Promise<void>;
+}
+
+// Sobe uma instância TOTALMENTE isolada do servidor (porta e banco próprios, fora do webServer
+// compartilhado do playwright.config.ts) — pro único cenário que a suíte principal não cobre: a
+// jornada real de primeiro boot (senha gerada de root só existe uma vez, e global-setup já
+// precisa consumi-la pra criar as fixtures compartilhadas antes de qualquer teste rodar). Também
+// serve de regressão pro bug real já encontrado: sem COOKIE_SECURE=false, o cookie de sessão
+// nunca sobrevive sobre http:// puro e a troca de senha forçada nunca "vinga" de verdade.
+export async function startStandaloneServer(port: string): Promise<StandaloneServer> {
+  const dbDir = mkdtempSync(join(tmpdir(), "totoggle-e2e-standalone-"));
+  const dbPath = join(dbDir, "toggles.db");
+  const baseURL = `http://127.0.0.1:${port}`;
+
+  const child: ChildProcess = spawn("go", ["run", "main.go"], {
+    cwd: join(__dirname, ".."),
+    env: { ...process.env, SERVER_PORT: port, DB_PATH: dbPath, COOKIE_SECURE: "false" },
+    stdio: "pipe",
+  });
+
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      const res = await fetch(`${baseURL}/health`);
+      if (res.ok) break;
+    } catch {
+      // ainda não subiu — tenta de novo
+    }
+    if (Date.now() > deadline) {
+      child.kill();
+      throw new Error("standalone server did not become ready in time");
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  return {
+    baseURL,
+    dbDir,
+    async stop() {
+      child.kill();
+      await new Promise((r) => setTimeout(r, 200));
+    },
+  };
 }
 
 // Cria um toggle novo e dedicado (não a fixture compartilhada) via API, como root — evita que

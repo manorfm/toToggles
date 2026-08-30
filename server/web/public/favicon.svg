@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Mesmo símbolo do brand-mark (components/AppShell.tsx: Icon name="toggle" dentro de
+       .brand-mark) — glifo de components/Icon.tsx, gradiente e cor de styles/global.css
+       (.brand-mark) convertidos de oklch() pros equivalentes sRGB, já que ICO/SVG de favicon
+       não interpretam oklch(). -->
+  <defs>
+    <linearGradient id="bg" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#31d78c" />
+      <stop offset="100%" stop-color="#00c577" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="9" fill="url(#bg)" />
+  <g transform="translate(4,4)" fill="none" stroke="#00220f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="7" width="20" height="10" rx="5" />
+    <circle cx="16" cy="12" r="2.6" fill="#00220f" stroke="none" />
+  </g>
+</svg>

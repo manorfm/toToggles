@@ -326,6 +326,19 @@ input[type="checkbox"] {
 .sep {
   color: var(--ink-4);
 }
+/* Off-canvas mobile nav (≤1024px — ver seção "Responsividade" no fim deste arquivo). Escondido
+   por padrão em telas largas: o estado navOpen (AppShell.tsx) nunca é alcançável ali, já que o
+   burger nem aparece. */
+.nav-burger {
+  display: none;
+}
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 84;
+  background: oklch(0 0 0 / 0.5);
+  backdrop-filter: blur(2px);
+}
 .nav-item {
   display: flex;
   align-items: center;
@@ -407,6 +420,7 @@ input[type="checkbox"] {
 .page {
   padding: 26px var(--pad) 60px;
   max-width: 1080px;
+  margin-inline: auto;
 }
 .page-head {
   display: flex;
@@ -1319,4 +1333,314 @@ input[type="checkbox"] {
 .rule-opt .rd {
   font-size: 11px;
   color: var(--ink-4);
+}
+
+/* ==========================================================================
+   Responsividade — portada 1:1 dos media queries reais do protótipo v2.2
+   (docs/toToggle v2.2.html, decodificado — mesmo método de lib/toggleLeaves.ts:
+   o CSS não é minificado nos seletores, então os breakpoints e propriedades
+   abaixo vêm direto do <style> real, não inferidos). Omitidas de propósito as
+   regras de classes que não existem nesta reescrita: `.ob-*` (OnboardingModal,
+   feature inteira fora de escopo — ver components/AppShell.tsx), `.toast*`
+   (sem sistema de toast), `.path-row`/`.path-line`/`.path-tail`/`.key-masked-*`
+   (a TogglePaths/KeysView do protótipo usa uma lista que não construímos — nosso
+   layout é grid de cards, já coberto por `.grid`/`.tg-grid` abaixo).
+   ========================================================================== */
+
+/* Telas bem largas: limita o crescimento do .page (margin-inline: auto acima)
+   e mantém o topbar com o mesmo respiro lateral do conteúdo centralizado. */
+@media (min-width: 1600px) {
+  .page {
+    max-width: 1240px;
+  }
+  .topbar {
+    padding-left: max(var(--pad), calc((100% - 1240px) / 2));
+    padding-right: max(var(--pad), calc((100% - 1240px) / 2));
+  }
+}
+@media (min-width: 1180px) and (max-width: 1599px) {
+  .topbar {
+    padding-left: max(var(--pad), calc((100% - 1080px) / 2));
+    padding-right: max(var(--pad), calc((100% - 1080px) / 2));
+  }
+}
+
+@media (max-width: 1180px) {
+  .app {
+    grid-template-columns: 212px 1fr;
+  }
+  .page {
+    max-width: none;
+  }
+}
+
+/* iPad portrait e abaixo: sidebar vira off-canvas (ver navOpen em AppShell.tsx). */
+@media (max-width: 1024px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 85;
+    width: 270px;
+    max-width: 84vw;
+    background: var(--surface);
+    backdrop-filter: none;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+  .sidebar.open {
+    transform: none;
+  }
+  .nav-burger {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .topbar {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: max(14px, env(safe-area-inset-top));
+  }
+  .page {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  /* cabeçalhos de página empilham */
+  .page-head {
+    flex-wrap: wrap;
+  }
+
+  /* touch: sem hover pra revelar ações de linha */
+  .node-actions,
+  .tg-card .node-actions {
+    opacity: 1;
+  }
+}
+
+/* Touch em geral (independe de largura) — mesmo raciocínio do bloco acima. */
+@media (hover: none) {
+  .node-actions,
+  .tg-card .node-actions {
+    opacity: 1;
+  }
+  .card.click:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 600px) {
+  body {
+    font-size: 15px;
+  }
+  .app {
+    height: 100dvh;
+    background: var(--bg);
+  }
+  .main {
+    height: 100dvh;
+  }
+  :root {
+    --pad: 16px;
+    --gap: 14px;
+  }
+
+  .topbar {
+    gap: 10px;
+    padding: 12px 14px;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  .crumbs {
+    font-size: 12.5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .crumbs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page {
+    padding: 18px 14px calc(56px + env(safe-area-inset-bottom));
+    max-width: none;
+  }
+  .page-title {
+    font-size: 21px;
+  }
+  .page-desc {
+    font-size: 13px;
+    max-width: none;
+  }
+  .page-head {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  /* ações primárias ocupam a largura toda */
+  .page-head .btn-primary {
+    flex: 1;
+  }
+  .btn {
+    height: 44px;
+    font-size: 14px;
+  }
+  .btn-icon {
+    width: 44px;
+  }
+  .btn-sm {
+    height: 36px;
+  }
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .switch {
+    --w: 44px;
+    --h: 26px;
+  }
+
+  /* cards/grids em coluna única */
+  .grid,
+  .tg-grid {
+    grid-template-columns: 1fr;
+  }
+  .card {
+    padding: 18px;
+  }
+  .app-stats {
+    gap: 18px;
+  }
+
+  /* toolbar/legenda dos toggle paths */
+  .tree-toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+  .tree-toolbar .search {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+  .tree-legend {
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .tg-card-path {
+    font-size: 14px;
+  }
+
+  /* drawer vira folha full-height */
+  .drawer {
+    width: 100vw;
+    border-left: none;
+  }
+  .drawer-head {
+    padding: calc(18px + env(safe-area-inset-top)) 16px 14px;
+  }
+  .drawer-body {
+    padding: 16px;
+    gap: 18px;
+  }
+  .drawer-foot {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .drawer-foot .btn {
+    flex: 1;
+  }
+  .rule-types {
+    grid-template-columns: 1fr;
+  }
+
+  /* modais viram folhas ancoradas embaixo */
+  .modal-scrim {
+    padding: 0;
+    place-items: end stretch;
+  }
+  .modal {
+    width: 100%;
+    border-radius: 18px 18px 0 0;
+    max-height: 92dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-body {
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .modal-head {
+    padding: 18px 16px 0;
+  }
+  .modal-foot {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+  }
+  .modal-foot .btn {
+    flex: 1;
+  }
+
+  /* times / usuários / aprovações empilham */
+  .member,
+  .appr-row,
+  .appr-system-row,
+  .appr-action-row {
+    flex-wrap: wrap;
+  }
+  .appr-btns {
+    margin-left: 0;
+    width: 100%;
+  }
+  .appr-btns .btn {
+    flex: 1;
+  }
+  .appr-system-row {
+    gap: 14px;
+  }
+  .appr-system-banner {
+    flex-wrap: wrap;
+  }
+  .aic-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .aic-label {
+    min-width: 0;
+  }
+
+  /* auth */
+  .auth-stage {
+    padding: 18px;
+    align-content: center;
+  }
+  .auth-card {
+    padding: 26px 20px 22px;
+    border-radius: 16px;
+  }
+
+  /* diversos */
+  .audit-filter {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .audit-filter::-webkit-scrollbar {
+    display: none;
+  }
+  .chip {
+    flex-shrink: 0;
+  }
+  .skey-val {
+    font-size: 11.5px;
+  }
+  .temp-pw-value {
+    font-size: 19px;
+  }
 }

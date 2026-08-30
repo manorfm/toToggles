@@ -71,8 +71,7 @@ toToogle/
 ```bash
 cd server
 go mod tidy
-make migrate-up   # applies the goose migrations — not automatic, must run before first start
-make dev
+make dev   # applies its own database migrations at startup — no separate step, nothing to install
 ```
 
 The server starts on http://localhost:3056 (override with `SERVER_PORT`).

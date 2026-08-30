@@ -296,8 +296,9 @@ código):
   `@latest` bumpava `go.mod` de `go 1.23.0` pra `go 1.25.7`, o que quebraria o `builder` stage
   fixado em `golang:1.23-alpine`; confirmado que builds normais quebram nessa combinação antes de
   fixar a versão). `config.InitializeDB()` chama `goose.Up(sqlDB, ".")` contra o `embed.FS` a cada
-  boot — idempotente (só aplica o que falta), então não conflita com quem ainda roda
-  `make migrate-up` manualmente no fluxo de dev local. O `Dockerfile` builder stage precisou
+  boot — idempotente (só aplica o que falta). O Makefile não tem (nem nunca precisou ter, depois
+  desta correção) um target manual de migração — `make run`/`make dev` já bastam sempre. O
+  `Dockerfile` builder stage precisou
   ganhar `COPY db/migrations/ ./db/migrations/` (antes só existia pro stage `assets`, que nunca
   compila nada — o `go:embed` precisa do diretório presente no stage que roda `go build`).
   Verificado ao vivo, fim a fim: build → run com volume real → schema criado (10 migrations
@@ -427,12 +428,9 @@ doc.
 ## Banco de Dados
 
 ### Sistema de Migrações
-- **Ferramenta**: Goose
-- **Localização**: `db/migrations/`
-- **Comandos**:
-  - `make migrate-up` - Aplicar migrações
-  - `make migrate-down` - Reverter última migração
-  - `make migrate-status` - Status das migrações
+- **Localização**: `db/migrations/` (embutidas no binário via `go:embed`, aplicadas
+  automaticamente a cada boot — `config.InitializeDB()`, ver detalhes mais abaixo). Não existe
+  comando manual de migração no Makefile — nunca é necessário rodar nada à parte.
 
 ### Histórico de Migrações
 1. `20230703_create_applications_and_toggles.sql` - Estrutura inicial
@@ -453,14 +451,11 @@ doc.
 ### Makefile Commands
 ```bash
 make help          # Mostrar ajuda
-make dev           # Desenvolvimento (migrate + run)
-make run           # Executar aplicação
+make dev           # Alias de `run`
+make run           # Executar aplicação (aplica as próprias migrations automaticamente)
 make build         # Compilar binário
 make test          # Executar testes
 make clean         # Limpar binário e banco
-make migrate-up    # Aplicar migrações
-make migrate-down  # Reverter migração
-make migrate-status # Status das migrações
 make docker-build  # Build Docker
 make docker-run    # Executar container
 ```

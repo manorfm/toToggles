@@ -63,6 +63,51 @@ describe("AppShell", () => {
     expect(screen.getByText("root")).toBeInTheDocument();
   });
 
+  it("mobile nav: burger opens the sidebar+scrim, and clicking a nav item closes it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+      )
+    );
+    const user = userEvent.setup();
+
+    const { container } = renderShell();
+    await screen.findByText("Applications content");
+
+    expect(container.querySelector(".nav-scrim")).not.toBeInTheDocument();
+    expect(container.querySelector(".sidebar")).not.toHaveClass("open");
+
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    expect(container.querySelector(".sidebar")).toHaveClass("open");
+    expect(container.querySelector(".nav-scrim")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: /teams/i }));
+    expect(container.querySelector(".sidebar")).not.toHaveClass("open");
+    expect(container.querySelector(".nav-scrim")).not.toBeInTheDocument();
+  });
+
+  it("mobile nav: clicking the scrim closes the sidebar without navigating away", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+      )
+    );
+    const user = userEvent.setup();
+
+    const { container } = renderShell();
+    await screen.findByText("Applications content");
+
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    expect(container.querySelector(".nav-scrim")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Fechar menu" }));
+    expect(container.querySelector(".sidebar")).not.toHaveClass("open");
+    expect(container.querySelector(".nav-scrim")).not.toBeInTheDocument();
+    expect(screen.getByText("Applications content")).toBeInTheDocument();
+  });
+
   it("shows the brand subtitle and a single 'Applications' crumb (no second level) on the home route", async () => {
     vi.stubGlobal(
       "fetch",

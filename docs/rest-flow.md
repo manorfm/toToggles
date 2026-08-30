@@ -187,7 +187,7 @@ GET    /api/applications                          # filtered by team membership 
 GET    /api/applications/:id
 PUT    /api/applications/:id                      # approval-aware, min role admin
 DELETE /api/applications/:id                      # approval-aware, min role root
-POST   /api/applications/:id/generate-secret      # admin/root only
+POST   /api/applications/:id/generate-secret      # approval-aware, min role admin
 GET    /api/applications/:id/secret-keys          # admin/root only
 
 # Toggles (session required)
@@ -198,8 +198,8 @@ PUT    /api/applications/:id/toggles/:toggleId              # approval-aware, mi
 DELETE /api/applications/:id/toggles/:toggleId              # approval-aware, min role admin
 PUT    /api/applications/:id/toggle/:toggleId                # recursive enable/disable, approval-aware, min role admin
 
-# Secret keys management (session required, admin/root only)
-DELETE /api/secret-keys/:id
+# Secret keys management (session required)
+DELETE /api/secret-keys/:id                       # approval-aware, min role admin
 
 # User management (session required; create/list: root or admin, scoped to admin's own teams —
 # get/update/delete/reset-password/status: root only)
@@ -804,7 +804,7 @@ integrations (see the top-level project README for the companion Java/Kotlin cli
 POST /api/applications/:id/generate-secret
 ```
 
-Admin/root only (not approval-aware). "Generate" is really "regenerate": **every existing secret key for the
+Approval-aware, minimum role admin (root always bypasses). "Generate" is really "regenerate": **every existing secret key for the
 application is deleted first**, then exactly one new key named `"API Access Key"` is created. There is no way
 to have multiple concurrently valid keys per application through this endpoint.
 
@@ -837,7 +837,7 @@ Admin/root only. Lists key metadata (no plaintext, no hash) for the application.
 DELETE /api/secret-keys/:id
 ```
 
-Admin/root only.
+Approval-aware, minimum role admin (root always bypasses).
 
 ```http
 GET /api/toggles
@@ -995,7 +995,12 @@ That request is classified as `toggle_update` instead.
 > Note: there is no separate `application_update` action type — `getActionType` maps **any** `PUT
 > /api/applications/:id` to `application_create`, same as the create route. So the single
 > `application_create` flag in `required_actions` gates both creating and updating applications;
-> there's no way to require approval for one but not the other.
+> there's no way to require approval for one but not the other. Execution correctly tells the two
+> apart internally, though: the middleware captures the target application's ID when the request
+> is a `PUT` (never possible for a real `POST` create, which has no ID yet), and
+> `ExecuteApprovedAction` branches on that to update the existing application instead of
+> attempting to create a new one. Before this was fixed, approving an edit always failed at
+> execute time (it tried to create a new application and had no `team_id` to do it with).
 
 ```http
 GET /api/approval/enabled

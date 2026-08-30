@@ -112,9 +112,8 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    ```bash
    make dev
    ```
-   (`make dev` runs `migrate-up` then `run` — but the binary also applies its own migrations at
-   startup, so `go run main.go`/`make run` alone works too, including in the production Docker
-   image, which has no external `goose` CLI available.)
+   (`make dev` is just an alias for `make run`/`go run main.go` — the binary applies its own
+   database migrations at startup, no separate step or install needed.)
 
 5. **Access the application**
    - Web UI: http://localhost:3056 (requires login — override the port with `SERVER_PORT`)
@@ -139,13 +138,7 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    make web-install web-build
    ```
 
-3. **Run database migrations** (optional — the binary applies these itself at startup; run this
-   manually only if you want migrations applied ahead of time, or to check status)
-   ```bash
-   make migrate-up
-   ```
-
-4. **Start the server**
+3. **Start the server** (applies its own database migrations at startup)
    ```bash
    make run
    ```
@@ -515,14 +508,11 @@ Logs are written as structured JSON to stdout (one object per line: `time`, `lev
 ### Available Make Commands
 ```bash
 make help          # Show all available commands
-make dev           # Development mode (migrate + run)
-make run           # Run the application
+make dev           # Alias for `run`
+make run           # Run the application (applies its own database migrations at startup)
 make build         # Build binary
 make test          # Run tests
 make clean         # Clean build artifacts and database
-make migrate-up    # Run database migrations (optional — the binary applies these itself at startup)
-make migrate-down  # Rollback migrations
-make migrate-status # Show migration status
 make docker-build  # Build Docker image
 make docker-run    # Run Docker container
 ```
@@ -538,9 +528,9 @@ make docker-run    # Run Docker container
 - **Security Improvements**: Enhanced authentication, password management, and session handling
 
 ### Database Evolution
-- **Migration System**: Comprehensive database versioning with goose, embedded directly in the
-  binary (`go:embed`) — applied automatically at every startup, so no separate migration step or
-  external `goose` CLI is needed even in the minimal production Docker image
+- **Migration System**: Database schema versioning embedded directly in the binary — applied
+  automatically at every startup, no separate step or install needed anywhere, including the
+  minimal production Docker image
 - **Entity Relationships**: Complex many-to-many relationships between users, teams, and applications
 - **Security Schema**: Encrypted passwords, secret key management, and audit trails
 
@@ -549,20 +539,6 @@ make docker-run    # Run Docker container
 - **Role-Based Endpoints**: Different API access levels based on user roles
 - **Public API**: External integration support via secret keys
 - **Comprehensive Error Handling**: Structured error responses with detailed codes
-
-### Database Migrations
-The binary applies these itself at every startup — the commands below are for manual control
-(rolling back, or checking status without starting the server), not a required setup step.
-```bash
-# Apply migrations
-make migrate-up
-
-# Rollback last migration
-make migrate-down
-
-# Check migration status
-make migrate-status
-```
 
 ### Code Quality
 ```bash

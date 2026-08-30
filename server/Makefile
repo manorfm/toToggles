@@ -1,16 +1,19 @@
 APP_NAME = toToogle
 DB_PATH = ./db/toggles.db
-MIGRATIONS_DIR = ./db/migrations
-GOOSE = goose
+# Default `true` no servidor (env.go) — exige HTTPS pro cookie de sessão persistir, correto em
+# produção. `run`/`dev` são sempre HTTP puro (localhost), então viram `false` aqui só pra esses
+# dois targets — Docker/deploy nunca passam por aqui, continuam com o default seguro.
+# Override manual: `make run COOKIE_SECURE=true` (ex.: testando atrás de um proxy HTTPS local).
+COOKIE_SECURE ?= false
 
-.PHONY: help run build test clean migrate-up migrate-down migrate-status docker-build docker-run web-install web-build web-dev web-test e2e
+.PHONY: help run build test clean docker-build docker-run web-install web-build web-dev web-test e2e
 
 help: ## Mostra esta ajuda
 	@echo "Comandos disponíveis:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-run: ## Roda a aplicação localmente
-	go run main.go
+run: ## Roda a aplicação localmente (aplica as próprias migrations automaticamente)
+	COOKIE_SECURE=$(COOKIE_SECURE) go run main.go
 
 build: ## Compila o binário
 	go build -o $(APP_NAME) main.go
@@ -21,22 +24,13 @@ test: ## Executa os testes
 clean: ## Remove binário e banco de dados
 	rm -f $(APP_NAME) $(DB_PATH)
 
-migrate-up: ## Aplica todas as migrations
-	$(GOOSE) -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) up
-
-migrate-down: ## Desfaz a última migration
-	$(GOOSE) -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) down
-
-migrate-status: ## Mostra o status das migrations
-	$(GOOSE) -dir $(MIGRATIONS_DIR) sqlite3 $(DB_PATH) status
-
 docker-build: ## Constrói a imagem Docker
 	docker build -t $(APP_NAME) .
 
 docker-run: ## Roda o container Docker
 	docker run -p 3056:3056 -v $(PWD)/db:/root/db $(APP_NAME)
 
-dev: migrate-up run ## Roda em modo desenvolvimento (migrate + run)
+dev: run ## Alias de `run`
 
 web-install: ## Instala dependências do frontend (server/web)
 	cd web && npm install

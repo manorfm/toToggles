@@ -26,7 +26,8 @@ export type IconName =
   | "sliders"
   | "globe"
   | "map"
-  | "rocket";
+  | "rocket"
+  | "menu";
 
 interface IconProps {
   name: IconName;
@@ -76,6 +77,15 @@ const paths: Record<IconName, JSX.Element> = {
     <>
       <path d="M18 6L6 18" />
       <path d="M6 6l12 12" />
+    </>
+  ),
+  // icons.jsx real (bundle v2.2, decodificado — mesmo método do header de lib/toggleLeaves.ts):
+  // menu: "M3 6h18M3 12h18M3 18h18" — glifo do nav-burger que abre a sidebar no mobile.
+  menu: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
     </>
   ),
   users: (

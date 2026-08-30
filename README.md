@@ -73,11 +73,8 @@ cd server
 go run main.go
 ```
 
-The binary applies its own database migrations at startup (embedded via `go:embed`, using
-[goose](https://github.com/pressly/goose) under the hood) — no separate step required, including
-inside the production Docker image, which has no external migration tool available.
-`make migrate-up`/`make migrate-down`/`make migrate-status` still exist for manual control (e.g.
-rolling back, or checking status without starting the server).
+The binary applies its own database migrations at startup — no separate step, and nothing to
+install, including inside the production Docker image.
 
 The server starts on `http://localhost:3056` by default (override with `SERVER_PORT`).
 

@@ -108,6 +108,14 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Off-canvas mobile nav (≤1024px, ver styles/global.css) — confirmado no app.jsx real do
+  // protótipo v2.2 (decodificado do bundle, mesmo método de lib/toggleLeaves.ts): estado
+  // `navOpen`, sidebar vira `<aside className={"sidebar"+(navOpen?" open":"")}>`, um botão
+  // `.nav-scrim` só existe no DOM quando aberto (fecha ao clicar fora), e o próprio `<aside>`
+  // fecha sozinho quando o clique cai dentro de um `.nav-item` (delegação, não um onClick por
+  // item). Em telas largas o burger fica com `display:none` (global.css) e este estado nunca é
+  // alcançável.
+  const [navOpen, setNavOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [appCount, setAppCount] = useState(0);
   const [teamCount, setTeamCount] = useState(0);
@@ -216,7 +224,12 @@ export function AppShell() {
 
   return (
     <div className="app">
-      <div className="sidebar">
+      <aside
+        className={"sidebar" + (navOpen ? " open" : "")}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest(".nav-item")) setNavOpen(false);
+        }}
+      >
         <div className="brand">
           <div className="brand-mark">
             <Icon name="toggle" size={20} />
@@ -287,10 +300,15 @@ export function AppShell() {
             />
           )}
         </div>
-      </div>
+      </aside>
+
+      {navOpen && <button className="nav-scrim" aria-label="Fechar menu" onClick={() => setNavOpen(false)} />}
 
       <main className="main">
         <div className="topbar">
+          <button className="btn btn-icon btn-soft nav-burger" aria-label="Menu" onClick={() => setNavOpen(true)}>
+            <Icon name="menu" size={18} />
+          </button>
           <Crumbs pathname={location.pathname} onHome={() => navigate("/")} openAppName={openApp?.name ?? null} />
         </div>
         <Outlet context={{ user, setOpenApp }} />
