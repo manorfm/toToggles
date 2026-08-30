@@ -751,18 +751,3 @@ func (uc *ApprovalUseCase) GetUserTeamForApplication(ctx context.Context, userID
 	// Se não encontrou team específico com acesso à aplicação, retornar o primeiro team
 	return userTeams[0].ID, nil
 }
-
-// GetFirstUserTeam obtém o primeiro team do usuário
-func (uc *ApprovalUseCase) GetFirstUserTeam(ctx context.Context, userID string) (string, error) {
-	// Buscar teams do usuário
-	userTeams, err := uc.teamRepo.GetTeamsByUserID(userID)
-	if err != nil {
-		return "", err
-	}
-
-	if len(userTeams) == 0 {
-		return "", errors.New("user has no teams assigned")
-	}
-
-	return userTeams[0].ID, nil
-}

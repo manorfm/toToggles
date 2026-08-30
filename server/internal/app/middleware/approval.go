@@ -366,8 +366,26 @@ func determineTeamID(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, a
 		return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
 
 	case entity.ApprovalActionApplicationCreate, entity.ApprovalActionApplicationDelete:
-		// Para ações de aplicação, usar o primeiro team do usuário
-		return getFirstUserTeam(ctx, approvalUseCase, userID)
+		// Se a aplicação já existe (PUT de edição, que reusa este mesmo action_type — não há
+		// application_update, ver docs/rest-flow.md §9.1 — ou um DELETE de verdade), resolve o
+		// team pela aplicação real, não pelo "primeiro team do usuário": um admin em múltiplos
+		// teams pode não ter a aplicação no seu primeiro team.
+		if applicationID != nil {
+			return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
+		}
+
+		// Criação de verdade (POST /applications, sem :id ainda): o cliente já manda team_id no
+		// corpo (campo obrigatório em application_handler.go#CreateApplicationRequest) — é esse
+		// team que deve ser dono da solicitação, não "o primeiro team do usuário". Usar o
+		// primeiro team ignorava a escolha do usuário sempre que ele pertencia a mais de um team,
+		// filiando a solicitação a um time errado — invisível para os aprovadores do time
+		// realmente escolhido (achado investigando um report ao vivo).
+		if body := peekJSONBody(c); body != nil {
+			if teamID, ok := body["team_id"].(string); ok && teamID != "" {
+				return teamID, nil
+			}
+		}
+		return "", entity.NewAppError(entity.ErrCodeValidation, "team_id is required to create an application")
 
 	case entity.ApprovalActionSecretKeyCreate, entity.ApprovalActionSecretKeyDelete:
 		// Secret keys pertencem a uma aplicação — mesmo raciocínio das ações de toggle
@@ -379,9 +397,4 @@ func determineTeamID(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, a
 	default:
 		return "", entity.NewAppError(entity.ErrCodeValidation, "unknown action type for team determination")
 	}
-}
-
-// getFirstUserTeam obtém o primeiro team do usuário
-func getFirstUserTeam(ctx context.Context, approvalUseCase *usecase.ApprovalUseCase, userID string) (string, error) {
-	return approvalUseCase.GetFirstUserTeam(ctx, userID)
 }

@@ -86,6 +86,7 @@ func setupApprovalWorkflowTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, *enti
 	router.PUT("/applications/:id/toggle/:toggleId", RequireApprovalAware(entity.UserRoleAdmin), UpdateEnabled)
 	router.PUT("/applications/:id/toggles/:toggleId", RequireApprovalAware(entity.UserRoleAdmin), UpdateToggle)
 	router.PUT("/applications/:id", RequireApprovalAware(entity.UserRoleAdmin), UpdateApplication)
+	router.POST("/applications", RequireApprovalAware(entity.UserRoleAdmin), CreateApplication)
 
 	return router, db, admin
 }
@@ -350,5 +351,49 @@ func TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication
 	db.Model(&entity.Application{}).Count(&count)
 	if count != 1 {
 		t.Errorf("expected exactly 1 application to exist, got %d", count)
+	}
+}
+
+// TestApprovalWorkflow_ApplicationCreate_UsesRequestedTeam_NotFirstUserTeam reproduces a bug
+// found investigating a live report: a Payment Squad approver never saw an application_create
+// request filed by an admin who belongs to BOTH Payment Squad and Data Platform. determineTeamID
+// (middleware/approval.go) had a case entity.ApprovalActionApplicationCreate,
+// entity.ApprovalActionApplicationDelete: return getFirstUserTeam(...) — it ignored the team_id
+// the client actually submitted in the POST body (required by
+// application_handler.go#CreateApplicationRequest) and always filed the request under
+// userTeams[0], whichever team GetTeamsByUserID happened to return first. An admin on two teams
+// who explicitly picked team-2 in the create form got their request silently misfiled under
+// team-1 — invisible to team-2's approvers, and visible only to team-1's (who never asked for
+// it). This proves the fix: the request lands under the team_id actually submitted.
+func TestApprovalWorkflow_ApplicationCreate_UsesRequestedTeam_NotFirstUserTeam(t *testing.T) {
+	router, db, admin := setupApprovalWorkflowTestRouter(t)
+	enableApproval(t, db, entity.ApprovalConfig{ApplicationCreate: true})
+
+	// admin já pertence a team-1 (criado por setupApprovalWorkflowTestRouter); adiciona um
+	// segundo team e o coloca lá também, ordenado para vir DEPOIS de team-1 em qualquer busca
+	// naturalmente ordenada por criação/ID, reproduzindo o "primeiro team do usuário" != "team
+	// escolhido no formulário".
+	team2 := &entity.Team{ID: "team-2", Name: "Team 2"}
+	if err := db.Create(team2).Error; err != nil {
+		t.Fatalf("failed to create second team: %v", err)
+	}
+	if err := db.Create(&entity.TeamUser{TeamID: team2.ID, UserID: admin.ID}).Error; err != nil {
+		t.Fatalf("failed to associate admin to second team: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/applications", strings.NewReader(`{"name": "New App", "team_id": "team-2"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pending entity.ApprovalRequest
+	if err := db.Where("action_type = ?", entity.ApprovalActionApplicationCreate).First(&pending).Error; err != nil {
+		t.Fatalf("expected a pending application_create request, got: %v", err)
+	}
+	if pending.TeamID != "team-2" {
+		t.Errorf("expected approval request to be filed under the requested team-2, got team_id=%q (misfiled under the admin's other team — invisible to the team-2 approver who should see it)", pending.TeamID)
 	}
 }

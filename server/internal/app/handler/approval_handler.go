@@ -261,7 +261,7 @@ func (h *ApprovalHandler) GetApprovableRequests(ctx *gin.Context) {
 	if requests != nil && len(requests) > 0 {
 		log.Printf("[DEBUG] GetApprovableRequests: First request ID=%s, ActionType=%s", requests[0].ID, requests[0].ActionType)
 	} else {
-		log.Printf("[IMPORTANT] GetApprovableRequests: No requests found for Username=%s - this might be because user is the requester of pending requests (cannot approve own requests)", user.Username)
+		log.Printf("[DEBUG] GetApprovableRequests: No approvable requests for UserID=%s Username=%s - either there is no pending request for a team where this user is a designated approver (team_users.is_approver), or every such pending request was created by this same user (self-approval is forbidden by CanBeApprovedBy)", userID, user.Username)
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
