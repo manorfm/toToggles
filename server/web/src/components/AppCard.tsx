@@ -69,7 +69,7 @@ export function AppCard({ application, canEdit = false, onEdit }: AppCardProps) 
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          navigate(`/applications/${application.id}#service-key-section`);
+          navigate(`/applications/${application.id}?tab=keys`);
         }}
       >
         <Icon name={hasKey ? "lock" : "key"} size={13} />

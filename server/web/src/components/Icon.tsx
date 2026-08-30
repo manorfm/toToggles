@@ -27,7 +27,8 @@ export type IconName =
   | "globe"
   | "map"
   | "rocket"
-  | "menu";
+  | "menu"
+  | "refresh";
 
 interface IconProps {
   name: IconName;
@@ -210,6 +211,16 @@ const paths: Record<IconName, JSX.Element> = {
     <>
       <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91 0z" />
       <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+    </>
+  ),
+  // Confirmado no icons.jsx real (UUID 061a0eeb-..., mesmo bundle v2.3 usado pra reconstruir
+  // KeysView — ver o comentário grande sobre o decode em server/CLAUDE.md, seção Frontend).
+  refresh: (
+    <>
+      <path d="M23 4v6h-6" />
+      <path d="M1 20v-6h6" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+      <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
     </>
   ),
 };

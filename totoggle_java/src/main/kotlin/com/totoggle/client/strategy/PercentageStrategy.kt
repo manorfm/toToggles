@@ -39,7 +39,7 @@ class PercentageStrategy : ActivationStrategy {
                 return false
             }
 
-            if (percentage < 0 || percentage > 100) {
+            if (percentage !in 0.0..100.0) {
                 logger.warn("Percentage value out of range [0,100]: $percentage")
                 return false
             }

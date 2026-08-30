@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { deleteApplication, getApplication } from "../api/applications";
 import { deleteToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
@@ -11,6 +11,7 @@ import { SecretKeySection } from "../components/SecretKeySection";
 import { TogglePaths } from "../components/TogglePaths";
 import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
+import type { ApplicationDetailTab } from "../hooks/useAppUser";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
 import { buildChildrenCountMap, countToggleTree, flattenToLeaves } from "../lib/toggleLeaves";
 import type { ToggleLeaf } from "../types/toggle";
@@ -26,22 +27,32 @@ type LoadState =
   | { status: "loading" }
   | { status: "error"; message: string };
 
-// Tela de detalhe de uma aplicação: grade de cards de toggles (TogglePaths/ToggleCard,
-// GET .../toggles?hierarchy=true fundido com GET .../toggles — ver lib/toggleLeaves.ts) +
-// criação (CreateToggleModal) + liga/desliga recursivo (PUT .../toggle/:id, singular) +
-// edição de regra de ativação (EditToggleDrawer, PUT .../toggles/:id não-recursivo) +
-// gerenciamento da service key (SecretKeySection). Exclusão de toggle individual fica
-// para uma próxima fatia.
+// Tela de detalhe de uma aplicação: DUAS abas reais (`tab`, confirmado no app.jsx real como
+// `setTab("toggles"|"keys")` — nunca as duas visíveis ao mesmo tempo), não uma página só
+// empilhada como numa fase anterior desta reescrita. "Toggles": grade de cards de toggles
+// (TogglePaths/ToggleCard, GET .../toggles?hierarchy=true fundido com GET .../toggles — ver
+// lib/toggleLeaves.ts) + criação (CreateToggleModal) + liga/desliga recursivo (PUT
+// .../toggle/:id, singular) + edição de regra de ativação (EditToggleDrawer, PUT
+// .../toggles/:id não-recursivo). "Service key": gerenciamento da chave (SecretKeySection).
+// Ambas ficam montadas o tempo todo (`hidden`, não desmontadas ao trocar de aba) — assim
+// `SecretKeySection` continua sendo o único dono do fetch de `GET /secret-keys` mesmo com o
+// usuário na aba Toggles (`hasSecretKey` alimenta o indicador da sub-nav da sidebar
+// independente da aba ativa). Exclusão de toggle individual fica para uma próxima fatia.
 export function ApplicationDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const applicationId = id!;
   const user = useAppUser();
   const navigate = useNavigate();
-  const location = useLocation();
   const toast = useToast();
   const setOpenApp = useSetOpenApp();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [hasSecretKey, setHasSecretKey] = useState(false);
+  // AppCard.tsx navega direto pra cá com `?tab=keys` quando o usuário clica na faixa de chave do
+  // card, sem passar pela sub-nav da sidebar (que só existe DEPOIS de já estar nesta tela — ver
+  // AppShell.tsx). Só lido uma vez, no mount — depois disso quem manda na aba é o estado local
+  // (`onTabChange`, exposto pro AppShell via `openApp`), igual ao `setTab` do protótipo real.
+  const [initialSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<ApplicationDetailTab>(initialSearchParams.get("tab") === "keys" ? "keys" : "toggles");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [configuring, setConfiguring] = useState<{ toggleId: string; childrenCount: number } | null>(null);
@@ -72,25 +83,18 @@ export function ApplicationDetailScreen() {
     load();
   }, [load]);
 
-  // AppCard.tsx navega direto pra cá com um hash (ex. #service-key-section) quando o usuário
-  // clica na faixa de chave do card, sem passar pela sub-nav da sidebar (que só existe DEPOIS
-  // de já estar nesta tela — ver AppShell.tsx). Precisa esperar `state.status === "loaded"`:
-  // a section-alvo só existe no DOM depois que os dados chegam.
-  useEffect(() => {
-    if (state.status !== "loaded" || !location.hash) return;
-    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [state.status, location.hash]);
-
   // Confirmado no protótipo real: o breadcrumb do topbar ganha um 3º nível com o nome da
-  // aplicação aberta ("Applications / {app.name} / Toggles"), e a sidebar ganha uma sub-nav
-  // ("Toggles"/"Service key") — só esta tela tem esses dados (nome, total de toggles, se existe
-  // service key).
+  // aplicação aberta ("Applications / {app.name} / Toggles" ou ".../Service key"), e a sidebar
+  // ganha uma sub-nav ("Toggles"/"Service key") que TROCA de aba — só esta tela tem esses dados
+  // (nome, total de toggles, se existe service key) e é dona da aba ativa.
   const openAppName = state.status === "loaded" ? state.applicationName : null;
   const openAppToggleCount = state.status === "loaded" ? state.stats.total : 0;
   useEffect(() => {
-    if (openAppName !== null) setOpenApp({ name: openAppName, toggleCount: openAppToggleCount, hasSecretKey });
+    if (openAppName !== null) {
+      setOpenApp({ name: openAppName, toggleCount: openAppToggleCount, hasSecretKey, tab, onTabChange: setTab });
+    }
     return () => setOpenApp(null);
-  }, [openAppName, openAppToggleCount, hasSecretKey, setOpenApp]);
+  }, [openAppName, openAppToggleCount, hasSecretKey, tab, setOpenApp]);
 
   const canEdit = user.role === "root" || user.role === "admin";
   const canDeleteApp = user.role === "root";
@@ -167,8 +171,14 @@ export function ApplicationDetailScreen() {
         <div className="h">
           <div className="page-title">{state.status === "loaded" ? state.applicationName : "Application"}</div>
           <div className="page-desc">
-            Each path is a chain of toggles — <span className="mono" style={{ color: "var(--ink-2)" }}>service.feature.flag</span>. A path is
-            active only when every segment is on.
+            {tab === "toggles" ? (
+              <>
+                Each path is a chain of toggles — <span className="mono" style={{ color: "var(--ink-2)" }}>service.feature.flag</span>. A
+                path is active only when every segment is on.
+              </>
+            ) : (
+              "One secret service key per application. Shown once on generation — store it in a secrets manager."
+            )}
           </div>
         </div>
         {state.status === "loaded" && (
@@ -178,17 +188,21 @@ export function ApplicationDetailScreen() {
                 <Icon name="trash" size={14} /> Delete application
               </button>
             )}
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 600 }}>
-                <span style={{ color: "var(--accent)" }}>{state.stats.on}</span>
-                <span style={{ color: "var(--ink-4)" }}>/{state.stats.total}</span>
-              </div>
-              <div style={{ fontSize: 11, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>active</div>
-            </div>
-            {canEdit && (
-              <button className="btn btn-primary" onClick={() => setCreating(true)}>
-                <Icon name="plus" size={16} /> New toggle
-              </button>
+            {tab === "toggles" && (
+              <>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 600 }}>
+                    <span style={{ color: "var(--accent)" }}>{state.stats.on}</span>
+                    <span style={{ color: "var(--ink-4)" }}>/{state.stats.total}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>active</div>
+                </div>
+                {canEdit && (
+                  <button className="btn btn-primary" onClick={() => setCreating(true)}>
+                    <Icon name="plus" size={16} /> New toggle
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
@@ -199,7 +213,7 @@ export function ApplicationDetailScreen() {
       {state.status === "loading" && <div className="empty">Carregando…</div>}
       {state.status === "error" && <div className="empty">{state.message}</div>}
       {state.status === "loaded" && (
-        <div id="toggles-section">
+        <div hidden={tab !== "toggles"}>
           <TogglePaths
             tree={state.leaves}
             search={search}
@@ -213,7 +227,7 @@ export function ApplicationDetailScreen() {
       )}
 
       {state.status === "loaded" && (
-        <div id="service-key-section" style={{ marginTop: 32, paddingTop: 22, borderTop: "1px solid var(--border)" }}>
+        <div hidden={tab !== "keys"}>
           <SecretKeySection
             applicationId={applicationId}
             canManage={canEdit}

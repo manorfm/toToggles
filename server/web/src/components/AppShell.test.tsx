@@ -1,23 +1,26 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
+import type { ApplicationDetailTab } from "../hooks/useAppUser";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-// Simula o que ApplicationDetailScreen faz de verdade (useSetOpenApp num useEffect) sem puxar a
-// tela inteira (com seu próprio fetch de toggles/hierarquia) pra este teste de shell.
+// Simula o que ApplicationDetailScreen faz de verdade (useSetOpenApp num useEffect, com a aba
+// como estado local repassado via onTabChange) sem puxar a tela inteira (com seu próprio fetch
+// de toggles/hierarquia) pra este teste de shell.
 function FakeOpenAppScreen({ name, toggleCount, hasSecretKey }: { name: string; toggleCount: number; hasSecretKey: boolean }) {
   const setOpenApp = useSetOpenApp();
+  const [tab, setTab] = useState<ApplicationDetailTab>("toggles");
   useEffect(() => {
-    setOpenApp({ name, toggleCount, hasSecretKey });
+    setOpenApp({ name, toggleCount, hasSecretKey, tab, onTabChange: setTab });
     return () => setOpenApp(null);
-  }, [name, toggleCount, hasSecretKey, setOpenApp]);
+  }, [name, toggleCount, hasSecretKey, tab, setOpenApp]);
   return <div>App detail content</div>;
 }
 
@@ -369,6 +372,34 @@ describe("AppShell", () => {
     const togglesLink = screen.getByRole("button", { name: /toggles/i });
     expect(togglesLink).toHaveTextContent("5");
     expect(screen.getByRole("button", { name: /service key/i }).querySelector(".key-active-dot")).toBeInTheDocument();
+  });
+
+  it("switches the sub-nav active tab and the breadcrumb's 3rd level when 'Service key' is clicked, and back when the app-name crumb is clicked", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+      )
+    );
+    const user = userEvent.setup();
+
+    renderShell("/applications/app1");
+    await screen.findByText("App detail content");
+
+    const togglesTab = screen.getByRole("button", { name: /toggles/i });
+    const keysTab = screen.getByRole("button", { name: /service key/i });
+    expect(togglesTab).toHaveClass("active");
+    expect(keysTab).not.toHaveClass("active");
+    expect(screen.getByText("Toggles", { selector: ".c.now" })).toBeInTheDocument();
+
+    await user.click(keysTab);
+    expect(keysTab).toHaveClass("active");
+    expect(togglesTab).not.toHaveClass("active");
+    expect(screen.getByText("Service key", { selector: ".c.now" })).toBeInTheDocument();
+
+    await user.click(screen.getByText("Billing Service", { selector: ".c.link" }));
+    expect(togglesTab).toHaveClass("active");
+    expect(screen.getByText("Toggles", { selector: ".c.now" })).toBeInTheDocument();
   });
 
   it("hides the sidebar sub-navigation once the route leaves the open application", async () => {

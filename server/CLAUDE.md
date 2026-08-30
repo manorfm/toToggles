@@ -650,11 +650,15 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       #OpenAppInfo = {name, toggleCount, hasSecretKey}`), consumido tanto pelo 3º nível do
       breadcrumb quanto por esta sub-nav — um único ponto de verdade em vez de dois mecanismos
       paralelos. `useSetBreadcrumbApp` foi renomeado pra `useSetOpenApp`
-      (`hooks/useSetOpenApp.ts`). Os dois itens de nav são **âncoras de scroll reais**
+      (`hooks/useSetOpenApp.ts`). Os dois itens de nav eram **âncoras de scroll reais**
       (`document.getElementById("toggles-section"|"service-key-section")?.scrollIntoView(...)`),
-      não um fake de estado de aba — nossa página empilha as duas seções (Toggles e Service key)
-      numa página só, sem tabs de verdade pra imitar o `setTab("toggles"|"keys")` do protótipo.
-      `hasSecretKey` vem de `SecretKeySection` via um novo callback opcional
+      um fake de estado de aba deliberado — nessa fase, a página ainda empilhava as duas seções
+      (Toggles e Service key) numa página só, sem tabs de verdade pra imitar o
+      `setTab("toggles"|"keys")` do protótipo. **Superado numa fase posterior**: virou aba de
+      verdade (`OpenAppInfo#tab`/`onTabChange`) — ver o bullet sobre isso em "Detalhe de
+      aplicação" acima, achado numa auditoria pedida pelo usuário que apontou exatamente essa
+      lacuna (a sub-nav nunca marcava "Service key" como ativa). `hasSecretKey` vem de
+      `SecretKeySection` via um novo callback opcional
       `onKeyPresenceChange?: (hasKey: boolean) => void` — mantém `SecretKeySection` como único
       dono do fetch de `GET /secret-keys` (não duplica a chamada em `ApplicationDetailScreen`).
       Também trouxe de volta pro `Icon.tsx` o path confirmado de `"layers"` (usado no item
@@ -835,6 +839,39 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     isso nunca é alcançável por aqui, mas continua valendo pra API em si. Deletar a folha funciona e
     ainda faz bubble-up: se isso deixa o pai sem filhos, o pai também é removido — testado ao vivo
     (`payments.card` → apagar `card` → `payments` some sozinho também).
+  - **Reescrito de página empilhada pra duas abas de verdade, achado numa auditoria pedida pelo
+    usuário** ("a tela de toggles está diferente do protótipo" e "a tela de service key parece
+    que hoje não existe, está a mesma de toggle"). Uma fase anterior tinha empilhado Toggles e
+    Service key numa página só, com a sub-nav da sidebar fazendo `scrollIntoView` até
+    `#toggles-section`/`#service-key-section` — o item "Toggles" ficava **hardcoded como
+    `"nav-item active"`**, então nada na UI indicava visualmente que você tinha "trocado de
+    tela" ao clicar em "Service key" (só rolava a mesma página). O `app.jsx` real (decodificado
+    do bundle v2.3) confirma que `ApplicationDetail` é `tab === "toggles" | "keys"` de verdade —
+    nunca as duas visíveis ao mesmo tempo, cabeçalho (descrição + contador "N/total active" +
+    botão "New toggle") condicional por aba, sub-nav e o 2º nível do breadcrumb TROCAM a aba
+    (`setTab`), não fazem scroll. Portado 1:1: `hooks/useAppUser.ts#OpenAppInfo` ganhou `tab` +
+    `onTabChange` (a fonte real do estado continua em `ApplicationDetailScreen`, repassada pro
+    `AppShell` do mesmo jeito que `hasSecretKey` já era); `AppCard`'s clique na faixa de chave
+    virou `navigate(".../applications/:id?tab=keys")` em vez de um hash, lido uma vez no mount
+    (`useSearchParams`) pra semear a aba inicial. As duas seções continuam montadas o tempo todo
+    (`hidden`, não desmontadas ao trocar de aba) — não porque o protótipo faça isso (lá é troca de
+    JSX renderizado, sem DOM escondido), mas porque `SecretKeySection` precisa continuar sendo o
+    único dono do fetch de `GET /secret-keys` mesmo com o usuário na aba Toggles (o indicador
+    `.key-active-dot` da sub-nav depende disso independente da aba ativa) — refazer esse fetch a
+    cada troca de aba seria um retrocesso real de performance sem ganho nenhum.
+  - **`SecretKeySection` reconstruído a partir do `KeysView` real** (mesmo decode) — a versão
+    anterior era só um badge + botões numa linha, bem mais simples que o confirmado: `.keys-head`
+    (título + hint "Shown only once when generated..." + "Rotate key" quando já existe chave),
+    estado vazio ilustrado (`.key-empty`, ícone 54px + título + descrição + CTA primário), card da
+    chave (`.key-single`, ícone + nome + "Created {data}" + botão Revoke) e o card "Lost the
+    key?" (`.key-lost`, CTA de regenerar). **Uma linha do protótipo foi deliberadamente omitida**:
+    `.key-masked-row`, que mostra a chave mascarada (`sk_live_••••••••1a2b`) — não existe backend
+    nenhum pra isso (`entity.SecretKey` não guarda nem os últimos 4 caracteres, só o hash SHA-256
+    completo, `json:"-"`); fabricar pontos genéricos fingindo ser a chave real seria inventar dado
+    que não existe, então a linha inteira foi omitida em vez de simulada. Pelo mesmo motivo,
+    "Last used {data}" no meta da chave também ficou de fora — não há tracking de último uso no
+    backend, só `created_at`. Ganhou o glifo `"refresh"` em `Icon.tsx` (confirmado no `icons.jsx`
+    real do mesmo bundle v2.3), usado tanto no botão "Rotate key" quanto em "Generate new key".
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

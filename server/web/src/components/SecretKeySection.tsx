@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { deleteSecretKey, generateSecretKey, listSecretKeys } from "../api/secretKeys";
 import { ApiError } from "../api/client";
 import { GeneratedKeyModal } from "./GeneratedKeyModal";
+import { Icon } from "./Icon";
 import { useToast } from "./ToastProvider";
 import type { SecretKey } from "../types/secretKey";
 
@@ -76,37 +77,75 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
     }
   }
 
+  const hasKey = state.status === "loaded" && !!state.key;
+
   return (
     <div>
-      <div className="section-h">Service key</div>
+      <div className="keys-head">
+        <div>
+          <div className="section-h">Service key</div>
+          <div className="field-hint" style={{ marginTop: 5 }}>
+            One secret key per application. Shown only once when generated — cannot be retrieved later.
+          </div>
+        </div>
+        {hasKey && canManage && (
+          <button className="btn btn-soft btn-sm" onClick={handleGenerate} disabled={busy}>
+            <Icon name="refresh" size={14} /> Rotate key
+          </button>
+        )}
+      </div>
 
       {state.status === "loading" && <div className="empty-ph">Carregando…</div>}
       {state.status === "error" && <div className="field-hint" style={{ color: "var(--danger)" }}>{state.message}</div>}
 
       {state.status === "loaded" && !state.key && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div className="field-hint">Nenhuma chave gerada ainda.</div>
+        <div className="key-empty">
+          <div className="key-empty-icon">
+            <Icon name="key" size={28} />
+          </div>
+          <div className="key-empty-t">No service key</div>
+          <div className="key-empty-d">Generate a secret key to connect your services to this application.</div>
           {canManage && (
-            <button className="btn btn-soft btn-sm" onClick={handleGenerate} disabled={busy}>
-              Generate key
+            <button className="btn btn-primary" style={{ marginTop: 22 }} onClick={handleGenerate} disabled={busy}>
+              <Icon name="plus" size={16} /> Generate service key
             </button>
           )}
         </div>
       )}
 
       {state.status === "loaded" && state.key && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span className="badge mono">{state.key.name}</span>
-          {canManage && (
-            <>
-              <button className="btn btn-soft btn-sm" onClick={handleGenerate} disabled={busy}>
-                Regenerate
-              </button>
+        <div className="key-single">
+          <div className="key-single-head">
+            <div className="ks-icon">
+              <Icon name="key" size={17} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="ks-name">{state.key.name}</div>
+              <div className="ks-meta">Created {new Date(state.key.created_at).toLocaleDateString()}</div>
+            </div>
+            {canManage && (
               <button className="btn btn-danger btn-sm" onClick={() => handleDelete(state.key!.id)} disabled={busy}>
-                Delete
+                <Icon name="trash" size={14} /> Revoke
               </button>
-            </>
-          )}
+            )}
+          </div>
+        </div>
+      )}
+
+      {state.status === "loaded" && state.key && canManage && (
+        <div className="key-lost">
+          <div className="key-lost-icon">
+            <Icon name="refresh" size={16} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="key-lost-t">Lost the key?</div>
+            <div className="key-lost-d">
+              Generate a new one. The current key is revoked immediately and any service still using it loses access.
+            </div>
+          </div>
+          <button className="btn btn-soft btn-sm" onClick={handleGenerate} disabled={busy}>
+            <Icon name="key" size={14} /> Generate new key
+          </button>
         </div>
       )}
 

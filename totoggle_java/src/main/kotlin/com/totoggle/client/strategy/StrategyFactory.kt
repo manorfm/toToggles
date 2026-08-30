@@ -129,7 +129,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
         return try {
             val strategy = getStrategy(rule.type)
             strategy.evaluate(rule, parameter)
-        } catch (e: StrategyNotFoundException) {
+        } catch (_: StrategyNotFoundException) {
             logger.warn("Strategy not found for rule type '{}', returning false", rule.type)
             false
         } catch (e: Exception) {

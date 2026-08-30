@@ -42,10 +42,10 @@ import { UserMenu } from "./UserMenu";
 // Sub-navegação da aplicação aberta — confirmada no app.jsx real como um `<div className=
 // "nav-label">{app.name}</div>` seguido de dois nav-items ("Toggles" com contador de
 // `stats.total`, "Service key" com um indicador `.key-active-dot` quando existe chave ativa),
-// que trocam de ABA dentro da mesma view (`setTab("toggles"|"keys")`). Nossa tela não tem essa
-// separação em abas — Toggles e Service key ficam empilhados numa página só — então os dois
-// itens aqui viram âncoras de scroll reais (`#toggles-section`/`#service-key-section`) em vez de
-// fingir um estado de aba que não existe.
+// que trocam de ABA dentro da mesma view (`setTab("toggles"|"keys")`) — ApplicationDetailScreen
+// virou aba de verdade (ver o comentário no topo desse arquivo) numa fase anterior que só tinha
+// as duas seções empilhadas numa página só, com âncoras de scroll fingindo um estado de aba que
+// não existia. `openApp.tab`/`openApp.onTabChange` (ver hooks/useAppUser.ts) são a fonte real.
 const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean; adminOrRoot?: boolean; icon: IconName; alwaysShowCount?: boolean }[] = [
   { to: "/", label: "Applications", end: true, icon: "apps", alwaysShowCount: true },
   { to: "/teams", label: "Teams & people", rootOnly: true, icon: "users", alwaysShowCount: true },
@@ -56,20 +56,24 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean;
 
 // Breadcrumb no topo do conteúdo — confirmado no app.jsx real como uma trilha
 // (.crumbs > .c.link "Applications" sempre clicável + .sep "/" + .c.now por seção), não um
-// rótulo único. Dentro de uma aplicação aberta, o confirmado é 3 níveis
-// ("Applications / {app.name} / Toggles") — o nome vem de `openApp`, que ApplicationDetailScreen
+// rótulo único. Dentro de uma aplicação aberta, o confirmado é 3 níveis ("Applications /
+// {app.name} / Toggles" ou ".../Service key", dependendo da aba ativa) — o 2º nível
+// (`{app.name}`) é clicável e volta pra aba Toggles (`onClick={() => setTab("toggles")}` no
+// protótipo real), o 3º nunca é. Os dados vêm de `openApp`, que ApplicationDetailScreen
 // preenche via useSetOpenApp assim que carrega a aplicação (ver hooks/useAppUser.ts#AppShellContext).
-function Crumbs({ pathname, onHome, openAppName }: { pathname: string; onHome: () => void; openAppName: string | null }) {
-  if (pathname.startsWith("/applications/") && openAppName) {
+function Crumbs({ pathname, onHome, openApp }: { pathname: string; onHome: () => void; openApp: OpenAppInfo | null }) {
+  if (pathname.startsWith("/applications/") && openApp) {
     return (
       <div className="crumbs">
         <button className="c link" onClick={onHome}>
           Applications
         </button>
         <span className="sep">/</span>
-        <span className="c link">{openAppName}</span>
+        <button className="c link" onClick={() => openApp.onTabChange("toggles")}>
+          {openApp.name}
+        </button>
         <span className="sep">/</span>
-        <span className="c now">Toggles</span>
+        <span className="c now">{openApp.tab === "keys" ? "Service key" : "Toggles"}</span>
       </div>
     );
   }
@@ -261,14 +265,14 @@ export function AppShell() {
             <>
               <div className="nav-label">{openApp.name}</div>
               <button
-                className="nav-item active"
-                onClick={() => document.getElementById("toggles-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className={"nav-item" + (openApp.tab === "toggles" ? " active" : "")}
+                onClick={() => openApp.onTabChange("toggles")}
               >
                 <Icon name="layers" size={17} /> Toggles <span className="count">{openApp.toggleCount}</span>
               </button>
               <button
-                className="nav-item"
-                onClick={() => document.getElementById("service-key-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className={"nav-item" + (openApp.tab === "keys" ? " active" : "")}
+                onClick={() => openApp.onTabChange("keys")}
               >
                 <Icon name="key" size={17} /> Service key
                 {openApp.hasSecretKey && <span className="count key-active-dot">●</span>}
@@ -309,7 +313,7 @@ export function AppShell() {
           <button className="btn btn-icon btn-soft nav-burger" aria-label="Menu" onClick={() => setNavOpen(true)}>
             <Icon name="menu" size={18} />
           </button>
-          <Crumbs pathname={location.pathname} onHome={() => navigate("/")} openAppName={openApp?.name ?? null} />
+          <Crumbs pathname={location.pathname} onHome={() => navigate("/")} openApp={openApp} />
         </div>
         <Outlet context={{ user, setOpenApp }} />
       </main>
