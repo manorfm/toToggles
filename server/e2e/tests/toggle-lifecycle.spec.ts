@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { createToggle, ensureSwitchOff, ensureSwitchOn, goToApprovalSettings } from "../helpers";
+import { createToggle, ensureSwitchOff, ensureSwitchOn, goToApprovalSettings, modalButton } from "../helpers";
 
 // Cada teste cria seu PRÓPRIO toggle (via API, como root) em vez de reusar a fixture
 // compartilhada — vários specs neste suite mexem/apagam toggles no mesmo servidor/banco
@@ -191,7 +191,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await adminPage.goto(`/applications/${fixtures.appId}`);
     await adminPage.getByRole("switch", { name: "e2e.delete.direct" }).waitFor();
     await adminPage.locator(".tg-card", { hasText: "e2e.delete.direct" }).getByRole("button", { name: "Delete", exact: true }).click();
-    await adminPage.locator(".modal", { hasText: "Delete toggle" }).getByRole("button", { name: "Delete", exact: true }).click();
+    await modalButton(adminPage, "Delete", { dialogTitle: "Delete toggle" }).click();
 
     await expect(adminPage.getByRole("switch", { name: "e2e.delete.direct" })).toHaveCount(0);
 
@@ -213,7 +213,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await adminPage.goto(`/applications/${fixtures.appId}`);
     await adminPage.getByRole("switch", { name: "e2e.delete.approved" }).waitFor();
     await adminPage.locator(".tg-card", { hasText: "e2e.delete.approved" }).getByRole("button", { name: "Delete", exact: true }).click();
-    await adminPage.locator(".modal", { hasText: "Delete toggle" }).getByRole("button", { name: "Delete", exact: true }).click();
+    await modalButton(adminPage, "Delete", { dialogTitle: "Delete toggle" }).click();
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
     await expect(adminPage.getByRole("switch", { name: "e2e.delete.approved" })).toBeVisible(); // ainda não apagou

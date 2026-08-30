@@ -33,6 +33,20 @@ describe("EditToggleDrawer", () => {
     expect(screen.getByText(/^enabled$/i)).toBeInTheDocument();
   });
 
+  // Achado escrevendo e2e (cascade.spec.ts): este switch não tinha role/aria-label nenhum —
+  // só dava pra selecionar por classe CSS (".row-control .switch"), diferente de todo outro
+  // switch do app (ToggleCard, ApprovalSettingsPanel, MemberRow, UserModal, o de "Activation
+  // rule" logo abaixo deste). Gap de acessibilidade real, não só de teste.
+  it("exposes the status switch with a real role and accessible name", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    await screen.findByText("payments.card");
+
+    const statusSwitch = screen.getByRole("switch", { name: /status/i });
+    expect(statusSwitch).toHaveAttribute("aria-checked", "true");
+  });
+
   it("shows a cascade warning when the toggle has children", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 

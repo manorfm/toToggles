@@ -25,6 +25,21 @@ export async function goToApprovalSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings" }).click();
 }
 
+// Padroniza a desambiguação "botão que abre um modal" vs. "botão de confirmar dentro do modal" —
+// vários fluxos reusam o mesmo texto pros dois (ex.: header "Criar usuário" + submit "Criar
+// usuário" em UserModal; "Add member" + "Add member" em AddMemberModal), o que já causou
+// violações de strict mode escritas ad hoc, cada spec inventando sua própria forma de escopar
+// (`.modal`, filtros de div, etc.). `data-testid="modal-scrim"` (components/Modal.tsx) é o único
+// data-testid do app — usado aqui de propósito como o único ponto de escopo pra "dentro do modal
+// aberto agora", já que o app nunca abre mais de um simultaneamente. `dialogTitle` é opcional e
+// só serve pra também confirmar QUAL modal está aberto (ex. distinguir "Delete toggle" de
+// "Delete application", ambos com um botão "Delete").
+export function modalButton(page: Page, name: string, options?: { dialogTitle?: string }): Locator {
+  const scrim = page.getByTestId("modal-scrim");
+  const scope = options?.dialogTitle ? scrim.filter({ hasText: options.dialogTitle }) : scrim;
+  return scope.getByRole("button", { name, exact: true });
+}
+
 // Cria um toggle novo e dedicado (não a fixture compartilhada) via API, como root — evita que
 // specs que mutam/apagam um toggle (disable, delete) interfiram entre si num full-suite run,
 // já que todos os arquivos de teste compartilham um único servidor/banco por invocação.

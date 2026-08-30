@@ -24,6 +24,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      # Warms the module + build cache (including the CGO compile of mattn/go-sqlite3, which is
+      # slow from cold) as its own uncapped step — Playwright's webServer just does `go run
+      # main.go` and waits for /health, and that wait has a timeout; paying the first-compile
+      # cost here instead avoids racing a slow cold build against that timeout.
+      - name: Warm Go build cache
+        run: go build ./...
 
       # Matches the node:20-alpine image used by server/Dockerfile's frontend-builder stage.
       - uses: actions/setup-node@v4

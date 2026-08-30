@@ -35,7 +35,14 @@ export default defineConfig({
     command: "go run main.go",
     cwd: "../",
     url: `${E2E_BASE_URL}/health`,
-    timeout: 30_000,
+    // `go run` recompila do zero se o cache de módulos/build do Go estiver frio — o driver
+    // sqlite (mattn/go-sqlite3) é CGO, e sua primeira compilação sozinha já pode passar de 30s
+    // num runner de CI, o que faria essa espera por /health estourar antes do binário sequer
+    // subir. CI já roda um `go build ./...` antes deste passo pra aquecer o cache (ver
+    // .github/workflows/e2e.yml), mas o timeout aqui fica generoso mesmo assim, como rede de
+    // segurança pra qualquer ambiente com cache frio (inclusive a primeira vez que alguém roda
+    // localmente).
+    timeout: 120_000,
     // Sempre false, de propósito: DB_PATH aponta pra um diretório temp novo calculado a cada
     // invocação deste config, então reusar um servidor já rodando (de uma run anterior, outro
     // DB_PATH) apontaria os testes pro banco errado — o custo de recompilar via `go run` a cada

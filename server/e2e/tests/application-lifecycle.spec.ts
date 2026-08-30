@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { ensureSwitchOff, ensureSwitchOn, goToApprovalSettings } from "../helpers";
+import { ensureSwitchOff, ensureSwitchOn, goToApprovalSettings, modalButton } from "../helpers";
 
 test.describe("application lifecycle — create", () => {
   test("without approval: applies immediately", async ({ browser }) => {
@@ -144,7 +144,7 @@ test.describe("application lifecycle — delete", () => {
       .getByRole("button", { name: "Edit application" })
       .click();
     await rootPage.getByRole("button", { name: "Delete", exact: true }).click();
-    await rootPage.locator(".modal", { hasText: "Delete application" }).getByRole("button", { name: "Delete", exact: true }).click();
+    await modalButton(rootPage, "Delete", { dialogTitle: "Delete application" }).click();
 
     await expect(rootPage.locator(".card.click", { hasText: "E2E Delete Target Direct" })).toHaveCount(0);
 

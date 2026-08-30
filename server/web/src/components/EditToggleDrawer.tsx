@@ -102,7 +102,13 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
                   Status
                 </div>
                 <div className="row-control">
-                  <button className={"switch lg" + (enabled ? " on" : "")} onClick={() => setEnabled(!enabled)} />
+                  <button
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label="Status"
+                    className={"switch lg" + (enabled ? " on" : "")}
+                    onClick={() => setEnabled(!enabled)}
+                  />
                   <div className="t">
                     <div className="tt">{enabled ? "Enabled" : "Disabled"}</div>
                     <div className="td">When off, this toggle and everything beneath it goes inactive.</div>
