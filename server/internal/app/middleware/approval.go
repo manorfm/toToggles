@@ -54,7 +54,7 @@ func ApprovalAware(approvalUseCase *usecase.ApprovalUseCase, requiredRole entity
 
 		// Sistema habilitado - verificar se a ação requer aprovação
 		actionType := getActionType(c)
-		
+
 		required, err := approvalUseCase.RequiresApproval(ctx, actionType)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "error checking approval requirements"))
@@ -74,18 +74,28 @@ func ApprovalAware(approvalUseCase *usecase.ApprovalUseCase, requiredRole entity
 		}
 
 		// Aprovação necessária - criar solicitação de aprovação
-		err = createApprovalRequest(c, approvalUseCase, user, actionType)
+		request, err := createApprovalRequest(c, approvalUseCase, user, actionType)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "failed to create approval request: "+err.Error()))
 			c.Abort()
 			return
 		}
 
-		c.JSON(http.StatusAccepted, gin.H{
-			"message": "action requires approval",
+		response := gin.H{
+			"message":           "action requires approval",
 			"approval_required": true,
-			"action_type": actionType,
-		})
+			"action_type":       actionType,
+		}
+		// secret_key_create: quem pediu pode pegar a chave e configurar o serviço já — ela só
+		// fica válida pra autenticação depois de aprovada (SecretKey.Active), mas não há motivo
+		// pra fazer o requester esperar a aprovação pra ter o valor em mãos. Ver
+		// ApprovalUseCase.CreateApprovalRequest (gera a chave já aqui) e RejectRequest (apaga
+		// fisicamente o registro se a solicitação for rejeitada).
+		if request != nil && request.PlainSecretKey != "" {
+			response["plain_key"] = request.PlainSecretKey
+			response["warning"] = "This key will only be shown once. Please store it securely. It will not work until the request is approved."
+		}
+		c.JSON(http.StatusAccepted, response)
 		c.Abort()
 	}
 }
@@ -175,25 +185,27 @@ func getActionType(c *gin.Context) entity.ApprovalActionType {
 	}
 }
 
-// createApprovalRequest cria uma solicitação de aprovação baseada na requisição HTTP
-func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, user *entity.User, actionType entity.ApprovalActionType) error {
+// createApprovalRequest cria uma solicitação de aprovação baseada na requisição HTTP. Devolve o
+// ApprovalRequest criado (não só erro) porque secret_key_create precisa repassar a chave em texto
+// puro pra quem pediu — ver ApprovalRequest.PlainSecretKey e o caso especial logo abaixo.
+func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, user *entity.User, actionType entity.ApprovalActionType) (*entity.ApprovalRequest, error) {
 	ctx := context.Background()
-	
+
 	// Capturar dados da requisição
 	var actionData interface{}
 	var applicationID *string
 	var toggleID *string
 	var description string
-	
+
 	// Ler o corpo da requisição
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	
+
 	// Restaurar o corpo da requisição para futuras leituras
 	c.Request.Body = io.NopCloser(strings.NewReader(string(body)))
-	
+
 	// Processar dados baseado no tipo de ação
 	switch actionType {
 	case entity.ApprovalActionToggleCreate:
@@ -202,7 +214,7 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		if appID != "" {
 			applicationID = &appID
 		}
-		
+
 		// Deserializar dados do toggle
 		var toggleData struct {
 			Toggle string `json:"toggle"`
@@ -211,7 +223,7 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 			actionData = toggleData
 			description = "Create toggle: " + toggleData.Toggle
 		}
-		
+
 	case entity.ApprovalActionToggleUpdate:
 		// Extrair IDs da URL
 		appID := c.Param("id")
@@ -222,14 +234,14 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		if tgID != "" {
 			toggleID = &tgID
 		}
-		
+
 		// Usar dados da requisição como estão
 		var updateData map[string]interface{}
 		if err := json.Unmarshal(body, &updateData); err == nil {
 			actionData = updateData
 			description = "Update toggle"
 		}
-		
+
 	case entity.ApprovalActionToggleDelete:
 		// Extrair IDs da URL
 		appID := c.Param("id")
@@ -241,7 +253,7 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 			toggleID = &tgID
 		}
 		description = "Delete toggle"
-		
+
 	case entity.ApprovalActionApplicationCreate:
 		// PUT /applications/:id (edição) cai no mesmo action_type de criação — não existe
 		// application_update (docs/rest-flow.md §9.1). Só a presença de :id na URL distingue os
@@ -309,7 +321,6 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		}
 		actionData = map[string]interface{}{
 			"application_id": appID,
-			"regenerate":     true, // generate-secret sempre regenera, nunca há múltiplas chaves ativas
 		}
 		description = "Generate secret key"
 
@@ -328,15 +339,15 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 	default:
 		description = "Unknown action"
 	}
-	
+
 	// Determinar teamID dinamicamente baseado na ação
 	teamID, err := determineTeamID(c, approvalUseCase, actionType, applicationID, user.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	
+
 	// Criar a solicitação de aprovação
-	_, err = approvalUseCase.CreateApprovalRequest(
+	request, err := approvalUseCase.CreateApprovalRequest(
 		ctx,
 		actionType,
 		description,
@@ -346,14 +357,14 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		toggleID,
 		actionData,
 	)
-	
-	return err
+
+	return request, err
 }
 
 // determineTeamID determina qual team ID usar para a solicitação de aprovação
 func determineTeamID(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, actionType entity.ApprovalActionType, applicationID *string, userID string) (string, error) {
 	ctx := context.Background()
-	
+
 	switch actionType {
 	case entity.ApprovalActionToggleCreate, entity.ApprovalActionToggleUpdate, entity.ApprovalActionToggleDelete,
 		entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable, entity.ApprovalActionToggleRule:

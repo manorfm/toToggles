@@ -12,13 +12,25 @@ import (
 )
 
 type SecretKey struct {
-	ID            string      `json:"id" gorm:"primaryKey;type:varchar(26)"`
-	Name          string      `json:"name" gorm:"not null;type:varchar(100)"` // Nome descritivo da chave
-	KeyHash       string      `json:"-" gorm:"not null;type:varchar(64);uniqueIndex"` // SHA256 hash da chave
-	ApplicationID string      `json:"application_id" gorm:"not null;type:varchar(26)"`
-	CreatedBy     string      `json:"created_by" gorm:"not null;type:varchar(26)"` // ID do usuário que criou
-	CreatedAt     time.Time   `json:"created_at"`
-	UpdatedAt     time.Time   `json:"updated_at"`
+	ID            string `json:"id" gorm:"primaryKey;type:varchar(26)"`
+	Name          string `json:"name" gorm:"not null;type:varchar(100)"`         // Nome descritivo da chave
+	KeyHash       string `json:"-" gorm:"not null;type:varchar(64);uniqueIndex"` // SHA256 hash da chave
+	ApplicationID string `json:"application_id" gorm:"not null;type:varchar(26)"`
+	CreatedBy     string `json:"created_by" gorm:"not null;type:varchar(26)"` // ID do usuário que criou
+	// Active é false enquanto a chave foi criada por um secret_key_create que ainda está pendente
+	// de aprovação — o registro (hash incluso) já existe pra que a chave em texto puro possa ser
+	// entregue a quem pediu na hora (ver ApprovalUseCase.CreateApprovalRequest), mas
+	// ValidateSecretKey recusa chaves inativas, então ela não autentica nada até ser aprovada.
+	// Sempre true fora do fluxo de aprovação (ver SecretKeyUseCase.CreateSecretKey). SEM a tag
+	// `default:` de propósito: GORM omite do INSERT qualquer campo com tag `default` cujo valor Go
+	// seja o zero-value do tipo — `false` é o zero-value de bool, então marcar a coluna com
+	// `default:true` faria toda tentativa de criar já como Active:false (o caso justamente mais
+	// importante aqui) ser silenciosamente sobrescrita pelo default da coluna. O código sempre
+	// define Active explicitamente (createSecretKey), então não depende do default da coluna; ele
+	// só existe na migration como salvaguarda pras linhas legadas de antes desta coluna existir.
+	Active    bool      `json:"active" gorm:"not null"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Relacionamentos
 	Application Application `json:"application,omitempty" gorm:"foreignKey:ApplicationID"`
@@ -32,7 +44,6 @@ func (sk *SecretKey) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
-
 
 // GenerateSecretKey gera uma nova chave secreta segura
 func GenerateSecretKey() (string, error) {

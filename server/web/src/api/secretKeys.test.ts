@@ -62,7 +62,23 @@ describe("generateSecretKey", () => {
 
     const result = await generateSecretKey("app1");
 
-    expect(result).toEqual({ kind: "pending_approval", actionType: "secret_key_create" });
+    expect(result).toEqual({ kind: "pending_approval", actionType: "secret_key_create", plainKey: undefined });
+  });
+
+  // O registro da chave já existe (inativo) na hora da solicitação — plain_key vem junto no 202
+  // pra que quem pediu tenha a única chance de vê-la (ver server/CLAUDE.md e
+  // ApprovalUseCase.CreateApprovalRequest).
+  it("passes through plain_key on a 202 so the requester can still see the key once", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(202, { approval_required: true, action_type: "secret_key_create", plain_key: "sk_pending123" })
+      )
+    );
+
+    const result = await generateSecretKey("app1");
+
+    expect(result).toEqual({ kind: "pending_approval", actionType: "secret_key_create", plainKey: "sk_pending123" });
   });
 });
 

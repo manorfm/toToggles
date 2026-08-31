@@ -88,7 +88,7 @@ func TestDisableToggleBySecret_UnknownPath(t *testing.T) {
 
 	app := &entity.Application{ID: "app-a", Name: "App A"}
 	db.Create(app)
-	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id", Active: true}
 	plainKey, _ := secretKey.SetSecretKey()
 	db.Create(secretKey)
 
@@ -112,7 +112,7 @@ func TestDisableToggleBySecret_CrossApplicationPath_NotFound(t *testing.T) {
 	db.Create(appA)
 	db.Create(appB)
 
-	keyA := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	keyA := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id", Active: true}
 	plainKeyA, _ := keyA.SetSecretKey()
 	db.Create(keyA)
 
@@ -138,7 +138,7 @@ func TestDisableToggleBySecret_Success(t *testing.T) {
 
 	app := &entity.Application{ID: "app-a", Name: "App A"}
 	db.Create(app)
-	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id", Active: true}
 	plainKey, _ := secretKey.SetSecretKey()
 	db.Create(secretKey)
 	toggle := &entity.Toggle{ID: "toggle-a", Path: "feature.rollout", Enabled: true, AppID: "app-a", Value: "rollout", Level: 1}
@@ -163,7 +163,7 @@ func TestDisableToggleBySecret_IdempotentWhenAlreadyDisabled(t *testing.T) {
 
 	app := &entity.Application{ID: "app-a", Name: "App A"}
 	db.Create(app)
-	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id"}
+	secretKey := &entity.SecretKey{ID: "key-a", Name: "Key A", ApplicationID: "app-a", CreatedBy: "test-user-id", Active: true}
 	plainKey, _ := secretKey.SetSecretKey()
 	db.Create(secretKey)
 	toggle := &entity.Toggle{ID: "toggle-a", Path: "feature.rollout", Enabled: false, AppID: "app-a", Value: "rollout", Level: 1}
@@ -292,6 +292,7 @@ func TestGetTogglesBySecret_ValidSecret(t *testing.T) {
 		Name:          "Test Secret",
 		ApplicationID: "test-app-id",
 		CreatedBy:     "test-user-id",
+		Active:        true,
 	}
 	plainKey, _ := secretKey.SetSecretKey()
 	db.Create(secretKey)

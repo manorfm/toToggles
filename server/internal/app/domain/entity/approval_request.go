@@ -12,16 +12,16 @@ import (
 type ApprovalActionType string
 
 const (
-	ApprovalActionToggleCreate     ApprovalActionType = "toggle_create"
-	ApprovalActionToggleUpdate     ApprovalActionType = "toggle_update"
-	ApprovalActionToggleDelete     ApprovalActionType = "toggle_delete"
-	ApprovalActionToggleEnable     ApprovalActionType = "toggle_enable"
-	ApprovalActionToggleDisable    ApprovalActionType = "toggle_disable"
-	ApprovalActionToggleRule       ApprovalActionType = "toggle_rule"
+	ApprovalActionToggleCreate      ApprovalActionType = "toggle_create"
+	ApprovalActionToggleUpdate      ApprovalActionType = "toggle_update"
+	ApprovalActionToggleDelete      ApprovalActionType = "toggle_delete"
+	ApprovalActionToggleEnable      ApprovalActionType = "toggle_enable"
+	ApprovalActionToggleDisable     ApprovalActionType = "toggle_disable"
+	ApprovalActionToggleRule        ApprovalActionType = "toggle_rule"
 	ApprovalActionApplicationCreate ApprovalActionType = "application_create"
 	ApprovalActionApplicationDelete ApprovalActionType = "application_delete"
-	ApprovalActionSecretKeyCreate  ApprovalActionType = "secret_key_create"
-	ApprovalActionSecretKeyDelete  ApprovalActionType = "secret_key_delete"
+	ApprovalActionSecretKeyCreate   ApprovalActionType = "secret_key_create"
+	ApprovalActionSecretKeyDelete   ApprovalActionType = "secret_key_delete"
 )
 
 // ApprovalStatus define os status de uma solicitação de aprovação
@@ -36,28 +36,34 @@ const (
 
 // ApprovalRequest representa uma solicitação de aprovação
 type ApprovalRequest struct {
-	ID            string             `json:"id" gorm:"primaryKey;type:varchar(26)"`
-	ActionType    ApprovalActionType `json:"action_type" gorm:"not null;type:varchar(50)"`
-	Description   string             `json:"description" gorm:"type:varchar(500)"`
-	RequestedBy   string             `json:"requested_by" gorm:"not null;type:varchar(26)"` // User ID
-	TeamID        string             `json:"team_id" gorm:"not null;type:varchar(26)"`
-	ApplicationID *string            `json:"application_id" gorm:"type:varchar(26)"` // Pode ser null para ações gerais
-	ToggleID      *string            `json:"toggle_id" gorm:"type:varchar(26)"`      // Pode ser null para ações de aplicação
-	Status        ApprovalStatus     `json:"status" gorm:"not null;type:varchar(20);default:'pending'"`
-	ActionData      json.RawMessage `json:"action_data" gorm:"type:text"` // Dados da ação original em JSON
-	ActionedBy      *string         `json:"actioned_by" gorm:"type:varchar(26)"`     // User ID de quem aprovou/rejeitou
-	ActionedAt      *time.Time      `json:"actioned_at"`                             // Data da aprovação/rejeição
-	RejectionReason *string         `json:"rejection_reason" gorm:"type:varchar(500)"`
-	ExpiresAt     time.Time          `json:"expires_at" gorm:"not null"` // Expira automaticamente
-	CreatedAt     time.Time          `json:"created_at"`
-	UpdatedAt     time.Time          `json:"updated_at"`
+	ID              string             `json:"id" gorm:"primaryKey;type:varchar(26)"`
+	ActionType      ApprovalActionType `json:"action_type" gorm:"not null;type:varchar(50)"`
+	Description     string             `json:"description" gorm:"type:varchar(500)"`
+	RequestedBy     string             `json:"requested_by" gorm:"not null;type:varchar(26)"` // User ID
+	TeamID          string             `json:"team_id" gorm:"not null;type:varchar(26)"`
+	ApplicationID   *string            `json:"application_id" gorm:"type:varchar(26)"` // Pode ser null para ações gerais
+	ToggleID        *string            `json:"toggle_id" gorm:"type:varchar(26)"`      // Pode ser null para ações de aplicação
+	Status          ApprovalStatus     `json:"status" gorm:"not null;type:varchar(20);default:'pending'"`
+	ActionData      json.RawMessage    `json:"action_data" gorm:"type:text"`        // Dados da ação original em JSON
+	ActionedBy      *string            `json:"actioned_by" gorm:"type:varchar(26)"` // User ID de quem aprovou/rejeitou
+	ActionedAt      *time.Time         `json:"actioned_at"`                         // Data da aprovação/rejeição
+	RejectionReason *string            `json:"rejection_reason" gorm:"type:varchar(500)"`
+	ExpiresAt       time.Time          `json:"expires_at" gorm:"not null"` // Expira automaticamente
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
 
 	// Relacionamentos
-	Requester   *User        `json:"requester,omitempty" gorm:"foreignKey:RequestedBy"`
-	Team        *Team        `json:"team,omitempty" gorm:"foreignKey:TeamID"`
-	Application *Application `json:"application,omitempty" gorm:"foreignKey:ApplicationID"`
-	Toggle      *Toggle      `json:"toggle,omitempty" gorm:"foreignKey:ToggleID"`
-	ActionedUser *User       `json:"actioned_user,omitempty" gorm:"foreignKey:ActionedBy"`
+	Requester    *User        `json:"requester,omitempty" gorm:"foreignKey:RequestedBy"`
+	Team         *Team        `json:"team,omitempty" gorm:"foreignKey:TeamID"`
+	Application  *Application `json:"application,omitempty" gorm:"foreignKey:ApplicationID"`
+	Toggle       *Toggle      `json:"toggle,omitempty" gorm:"foreignKey:ToggleID"`
+	ActionedUser *User        `json:"actioned_user,omitempty" gorm:"foreignKey:ActionedBy"`
+
+	// PlainSecretKey é transiente (gorm:"-", nunca persistido) — só populado em memória pelo
+	// retorno de ApprovalUseCase.CreateApprovalRequest quando ActionType é secret_key_create, pra
+	// que o handler HTTP possa devolver a chave em texto puro a quem acabou de pedi-la (única
+	// oportunidade de vê-la: ninguém mais vai estar presente quando a solicitação for aprovada).
+	PlainSecretKey string `json:"-" gorm:"-"`
 }
 
 // BeforeCreate hook para gerar ID único
@@ -150,17 +156,17 @@ func (ar *ApprovalRequest) CanBeApprovedBy(userID string) bool {
 	if ar.RequestedBy == userID {
 		return false
 	}
-	
+
 	// Deve estar pendente
 	if ar.Status != ApprovalStatusPending {
 		return false
 	}
-	
+
 	// Não deve estar expirada
 	if ar.IsExpired() {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -223,10 +229,10 @@ func (ar *ApprovalRequest) Validate() error {
 // ApprovalRequestWithDetails representa uma solicitação com detalhes carregados
 type ApprovalRequestWithDetails struct {
 	*ApprovalRequest
-	RequesterName   string `json:"requester_name"`
-	TeamName        string `json:"team_name"`
-	ApplicationName string `json:"application_name,omitempty"`
-	TogglePath      string `json:"toggle_path,omitempty"`
+	RequesterName    string `json:"requester_name"`
+	TeamName         string `json:"team_name"`
+	ApplicationName  string `json:"application_name,omitempty"`
+	TogglePath       string `json:"toggle_path,omitempty"`
 	ActionedUserName string `json:"actioned_user_name,omitempty"`
 }
 
@@ -243,10 +249,10 @@ type ApprovalStatsResponse struct {
 
 // TeamApproverInfo representa informações de aprovador do time
 type TeamApproverInfo struct {
-	TeamID      string `json:"team_id"`
-	TeamName    string `json:"team_name"`
-	IsApprover  bool   `json:"is_approver"`
-	CanApprove  bool   `json:"can_approve"`
+	TeamID     string `json:"team_id"`
+	TeamName   string `json:"team_name"`
+	IsApprover bool   `json:"is_approver"`
+	CanApprove bool   `json:"can_approve"`
 }
 
 // GetActionTypeDisplayName retorna o nome amigável do tipo de ação
@@ -263,7 +269,7 @@ func GetActionTypeDisplayName(actionType ApprovalActionType) string {
 		ApprovalActionSecretKeyCreate:   "Criar Chave Secreta",
 		ApprovalActionSecretKeyDelete:   "Excluir Chave Secreta",
 	}
-	
+
 	if name, exists := names[actionType]; exists {
 		return name
 	}
@@ -278,7 +284,7 @@ func GetStatusDisplayName(status ApprovalStatus) string {
 		ApprovalStatusRejected: "Rejeitado",
 		ApprovalStatusExpired:  "Expirado",
 	}
-	
+
 	if name, exists := names[status]; exists {
 		return name
 	}

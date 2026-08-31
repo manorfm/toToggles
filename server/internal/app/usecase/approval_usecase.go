@@ -194,11 +194,37 @@ func (uc *ApprovalUseCase) CreateApprovalRequest(ctx context.Context, actionType
 		}
 	}
 
+	// secret_key_create: gerar a chave (hash + texto puro) JÁ AQUI, inativa — quem pediu recebe o
+	// valor em texto puro nesta resposta (única chance, ninguém mais vai estar presente quando a
+	// solicitação for aprovada) e pode configurar o serviço desde já; a chave só autentica de
+	// verdade depois de aprovada (ActivateAndRotateSecretKey na execução) ou é apagada
+	// fisicamente se rejeitada (ver RejectRequest). O ID da chave pendente viaja dentro de
+	// action_data pra a execução/rejeição saberem qual registro tratar.
+	var plainSecretKey string
+	if actionType == entity.ApprovalActionSecretKeyCreate {
+		if applicationID == nil {
+			return nil, errors.New("application ID is required for secret key creation")
+		}
+		pending, err := uc.secretKeyUseCase.CreatePendingSecretKey("API Access Key", *applicationID, requestedBy)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create pending secret key: %w", err)
+		}
+		plainSecretKey = pending.PlainTextKey
+
+		dataMap, ok := actionData.(map[string]interface{})
+		if !ok {
+			dataMap = map[string]interface{}{}
+		}
+		dataMap["secret_key_id"] = pending.SecretKey.ID
+		actionData = dataMap
+	}
+
 	// Criar solicitação
 	request, err := entity.NewApprovalRequest(actionType, description, requestedBy, teamID, applicationID, toggleID, actionData)
 	if err != nil {
 		return nil, err
 	}
+	request.PlainSecretKey = plainSecretKey
 
 	// Salvar no banco
 	if err := uc.approvalRequestRepo.Create(ctx, request); err != nil {
@@ -330,6 +356,20 @@ func (uc *ApprovalUseCase) RejectRequest(ctx context.Context, requestID string, 
 
 	if err := uc.approvalRequestRepo.Update(ctx, request); err != nil {
 		return err
+	}
+
+	// secret_key_create rejeitada: o registro da chave (criado inativo já na hora da
+	// solicitação, ver CreateApprovalRequest) é apagado FISICAMENTE do banco — nunca chegou a
+	// ficar válida, então não há razão pra manter o hash em lugar nenhum.
+	if request.ActionType == entity.ApprovalActionSecretKeyCreate {
+		var actionData struct {
+			SecretKeyID string `json:"secret_key_id"`
+		}
+		if err := request.GetActionDataAs(&actionData); err == nil && actionData.SecretKeyID != "" {
+			if err := uc.secretKeyUseCase.DeleteSecretKey(actionData.SecretKeyID); err != nil {
+				return fmt.Errorf("failed to delete rejected pending secret key: %w", err)
+			}
+		}
 	}
 
 	teamID := request.TeamID
@@ -754,42 +794,30 @@ func (uc *ApprovalUseCase) executeApplicationDeleteAction(ctx context.Context, r
 }
 
 func (uc *ApprovalUseCase) executeSecretKeyCreateAction(ctx context.Context, request *entity.ApprovalRequest) error {
-	// Deserializar action data
+	// A chave já foi criada (inativa) na hora da solicitação, ver CreateApprovalRequest — o valor
+	// em texto puro já foi entregue a quem pediu naquele momento. Executar esta ação só ATIVA o
+	// registro pendente e apaga qualquer outra chave da aplicação (uma app tem no máximo uma
+	// chave ativa por vez); nunca gera uma chave nova aqui, pois ninguém estaria presente pra
+	// copiá-la.
 	var actionData struct {
-		ApplicationID   string `json:"application_id"`
-		ApplicationName string `json:"application_name"`
-		Regenerate      bool   `json:"regenerate"`
+		ApplicationID string `json:"application_id"`
+		SecretKeyID   string `json:"secret_key_id"`
 	}
 
 	if err := request.GetActionDataAs(&actionData); err != nil {
 		return fmt.Errorf("failed to deserialize action data: %w", err)
 	}
 
-	// Verificar se a aplicação existe
 	if request.ApplicationID == nil {
 		return errors.New("application ID is required for secret key creation")
 	}
-
-	// Usar SecretKeyUseCase para gerar ou regenerar a chave
-	var err error
-
-	if actionData.Regenerate {
-		_, err = uc.secretKeyUseCase.RegenerateSecretKey(*request.ApplicationID, request.RequestedBy)
-	} else {
-		_, err = uc.secretKeyUseCase.CreateSecretKey("API Access Key", *request.ApplicationID, request.RequestedBy)
+	if actionData.SecretKeyID == "" {
+		return errors.New("pending secret key not found for this request")
 	}
 
-	if err != nil {
-		return fmt.Errorf("failed to create secret key: %w", err)
+	if err := uc.secretKeyUseCase.ActivateAndRotateSecretKey(actionData.SecretKeyID, *request.ApplicationID); err != nil {
+		return fmt.Errorf("failed to activate secret key: %w", err)
 	}
-
-	// Log da criação bem-sucedida (sem incluir a chave plana por segurança)
-	fmt.Printf("Secret key created successfully for application %s by user %s\n",
-		*request.ApplicationID, request.RequestedBy)
-
-	// Nota: A chave plana não é retornada aqui pois o usuário não estará presente
-	// para copiá-la. Em um sistema real, seria necessário notificar o usuário
-	// de alguma forma (email, notificação, etc.)
 
 	return nil
 }

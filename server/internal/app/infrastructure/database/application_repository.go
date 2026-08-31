@@ -121,7 +121,10 @@ func (r *ApplicationRepositoryImpl) GetAllWithToggleCounts() ([]*entity.Applicat
 
 	// has_secret_key via EXISTS subquery, não JOIN direto com secret_keys: um LEFT JOIN
 	// multiplicaria as linhas de toggles por chave (uma app pode ter mais de uma secret key),
-	// inflando COUNT/SUM acima mesmo com GROUP BY.
+	// inflando COUNT/SUM acima mesmo com GROUP BY. `sk.active = 1` de propósito: uma chave criada
+	// por um secret_key_create ainda pendente de aprovação existe no banco (inativa, ver
+	// entity.SecretKey.Active) mas não é "a chave da aplicação" pro indicador do AppCard até ser
+	// aprovada — mesmo raciocínio de SecretKeyUseCase.GetSecretKeysByApplicationID.
 	err := r.db.Table("applications").
 		Select(`
 			applications.id,
@@ -131,7 +134,7 @@ func (r *ApplicationRepositoryImpl) GetAllWithToggleCounts() ([]*entity.Applicat
 			COUNT(toggles.id) as total_toggles,
 			SUM(CASE WHEN toggles.enabled = 1 THEN 1 ELSE 0 END) as enabled_toggles,
 			SUM(CASE WHEN toggles.enabled = 0 THEN 1 ELSE 0 END) as disabled_toggles,
-			EXISTS(SELECT 1 FROM secret_keys sk WHERE sk.application_id = applications.id) as has_secret_key
+			EXISTS(SELECT 1 FROM secret_keys sk WHERE sk.application_id = applications.id AND sk.active = 1) as has_secret_key
 		`).
 		Joins("LEFT JOIN toggles ON applications.id = toggles.app_id").
 		Group("applications.id, applications.name, applications.created_at, applications.updated_at").

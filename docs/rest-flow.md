@@ -833,6 +833,32 @@ to have multiple concurrently valid keys per application through this endpoint.
 `plain_key` is never persisted or retrievable again — only its SHA-256 hash is stored (`key_hash`, which is
 never serialized in any response).
 
+**When approval is required for `secret_key_create`**, the `202` response below carries `plain_key` too — the
+key's row is created (hashed) immediately, at request time, not at execute time. This closes a real bug: the
+original design generated the key only inside `.../execute`, discarded the plaintext, and left a secret key
+that literally no one could ever retrieve. Now:
+
+```json
+{
+  "message": "action requires approval",
+  "approval_required": true,
+  "action_type": "secret_key_create",
+  "plain_key": "sk_9f1c...redacted...",
+  "warning": "This key will only be shown once. Please store it securely. It will not work until the request is approved."
+}
+```
+
+The row exists but is **inactive** (`secret_keys.active = false`) — `ValidateSecretKey` (the `X-API-Key`
+auth path used by `GET /api/toggles` and the kill switch) rejects it exactly like a nonexistent key, and it
+does not show up in `GET /api/applications/:id/secret-keys` either. The requester can copy the value and
+configure their service immediately; it just won't authenticate anything yet. Any previously-active key for
+the application keeps working unchanged throughout the wait — nothing is rotated until approval. On
+`.../execute`, the pending row is activated and every *other* key for the application is deleted (same
+one-active-key-per-application invariant as the immediate path). On `.../reject`, the pending row is deleted
+physically — it never became valid, so there is no reason to keep the hash. See
+`ApprovalUseCase.CreateApprovalRequest`/`RejectRequest`/`executeSecretKeyCreateAction` and
+`SecretKeyUseCase.CreatePendingSecretKey`/`ActivateAndRotateSecretKey`.
+
 ```http
 GET /api/applications/:id/secret-keys
 ```

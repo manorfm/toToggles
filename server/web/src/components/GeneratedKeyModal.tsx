@@ -5,12 +5,16 @@ import { Icon } from "./Icon";
 interface GeneratedKeyModalProps {
   plainKey: string;
   onClose: () => void;
+  // true quando a chave veio de uma solicitação sob aprovação (generate-secret 202) — o registro
+  // já existe (inativo) e este é o único momento em que alguém vai ver o valor em texto puro, mas
+  // ele ainda não autentica nada até um aprovador aprovar a solicitação (server/CLAUDE.md).
+  pendingApproval?: boolean;
 }
 
 // Adaptado de get_full_jsx("ServiceKeyModal") — a chave só existe nesta resposta
 // (docs/rest-flow.md §8: "plain_key is never persisted or retrievable again"), então
 // o modal só pode ser fechado depois que o usuário confirmar que já a salvou.
-export function GeneratedKeyModal({ plainKey, onClose }: GeneratedKeyModalProps) {
+export function GeneratedKeyModal({ plainKey, onClose, pendingApproval }: GeneratedKeyModalProps) {
   const [acked, setAcked] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -22,7 +26,7 @@ export function GeneratedKeyModal({ plainKey, onClose }: GeneratedKeyModalProps)
   return (
     <Modal
       icon="key"
-      title="Service key generated"
+      title={pendingApproval ? "Service key generated — pending approval" : "Service key generated"}
       sub="Shown once — save it now before closing"
       onClose={onClose}
       closeable={acked}
@@ -37,6 +41,12 @@ export function GeneratedKeyModal({ plainKey, onClose }: GeneratedKeyModalProps)
         <div>
           <b>Save this key immediately.</b> Once you close this dialog the key is permanently masked.
           There is no way to retrieve it from toToggle — store it in a secrets manager.
+          {pendingApproval && (
+            <>
+              {" "}
+              It will not work yet — an approver still needs to approve this request before the key becomes valid.
+            </>
+          )}
         </div>
       </div>
 

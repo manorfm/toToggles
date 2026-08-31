@@ -52,4 +52,18 @@ describe("GeneratedKeyModal", () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("warns that the key is not active yet when pendingApproval is set", () => {
+    render(<GeneratedKeyModal plainKey="sk_abc123" pendingApproval onClose={vi.fn()} />);
+
+    expect(screen.getByText(/pending approval/i)).toBeInTheDocument();
+    expect(screen.getByText(/will not work yet/i)).toBeInTheDocument();
+  });
+
+  it("shows the plain regenerated-key copy when pendingApproval is not set", () => {
+    render(<GeneratedKeyModal plainKey="sk_abc123" onClose={vi.fn()} />);
+
+    expect(screen.queryByText(/pending approval/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/will not work yet/i)).not.toBeInTheDocument();
+  });
 });

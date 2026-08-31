@@ -16,8 +16,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	// Auto migrate
 	err = db.AutoMigrate(
-		&entity.Application{}, 
-		&entity.Toggle{}, 
+		&entity.Application{},
+		&entity.Toggle{},
 		&entity.SecretKey{},
 		&entity.ApprovalRequest{},
 	)
@@ -203,9 +203,20 @@ func TestApplicationRepository_GetAllWithToggleCounts_HasSecretKey(t *testing.T)
 		t.Fatalf("failed to create application: %v", err)
 	}
 
-	key := &entity.SecretKey{Name: "prod", ApplicationID: withKey.ID, CreatedBy: "user-1", KeyHash: "hash"}
+	key := &entity.SecretKey{Name: "prod", ApplicationID: withKey.ID, CreatedBy: "user-1", KeyHash: "hash", Active: true}
 	if err := db.Create(key).Error; err != nil {
 		t.Fatalf("failed to create secret key: %v", err)
+	}
+
+	pendingOnly := entity.NewApplication("Pending Key Only")
+	if err := repo.Create(pendingOnly); err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	// Uma chave criada por um secret_key_create ainda pendente de aprovação (Active: false) não
+	// deve contar como "a aplicação tem uma chave" — ela não é usável até ser aprovada.
+	pendingKey := &entity.SecretKey{Name: "pending", ApplicationID: pendingOnly.ID, CreatedBy: "user-1", KeyHash: "pending-hash", Active: false}
+	if err := db.Create(pendingKey).Error; err != nil {
+		t.Fatalf("failed to create pending secret key: %v", err)
 	}
 
 	results, err := repo.GetAllWithToggleCounts()
@@ -219,10 +230,13 @@ func TestApplicationRepository_GetAllWithToggleCounts_HasSecretKey(t *testing.T)
 	}
 
 	if !byID[withKey.ID].HasSecretKey {
-		t.Errorf("expected HasSecretKey=true for application with a secret key")
+		t.Errorf("expected HasSecretKey=true for application with an active secret key")
 	}
 	if byID[withoutKey.ID].HasSecretKey {
 		t.Errorf("expected HasSecretKey=false for application without a secret key")
+	}
+	if byID[pendingOnly.ID].HasSecretKey {
+		t.Errorf("expected HasSecretKey=false for application whose only key is pending approval (inactive)")
 	}
 }
 

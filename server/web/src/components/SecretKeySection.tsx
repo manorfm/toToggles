@@ -25,6 +25,9 @@ type State = { status: "loading" } | { status: "loaded"; key: SecretKey | null }
 export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange, onPendingApproval }: SecretKeySectionProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  // A chave revelada veio de uma solicitação sob aprovação (generate-secret 202 com plain_key) —
+  // muda o texto do modal pra deixar claro que ela ainda não está ativa.
+  const [revealedKeyPending, setRevealedKeyPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -49,8 +52,16 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
       const result = await generateSecretKey(applicationId);
       if (result.kind === "pending_approval") {
         onPendingApproval?.(result.actionType);
+        // A chave já existe (inativa) e result.plainKey é a única chance de vê-la — mesmo assim,
+        // avisa que a ação está pendente (onPendingApproval acima) e NÃO recarrega a lista (a
+        // chave pendente não aparece em GET .../secret-keys até ser aprovada).
+        if (result.plainKey) {
+          setRevealedKeyPending(true);
+          setRevealedKey(result.plainKey);
+        }
         return;
       }
+      setRevealedKeyPending(false);
       setRevealedKey(result.plainKey);
       load();
     } catch (err) {
@@ -149,7 +160,13 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
         </div>
       )}
 
-      {revealedKey && <GeneratedKeyModal plainKey={revealedKey} onClose={() => setRevealedKey(null)} />}
+      {revealedKey && (
+        <GeneratedKeyModal
+          plainKey={revealedKey}
+          pendingApproval={revealedKeyPending}
+          onClose={() => setRevealedKey(null)}
+        />
+      )}
     </div>
   );
 }

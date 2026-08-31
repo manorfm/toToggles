@@ -123,7 +123,30 @@ describe("SecretKeySection", () => {
     expect(onKeyPresenceChange).toHaveBeenCalledWith(false);
   });
 
-  it("calls onPendingApproval and does not open the reveal modal when generate is intercepted (202)", async () => {
+  it("calls onPendingApproval and opens the reveal modal (pending-approval copy) when generate is intercepted with a plain_key", async () => {
+    const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return Promise.resolve(
+          jsonResponse(202, { approval_required: true, action_type: "secret_key_create", plain_key: "sk_pending123" })
+        );
+      }
+      return Promise.resolve(jsonResponse(200, { success: true, secret_keys: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onPendingApproval = vi.fn();
+    const user = userEvent.setup();
+
+    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
+    await screen.findByText("No service key");
+
+    await user.click(screen.getByRole("button", { name: /generate service key/i }));
+
+    expect(onPendingApproval).toHaveBeenCalledWith("secret_key_create");
+    expect(await screen.findByText("sk_pending123")).toBeInTheDocument();
+    expect(screen.getByText(/pending approval/i)).toBeInTheDocument();
+  });
+
+  it("calls onPendingApproval and does not open the reveal modal when the intercepted response carries no plain_key", async () => {
     const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
       if (init?.method === "POST") {
         return Promise.resolve(jsonResponse(202, { approval_required: true, action_type: "secret_key_create" }));

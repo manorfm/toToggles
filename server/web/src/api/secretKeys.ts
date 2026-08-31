@@ -4,6 +4,9 @@ import type { DeleteSecretKeyResult, GenerateSecretKeyResult, SecretKey } from "
 interface ApprovalRequiredBody {
   approval_required: true;
   action_type: string;
+  // Só populado por generate-secret: a chave em texto puro, já gerada (inativa) na hora da
+  // solicitação — ver GenerateSecretKeyResult.
+  plain_key?: string;
 }
 
 export async function listSecretKeys(applicationId: string): Promise<SecretKey[]> {
@@ -25,7 +28,7 @@ export async function generateSecretKey(applicationId: string): Promise<Generate
     method: "POST",
   });
   if ("approval_required" in body) {
-    return { kind: "pending_approval", actionType: body.action_type };
+    return { kind: "pending_approval", actionType: body.action_type, plainKey: body.plain_key };
   }
   return { kind: "generated", secretKey: body.secret_key, plainKey: body.plain_key, warning: body.warning };
 }

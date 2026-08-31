@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -395,5 +397,153 @@ func TestApprovalWorkflow_ApplicationCreate_UsesRequestedTeam_NotFirstUserTeam(t
 	}
 	if pending.TeamID != "team-2" {
 		t.Errorf("expected approval request to be filed under the requested team-2, got team_id=%q (misfiled under the admin's other team — invisible to the team-2 approver who should see it)", pending.TeamID)
+	}
+}
+
+// TestApprovalWorkflow_SecretKeyCreate_RequesterGetsPlainKeyImmediately_ButItIsNotYetValid
+// cobre o bug real reportado: gerar uma chave sob aprovação nunca devolvia a chave em texto puro
+// a ninguém (executeSecretKeyCreateAction descartava o valor). Agora o valor é gerado e devolvido
+// já na hora da solicitação (202), mas o registro nasce inativo — não deve autenticar nada antes
+// da aprovação.
+func TestApprovalWorkflow_SecretKeyCreate_RequesterGetsPlainKeyImmediately_ButItIsNotYetValid(t *testing.T) {
+	router, db, _ := setupApprovalWorkflowTestRouter(t)
+	enableApproval(t, db, entity.ApprovalConfig{SecretKeyCreate: true})
+
+	req := httptest.NewRequest(http.MethodPost, "/applications/app-1/generate-secret", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON response: %v", err)
+	}
+	plainKey, _ := resp["plain_key"].(string)
+	if plainKey == "" {
+		t.Fatalf("expected plain_key in the 202 response — the requester has no other chance to ever see this key, got: %v", resp)
+	}
+
+	var pendingKey entity.SecretKey
+	if err := db.Where("application_id = ?", "app-1").First(&pendingKey).Error; err != nil {
+		t.Fatalf("expected a secret key row to already exist for app-1, got: %v", err)
+	}
+	if pendingKey.Active {
+		t.Errorf("expected the pending key to be inactive until approved, got Active=true")
+	}
+
+	hash := sha256.Sum256([]byte(plainKey))
+	if pendingKey.KeyHash != hex.EncodeToString(hash[:]) {
+		t.Errorf("the plain_key returned does not match the hash of the pending row — requester was handed the wrong key")
+	}
+}
+
+// TestApprovalWorkflow_SecretKeyCreate_ApprovedAndExecuted_ActivatesKeyAndRotatesOld verifica o
+// ciclo completo: uma chave já ativa preexistente continua funcionando durante a espera, e só é
+// substituída (apagada) quando a nova é de fato aprovada+executada.
+func TestApprovalWorkflow_SecretKeyCreate_ApprovedAndExecuted_ActivatesKeyAndRotatesOld(t *testing.T) {
+	router, db, _ := setupApprovalWorkflowTestRouter(t)
+	root := enableApproval(t, db, entity.ApprovalConfig{SecretKeyCreate: true})
+
+	oldKey := &entity.SecretKey{ID: "old-key", Name: "API Access Key", ApplicationID: "app-1", CreatedBy: "admin-1", KeyHash: "old-hash", Active: true}
+	if err := db.Create(oldKey).Error; err != nil {
+		t.Fatalf("failed to seed existing active key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/applications/app-1/generate-secret", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pendingRequest entity.ApprovalRequest
+	if err := db.Where("application_id = ? AND action_type = ?", "app-1", entity.ApprovalActionSecretKeyCreate).First(&pendingRequest).Error; err != nil {
+		t.Fatalf("expected a pending secret_key_create request, got: %v", err)
+	}
+
+	// A chave antiga continua lá enquanto a solicitação está pendente.
+	if err := db.First(&entity.SecretKey{}, "id = ?", "old-key").Error; err != nil {
+		t.Errorf("expected the old key to still exist while the new one is only pending, got: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := globalApprovalUseCase.ApproveRequest(ctx, pendingRequest.ID, root); err != nil {
+		t.Fatalf("failed to approve request: %v", err)
+	}
+	if err := globalApprovalUseCase.ExecuteApprovedAction(ctx, pendingRequest.ID, root); err != nil {
+		t.Fatalf("failed to execute approved action: %v", err)
+	}
+
+	if err := db.First(&entity.SecretKey{}, "id = ?", "old-key").Error; err == nil {
+		t.Errorf("expected the old key to have been physically deleted after the new one was approved")
+	}
+
+	var newKeys []entity.SecretKey
+	if err := db.Where("application_id = ?", "app-1").Find(&newKeys).Error; err != nil {
+		t.Fatalf("failed to query keys after execute: %v", err)
+	}
+	if len(newKeys) != 1 {
+		t.Fatalf("expected exactly one secret key left for app-1 after rotation, got %d", len(newKeys))
+	}
+	if !newKeys[0].Active {
+		t.Errorf("expected the new key to be active after approve+execute, still inactive")
+	}
+}
+
+// TestApprovalWorkflow_SecretKeyCreate_Rejected_DeletesPendingKeyPhysically confirma o outro lado
+// da decisão: rejeitar a solicitação apaga fisicamente o registro pendente (nunca chegou a ser
+// válido, não há razão pra manter o hash), sem afetar uma chave ativa preexistente.
+func TestApprovalWorkflow_SecretKeyCreate_Rejected_DeletesPendingKeyPhysically(t *testing.T) {
+	router, db, _ := setupApprovalWorkflowTestRouter(t)
+	root := enableApproval(t, db, entity.ApprovalConfig{SecretKeyCreate: true})
+
+	oldKey := &entity.SecretKey{ID: "old-key", Name: "API Access Key", ApplicationID: "app-1", CreatedBy: "admin-1", KeyHash: "old-hash", Active: true}
+	if err := db.Create(oldKey).Error; err != nil {
+		t.Fatalf("failed to seed existing active key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/applications/app-1/generate-secret", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pendingRequest entity.ApprovalRequest
+	if err := db.Where("application_id = ? AND action_type = ?", "app-1", entity.ApprovalActionSecretKeyCreate).First(&pendingRequest).Error; err != nil {
+		t.Fatalf("expected a pending secret_key_create request, got: %v", err)
+	}
+	var pendingKeyID string
+	{
+		var actionData struct {
+			SecretKeyID string `json:"secret_key_id"`
+		}
+		if err := pendingRequest.GetActionDataAs(&actionData); err != nil {
+			t.Fatalf("failed to read action_data: %v", err)
+		}
+		pendingKeyID = actionData.SecretKeyID
+	}
+	if pendingKeyID == "" {
+		t.Fatalf("expected action_data to carry the pending secret_key_id")
+	}
+
+	ctx := context.Background()
+	if err := globalApprovalUseCase.RejectRequest(ctx, pendingRequest.ID, root, "not needed"); err != nil {
+		t.Fatalf("failed to reject request: %v", err)
+	}
+
+	if err := db.First(&entity.SecretKey{}, "id = ?", pendingKeyID).Error; err == nil {
+		t.Errorf("expected the pending secret key row to be physically deleted after rejection")
+	}
+
+	// A chave antiga, ativa, não deve ter sido tocada pela rejeição.
+	var stillActive entity.SecretKey
+	if err := db.First(&stillActive, "id = ?", "old-key").Error; err != nil {
+		t.Fatalf("expected old active key to still exist after rejecting the new one, got: %v", err)
+	}
+	if !stillActive.Active {
+		t.Errorf("expected old key to remain active, got Active=false")
 	}
 }

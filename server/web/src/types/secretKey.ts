@@ -19,8 +19,11 @@ export interface GeneratedSecretKey {
 
 // generate-secret e DELETE /secret-keys/:id são approval-aware (docs/rest-flow.md §9.1) — mesmo
 // formato { kind: "pending_approval", actionType } usado por api/toggles.ts/api/applications.ts.
+// plainKey em "pending_approval": quem pediu a chave recebe o valor em texto puro já na hora da
+// solicitação (a chave existe no banco, só inativa — não autentica nada até ser aprovada). Sem
+// isso o requester nunca teria como ver a chave, já que só ele vê esta resposta 202.
 export type GenerateSecretKeyResult =
   | ({ kind: "generated" } & GeneratedSecretKey)
-  | { kind: "pending_approval"; actionType: string };
+  | { kind: "pending_approval"; actionType: string; plainKey?: string };
 
 export type DeleteSecretKeyResult = { kind: "deleted" } | { kind: "pending_approval"; actionType: string };
