@@ -9,12 +9,22 @@ import (
 )
 
 type TeamHandler struct {
-	teamUseCase *usecase.TeamUseCase
+	teamUseCase  *usecase.TeamUseCase
+	userUseCase  *usecase.UserUseCase
+	auditUseCase *usecase.AuditUseCase
 }
 
-func NewTeamHandler(teamUseCase *usecase.TeamUseCase) *TeamHandler {
+// userUseCase: só pra resolver o username de quem foi adicionado ao time na hora de montar o
+// texto do evento de auditoria ("Added @username", confirmado no protótipo real como
+// "Added <b>{name}</b>") — AddUserToTeam já busca o usuário internamente, mas descarta o
+// resultado; refazer a assinatura desse usecase pra devolvê-lo encadearia numa mudança maior
+// (UserManagementHandler.UpdateUser também chama AddUserToTeam, em loop), então uma segunda
+// busca aqui é o caminho mais barato.
+func NewTeamHandler(teamUseCase *usecase.TeamUseCase, userUseCase *usecase.UserUseCase, auditUseCase *usecase.AuditUseCase) *TeamHandler {
 	return &TeamHandler{
-		teamUseCase: teamUseCase,
+		teamUseCase:  teamUseCase,
+		userUseCase:  userUseCase,
+		auditUseCase: auditUseCase,
 	}
 }
 
@@ -81,6 +91,9 @@ func (h *TeamHandler) CreateTeam(c *gin.Context) {
 		})
 		return
 	}
+
+	teamID := team.ID
+	h.auditUseCase.Record(entity.AuditEventTeamCreated, "Created team "+team.Name, "", &teamID, auditActor(c))
 
 	c.JSON(http.StatusCreated, TeamResponse{
 		Success: true,
@@ -237,6 +250,12 @@ func (h *TeamHandler) AddUserToTeam(c *gin.Context) {
 		return
 	}
 
+	addedText := "Added member"
+	if addedUser, err := h.userUseCase.GetUserByID(req.UserID); err == nil {
+		addedText = "Added @" + addedUser.Username
+	}
+	h.auditUseCase.Record(entity.AuditEventMemberAdded, addedText, "", &teamID, auditActor(c))
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "User added to team successfully",
@@ -264,6 +283,8 @@ func (h *TeamHandler) RemoveUserFromTeam(c *gin.Context) {
 		})
 		return
 	}
+
+	h.auditUseCase.Record(entity.AuditEventMemberRemoved, "Removed member", "", &teamID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

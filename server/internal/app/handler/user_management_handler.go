@@ -14,15 +14,18 @@ type UserManagementHandler struct {
 	userUseCase     *usecase.UserUseCase
 	teamUseCase     *usecase.TeamUseCase
 	approvalUseCase *usecase.ApprovalUseCase
+	auditUseCase    *usecase.AuditUseCase
 }
 
-func NewUserManagementHandler(userUseCase *usecase.UserUseCase, teamUseCase *usecase.TeamUseCase, approvalUseCase *usecase.ApprovalUseCase) *UserManagementHandler {
+func NewUserManagementHandler(userUseCase *usecase.UserUseCase, teamUseCase *usecase.TeamUseCase, approvalUseCase *usecase.ApprovalUseCase, auditUseCase *usecase.AuditUseCase) *UserManagementHandler {
 	return &UserManagementHandler{
 		userUseCase:     userUseCase,
 		teamUseCase:     teamUseCase,
 		approvalUseCase: approvalUseCase,
+		auditUseCase:    auditUseCase,
 	}
 }
+
 
 // CreateUserManagementRequest representa a requisição de criação de usuário. Confirmado no
 // protótipo (get_full_jsx("UserModal")): time é escolhido na própria criação (não é mais um
@@ -184,6 +187,9 @@ func (h *UserManagementHandler) CreateUser(c *gin.Context) {
 		}
 	}
 
+	teamID := req.TeamID
+	h.auditUseCase.Record(entity.AuditEventUserCreated, "Created user @"+user.Username, "", &teamID, currentUser)
+
 	c.JSON(http.StatusCreated, CreateUserManagementResponse{
 		Success:  true,
 		User:     user,
@@ -315,6 +321,15 @@ func (h *UserManagementHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
+	// team_id resolvido ANTES do delete acima (não via RecordForUser, que consultaria de novo
+	// depois): não há garantia de que team_users ainda tenha a associação do usuário no momento
+	// de gravar o evento, então usa a relação já carregada em userToDelete.
+	var teamID *string
+	if len(userToDelete.Teams) > 0 {
+		teamID = &userToDelete.Teams[0].ID
+	}
+	h.auditUseCase.Record(entity.AuditEventUserDeleted, "Deleted user @"+userToDelete.Username, "", teamID, currentUser)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "User deleted successfully",
@@ -404,6 +419,8 @@ func (h *UserManagementHandler) ResetUserPassword(c *gin.Context) {
 	_ = h.userUseCase.InvalidateSessions(userID)
 	user.RefreshStatus()
 
+	h.auditUseCase.RecordForUser(entity.AuditEventUserPasswordReset, "Reset password for @"+user.Username, "", user.ID, currentUser)
+
 	c.JSON(http.StatusOK, ResetPasswordResponse{Success: true, User: user, Password: randomPassword})
 }
 
@@ -449,6 +466,12 @@ func (h *UserManagementHandler) SetUserStatus(c *gin.Context) {
 		return
 	}
 	user.RefreshStatus()
+
+	verb := "Deactivated"
+	if req.Active {
+		verb = "Reactivated"
+	}
+	h.auditUseCase.RecordForUser(entity.AuditEventUserStatusChanged, verb+" user @"+user.Username, "", user.ID, currentUser)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "user": user})
 }

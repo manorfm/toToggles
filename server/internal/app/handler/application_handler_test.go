@@ -9,12 +9,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/domain/policy"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 )
 
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	return gin.New()
+}
+
+// newTestAuditUseCase monta um usecase.AuditUseCase real (mocks por baixo) pra satisfazer
+// construtores de handler que agora exigem um — os testes deste pacote não são sobre auditoria,
+// só precisam de uma instância que não seja nil (Record com actor nil, aliás, já é no-op).
+func newTestAuditUseCase() *usecase.AuditUseCase {
+	teamRepo := usecase.NewMockTeamRepository()
+	return usecase.NewAuditUseCase(usecase.NewMockAuditLogRepository(), policy.NewAuditAccess(teamRepo), teamRepo)
 }
 
 func TestApplicationHandler_CreateApplication(t *testing.T) {
@@ -76,7 +85,7 @@ func TestApplicationHandler_CreateApplication(t *testing.T) {
 			testTeam := &entity.Team{ID: "team123", Name: "Test Team"}
 			teamMock.Teams["team123"] = testTeam
 			
-			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase, newTestAuditUseCase())
 
 			router.POST("/applications", handler.CreateApplication)
 
@@ -161,7 +170,7 @@ func TestApplicationHandler_GetApplication(t *testing.T) {
 			teamMock := usecase.NewMockTeamRepository()
 			userMock := usecase.NewMockUserRepository()
 			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase, newTestAuditUseCase())
 
 			router.GET("/applications/:id", handler.GetApplication)
 
@@ -208,7 +217,7 @@ func TestApplicationHandler_GetAllApplications(t *testing.T) {
 	teamMock := usecase.NewMockTeamRepository()
 	userMock := usecase.NewMockUserRepository()
 	teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
-	handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
+	handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase, newTestAuditUseCase())
 
 	// Add middleware to set authenticated user
 	router.Use(func(c *gin.Context) {
@@ -301,7 +310,7 @@ func TestApplicationHandler_UpdateApplication(t *testing.T) {
 			teamMock := usecase.NewMockTeamRepository()
 			userMock := usecase.NewMockUserRepository()
 			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase, newTestAuditUseCase())
 
 			router.PUT("/applications/:id", handler.UpdateApplication)
 
@@ -378,7 +387,7 @@ func TestApplicationHandler_DeleteApplication(t *testing.T) {
 			teamMock := usecase.NewMockTeamRepository()
 			userMock := usecase.NewMockUserRepository()
 			teamUseCase := usecase.NewTeamUseCase(teamMock, userMock, mockRepo)
-			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase)
+			handler := NewApplicationHandler(useCase, toggleUseCase, teamUseCase, newTestAuditUseCase())
 
 			router.DELETE("/applications/:id", handler.DeleteApplication)
 

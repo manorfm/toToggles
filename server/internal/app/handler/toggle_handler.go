@@ -11,13 +11,31 @@ import (
 // ToggleHandler gerencia as requisições HTTP para toggles
 type ToggleHandler struct {
 	toggleUseCase *usecase.ToggleUseCase
+	auditUseCase  *usecase.AuditUseCase
 }
 
 // NewToggleHandler cria uma nova instância de ToggleHandler
-func NewToggleHandler(toggleUseCase *usecase.ToggleUseCase) *ToggleHandler {
+func NewToggleHandler(toggleUseCase *usecase.ToggleUseCase, auditUseCase *usecase.AuditUseCase) *ToggleHandler {
 	return &ToggleHandler{
 		toggleUseCase: toggleUseCase,
+		auditUseCase:  auditUseCase,
 	}
+}
+
+// auditActor lê o usuário autenticado do contexto Gin pra gravar auditoria — nunca falha a
+// requisição se, por algum motivo, o middleware de auth não tiver rodado (não deveria acontecer
+// em nenhuma rota real, mas Record já tolera actor nil, então aqui só evita um type assertion
+// que panica).
+func auditActor(c *gin.Context) *entity.User {
+	u, exists := c.Get("user")
+	if !exists {
+		return nil
+	}
+	user, ok := u.(*entity.User)
+	if !ok {
+		return nil
+	}
+	return user
 }
 
 // CreateToggleRequest representa a requisição para criar um toggle
@@ -89,6 +107,8 @@ func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
+
+	h.auditUseCase.RecordForApplication(entity.AuditEventToggleCreated, "Created toggle "+req.Toggle, req.Toggle, appID, auditActor(c))
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "toggle created successfully",
@@ -187,6 +207,28 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		return
 	}
 
+	// has_activation_rule/activation_rule no corpo distingue "mudou a regra" de "só ligou/
+	// desligou" — mesma heurística de getActionType (middleware/approval.go) pro mesmo par de
+	// rotas, aqui só pra escolher o tipo de evento de auditoria certo.
+	if req.HasActivationRule && req.ActivationRule != nil {
+		// Confirmado no protótipo real (app.jsx#saveDrawer): "Set <b>{type}</b> rule" pra
+		// qualquer tipo, com um sufixo " to <b>{value}%</b>" só quando o tipo é percentage —
+		// os outros 6 tipos (parameter/user_id/canary/ip/country/time) não têm esse sufixo.
+		ruleText := "Set " + string(req.ActivationRule.Type) + " rule"
+		if req.ActivationRule.Type == entity.ActivationRuleTypePercentage {
+			ruleText += " to " + req.ActivationRule.Value + "%"
+		}
+		h.auditUseCase.RecordForApplication(entity.AuditEventToggleRuleSet, ruleText, updatedToggle.Path, appID, auditActor(c))
+	} else {
+		eventType := entity.AuditEventToggleDisabled
+		verb := "Disabled"
+		if req.Enabled {
+			eventType = entity.AuditEventToggleEnabled
+			verb = "Enabled"
+		}
+		h.auditUseCase.RecordForApplication(eventType, verb+" "+updatedToggle.Path, "", appID, auditActor(c))
+	}
+
 	c.JSON(http.StatusOK, updatedToggle)
 }
 
@@ -206,6 +248,14 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 		return
 	}
 
+	// Path só existe pra montar a mensagem de auditoria (o próprio delete não devolve o toggle
+	// apagado) — buscado antes da exclusão, de propósito; se falhar, segue sem travar o delete
+	// (RecordForApplication com target vazio ainda é melhor que não gravar o evento).
+	var path string
+	if toggle, err := h.toggleUseCase.GetToggleByID(toggleID, appID); err == nil {
+		path = toggle.Path
+	}
+
 	err := h.toggleUseCase.DeleteToggleByID(toggleID, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
@@ -223,6 +273,8 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
+
+	h.auditUseCase.RecordForApplication(entity.AuditEventToggleDeleted, "Deleted toggle "+path, "", appID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "toggle deleted successfully",
@@ -329,6 +381,14 @@ func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "error fetching updated toggle"))
 		return
 	}
+
+	eventType := entity.AuditEventToggleDisabled
+	verb := "Disabled"
+	if req.Enabled {
+		eventType = entity.AuditEventToggleEnabled
+		verb = "Enabled"
+	}
+	h.auditUseCase.RecordForApplication(eventType, verb+" "+updatedToggle.Path, "", appID, auditActor(c))
 
 	c.JSON(http.StatusOK, updatedToggle)
 }

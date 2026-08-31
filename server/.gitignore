@@ -8,3 +8,10 @@ node_modules/
 # it is no longer needed for deploys, and a fresh clone must run `make web-build` (or
 # `cd web && npm run build`) once before `make dev`/`make run` for local dev.
 static/app/
+
+# Compiled Go binary (Makefile's `make build` -> `go build -o toToogle main.go`; also
+# written by a bare `go build ./...` from this directory, since Go drops a binary named
+# after the module for every main package it finds under `./...`). Same mistake as
+# static/app/ above — a binary was committed at some point (commit f4ee2ff) instead of
+# being built fresh; removed and ignored here so it can't happen again.
+/toToogle

@@ -13,13 +13,19 @@ type SecretKeyHandler struct {
 	secretKeyUseCase    *usecase.SecretKeyUseCase
 	toggleUseCase       *usecase.ToggleUseCase
 	applicationUseCase  *usecase.ApplicationUseCase
+	auditUseCase        *usecase.AuditUseCase
 }
 
-func NewSecretKeyHandler(secretKeyUseCase *usecase.SecretKeyUseCase, toggleUseCase *usecase.ToggleUseCase, applicationUseCase *usecase.ApplicationUseCase) *SecretKeyHandler {
+// auditUseCase: sem cobertura pro kill switch (DisableToggleBySecret) de propósito — essa rota
+// autentica por secret key, não por sessão (docs/rest-flow.md), então não existe um
+// entity.User pra ser o actor; Record já ignora actor nil, então cobrir isso exigiria inventar
+// um ator sintético "a secret key", fora do escopo combinado (auditoria de ações de usuário).
+func NewSecretKeyHandler(secretKeyUseCase *usecase.SecretKeyUseCase, toggleUseCase *usecase.ToggleUseCase, applicationUseCase *usecase.ApplicationUseCase, auditUseCase *usecase.AuditUseCase) *SecretKeyHandler {
 	return &SecretKeyHandler{
 		secretKeyUseCase:   secretKeyUseCase,
 		toggleUseCase:      toggleUseCase,
 		applicationUseCase: applicationUseCase,
+		auditUseCase:       auditUseCase,
 	}
 }
 
@@ -58,6 +64,12 @@ func (h *SecretKeyHandler) GenerateSecretKey(c *gin.Context) {
 
 	userID := user.ID
 
+	// Existência checada ANTES de regenerar só pra saber se isto é a primeira chave da
+	// aplicação ou uma rotação — RegenerateSecretKey sempre apaga a(s) anterior(es) antes de
+	// criar, então checar depois já seria tarde demais.
+	existingKeys, _ := h.secretKeyUseCase.GetSecretKeysByApplicationID(applicationID)
+	rotated := len(existingKeys) > 0
+
 	// Regenerar a secret key (invalida as anteriores)
 	response, err := h.secretKeyUseCase.RegenerateSecretKey(applicationID, userID)
 	if err != nil {
@@ -66,6 +78,14 @@ func (h *SecretKeyHandler) GenerateSecretKey(c *gin.Context) {
 		})
 		return
 	}
+
+	// Confirmado no protótipo real (app.jsx#doGenerateKey): "Rotated service key" quando já
+	// existia uma chave, "Generated service key" na primeira vez — nunca sempre "Generated".
+	keyEventText := "Generated service key"
+	if rotated {
+		keyEventText = "Rotated service key"
+	}
+	h.auditUseCase.RecordForApplication(entity.AuditEventKeyGenerated, keyEventText, "", applicationID, user)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
@@ -239,6 +259,13 @@ func (h *SecretKeyHandler) DeleteSecretKey(c *gin.Context) {
 		return
 	}
 
+	// applicationID só existe pra montar o evento de auditoria (o delete em si não devolve a
+	// chave apagada) — buscado antes da exclusão, de propósito.
+	var applicationID string
+	if key, err := h.secretKeyUseCase.GetSecretKeyByID(secretKeyID); err == nil {
+		applicationID = key.ApplicationID
+	}
+
 	err := h.secretKeyUseCase.DeleteSecretKey(secretKeyID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -246,6 +273,8 @@ func (h *SecretKeyHandler) DeleteSecretKey(c *gin.Context) {
 		})
 		return
 	}
+
+	h.auditUseCase.RecordForApplication(entity.AuditEventKeyRevoked, "Service key revoked", "", applicationID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

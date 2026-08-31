@@ -13,14 +13,16 @@ type ApplicationHandler struct {
 	appUseCase    *usecase.ApplicationUseCase
 	toggleUseCase *usecase.ToggleUseCase
 	teamUseCase   *usecase.TeamUseCase
+	auditUseCase  *usecase.AuditUseCase
 }
 
 // NewApplicationHandler cria uma nova instância de ApplicationHandler
-func NewApplicationHandler(appUseCase *usecase.ApplicationUseCase, toggleUseCase *usecase.ToggleUseCase, teamUseCase *usecase.TeamUseCase) *ApplicationHandler {
+func NewApplicationHandler(appUseCase *usecase.ApplicationUseCase, toggleUseCase *usecase.ToggleUseCase, teamUseCase *usecase.TeamUseCase, auditUseCase *usecase.AuditUseCase) *ApplicationHandler {
 	return &ApplicationHandler{
 		appUseCase:    appUseCase,
 		toggleUseCase: toggleUseCase,
 		teamUseCase:   teamUseCase,
+		auditUseCase:  auditUseCase,
 	}
 }
 
@@ -76,6 +78,8 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "failed to associate application with team"))
 		return
 	}
+
+	h.auditUseCase.Record(entity.AuditEventApplicationCreated, "Created application "+app.Name, "", &req.TeamID, auditActor(c))
 
 	c.JSON(http.StatusCreated, app)
 }
@@ -266,6 +270,17 @@ func (h *ApplicationHandler) DeleteApplication(c *gin.Context) {
 		return
 	}
 
+	// Nome/time só existem pra montar a mensagem de auditoria (o delete em si não devolve a
+	// aplicação apagada) — buscados antes da exclusão, de propósito.
+	name := id
+	var teamID *string
+	if app, err := h.appUseCase.GetApplicationByID(id); err == nil {
+		name = app.Name
+	}
+	if teams, err := h.teamUseCase.GetApplicationTeams(id); err == nil && len(teams) > 0 {
+		teamID = &teams[0].ID
+	}
+
 	err := h.appUseCase.DeleteApplication(id)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
@@ -280,6 +295,8 @@ func (h *ApplicationHandler) DeleteApplication(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
 		return
 	}
+
+	h.auditUseCase.Record(entity.AuditEventApplicationDeleted, "Deleted application "+name, "", teamID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "application deleted successfully",

@@ -175,6 +175,11 @@ func Init(router *gin.Engine) {
 				// Aprovadores
 				approval.GET("/my-approver-teams", handler.GetMyApproverTeams)
 			}
+
+			// Audit trail — qualquer usuário autenticado, sem RequireRoot/RequireAdmin: a
+			// visibilidade é escopada por time dentro do usecase (domain/policy.AuditAccess),
+			// mesmo padrão de GET /approval/requests.
+			protected.GET("/audit", handler.GetAuditLog)
 		}
 	}
 

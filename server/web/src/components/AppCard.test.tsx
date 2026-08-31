@@ -20,7 +20,7 @@ describe("AppCard", () => {
   it("shows the application name and toggle counts", () => {
     render(
       <MemoryRouter>
-        <AppCard application={app} />
+        <AppCard application={app} accentIndex={0} />
       </MemoryRouter>
     );
 
@@ -34,7 +34,7 @@ describe("AppCard", () => {
   it("links to the application's detail page", () => {
     render(
       <MemoryRouter>
-        <AppCard application={app} />
+        <AppCard application={app} accentIndex={0} />
       </MemoryRouter>
     );
 
@@ -44,7 +44,7 @@ describe("AppCard", () => {
   it("shows a two-letter glyph derived from the name", () => {
     render(
       <MemoryRouter>
-        <AppCard application={app} />
+        <AppCard application={app} accentIndex={0} />
       </MemoryRouter>
     );
 
@@ -56,7 +56,7 @@ describe("AppCard", () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
-        <AppCard application={app} canEdit onEdit={onEdit} />
+        <AppCard application={app} accentIndex={0} canEdit onEdit={onEdit} />
       </MemoryRouter>
     );
 
@@ -69,7 +69,7 @@ describe("AppCard", () => {
   it("does not show an edit button when canEdit is false", () => {
     render(
       <MemoryRouter>
-        <AppCard application={app} canEdit={false} onEdit={vi.fn()} />
+        <AppCard application={app} accentIndex={0} canEdit={false} onEdit={vi.fn()} />
       </MemoryRouter>
     );
 
@@ -79,7 +79,7 @@ describe("AppCard", () => {
   it("shows 'No service key' and a Generate CTA when has_secret_key is false", () => {
     render(
       <MemoryRouter>
-        <AppCard application={{ ...app, has_secret_key: false }} />
+        <AppCard application={{ ...app, has_secret_key: false }} accentIndex={0} />
       </MemoryRouter>
     );
 
@@ -91,7 +91,7 @@ describe("AppCard", () => {
   it("shows 'Service key active' and a Manage CTA when has_secret_key is true", () => {
     render(
       <MemoryRouter>
-        <AppCard application={{ ...app, has_secret_key: true }} />
+        <AppCard application={{ ...app, has_secret_key: true }} accentIndex={0} />
       </MemoryRouter>
     );
 
@@ -105,7 +105,7 @@ describe("AppCard", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
-          <Route path="/" element={<AppCard application={{ ...app, has_secret_key: true }} />} />
+          <Route path="/" element={<AppCard application={{ ...app, has_secret_key: true }} accentIndex={0} />} />
           <Route path="/applications/:id" element={<div>detail screen</div>} />
         </Routes>
       </MemoryRouter>

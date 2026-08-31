@@ -5,6 +5,10 @@ import { Icon } from "./Icon";
 
 interface AppCardProps {
   application: Application;
+  // Posição da app em ordem de criação (0 = mais antiga) — indexa a paleta de 6 cores real do
+  // protótipo (lib/applicationAccent.ts#HUES_CYCLE). O pai (ApplicationsScreen) resolve isso uma
+  // vez pra lista inteira via creationOrderIndex, em vez de cada card recalcular a ordenação.
+  accentIndex: number;
   canEdit?: boolean;
   onEdit?: (application: Application) => void;
 }
@@ -16,8 +20,8 @@ interface AppCardProps {
 // gap conhecido em server/CLAUDE.md. O 3º stat "Key" e a faixa `.app-key-row` (indicador real de
 // presença de secret key) usam `has_secret_key`, que veio de uma query nova no backend
 // (EXISTS sobre secret_keys, ver application_repository.go#GetAllWithToggleCounts).
-export function AppCard({ application, canEdit = false, onEdit }: AppCardProps) {
-  const { accent, soft } = applicationAccent(application.id);
+export function AppCard({ application, accentIndex, canEdit = false, onEdit }: AppCardProps) {
+  const { accent, soft } = applicationAccent(accentIndex);
   const navigate = useNavigate();
   const hasKey = application.has_secret_key;
 

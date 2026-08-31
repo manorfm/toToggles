@@ -54,7 +54,7 @@ func TestToggleHandler_CreateToggle(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.POST("/applications/:id/toggles", handler.CreateToggle)
 
@@ -165,7 +165,7 @@ func TestToggleHandler_GetToggleStatus(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.GET("/applications/:id/toggles/:toggleId", handler.GetToggleStatus)
 
@@ -244,7 +244,7 @@ func TestToggleHandler_UpdateToggle(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.PUT("/applications/:id/toggles/:toggleId", handler.UpdateToggle)
 
@@ -321,7 +321,7 @@ func TestToggleHandler_GetAllTogglesByApp(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.GET("/applications/:id/toggles", handler.GetAllToggles)
 
@@ -455,7 +455,7 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.DELETE("/applications/:id/toggles/:toggleId", handler.DeleteToggle)
 
@@ -548,7 +548,7 @@ func TestToggleHandler_UpdateEnabled(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.PUT("/applications/:id/toggle/:toggleId", handler.UpdateEnabled)
 
@@ -661,7 +661,7 @@ func TestToggleHandler_GetToggleStatus_Validation(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.GET("/applications/:id/toggles/:toggleId/status", handler.GetToggleStatus)
 
@@ -874,7 +874,7 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
-			handler := NewToggleHandler(toggleUseCase)
+			handler := NewToggleHandler(toggleUseCase, newTestAuditUseCase())
 
 			router.PUT("/applications/:id/toggles/:toggleId", handler.UpdateToggle)
 

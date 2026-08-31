@@ -369,6 +369,85 @@ código):
   `docs/rest-flow.md` §8.1. Reusa a MESMA secret key da leitura (trade-off aceito, não uma
   credencial nova — ver a mesma seção da doc pro raciocínio completo).
 
+### Rotas de Auditoria (Protegidas)
+- `GET /api/audit?category=...&cursor=...&limit=...` — audit trail real, adicionado numa fase
+  posterior desta reescrita depois de uma auditoria (pedida pelo usuário) contra o `HistoryView`
+  real do protótipo, que revelou que a tela "History" existente só reaproveitava o histórico de
+  aprovações (`GET /approval/requests`), não um audit trail genérico — porque **não existia
+  nenhum** no backend até então. Discutido o plano com o usuário antes de implementar (opções:
+  faseado por tipo de evento / completo / não construir — escolhido faseado; depois retomado com
+  "sim" pra implementar de fato) e refinado com dois requisitos explícitos do usuário: paginação
+  **infinita por cursor, não por número de página**, e os mesmos filtros de categoria do
+  protótipo (chips `All/Toggles/Keys/Access/Approvals`).
+  - **Entidade nova**: `entity.AuditLog` (`domain/entity/audit_log.go`, migration
+    `20260830000000_add_audit_logs_table.sql`) — `event_type` (granular, um por domínio:
+    `toggle_created`, `toggle_deleted`, `key_generated`... — ver a constante completa no
+    arquivo) mapeado pra exatamente uma de 4 `category` (`AuditEventType.EventCategory()`).
+    Diferente do protótipo real: lá um `type` genérico (`"create"`/`"delete"`) é reusado entre
+    domínios — o que faz um evento de **apagar usuário** cair na categoria "toggles" no
+    protótipo (`AUDIT_CAT["delete"] === "toggles"`), uma ambiguidade real não replicada aqui.
+    `text`/`target` são sempre texto puro, nunca HTML — o `HistoryView` real usa
+    `dangerouslySetInnerHTML` sobre `text` (ex.: `"Disabled <b>experiments</b> branch"`);
+    gravar HTML cru no banco a partir de um `target` que vem de nome escolhido pelo usuário
+    (path de toggle, nome de aplicação) seria abrir um vetor de XSS armazenado — decisão tomada
+    sem perguntar ao usuário, é uma correção de segurança, não uma divergência de produto.
+  - **Visibilidade**: `domain/policy.AuditAccess` — mesma regra já validada em `ApprovalAccess`
+    (root irrestrito; não-root só vê `team_id` de times dos quais é membro), com nome/dono
+    próprios porque auditoria e aprovação são domínios diferentes mesmo reaproveitando a mesma
+    pergunta. Eventos sem `team_id` (hoje só `approval_system_toggled`, o on/off do sistema de
+    aprovação) ficam root-only "de graça" — `NULL IN (...)` nunca é verdadeiro em SQL, nenhum
+    não-root bate nessa cláusula. Gestão de usuário usa a MESMA regra de `team_id`, uma
+    aproximação deliberada de `canManageUser` (que é "compartilha QUALQUER time", não "o
+    primeiro time gravado no evento") — registrado como simplificação consciente, não como bug.
+  - **Onde grava**: no ponto exato da mutação, não em middleware — um middleware amarrado à
+    requisição HTTP original nunca veria a execução de uma ação aprovada, que roda numa
+    requisição separada bem depois (`POST /approval/requests/:id/execute`). Duas categorias de
+    ponto de gravação: (1) direto no **handler**, logo após a chamada ao usecase ter sucesso,
+    pra toda mutação imediata (workflow de aprovação desligado, ou aquele tipo de ação não
+    configurado pra exigir aprovação) — `ToggleHandler`, `SecretKeyHandler`,
+    `ApplicationHandler`, `TeamHandler`, `UserManagementHandler` ganharam um
+    `*usecase.AuditUseCase`; se o middleware `RequireApprovalAware` interceptar a ação, o
+    handler real nunca roda, então esse caminho nunca dispara por engano quando a ação foi pro
+    workflow em vez de executar direto. (2) dentro do próprio **`ApprovalUseCase`**
+    (`ApproveRequest`/`RejectRequest`/`UpdateApprovalSettings`, só quando `ApprovalEnabled`
+    muda) — `auditUseCase` é um campo opcional ali (pode ficar `nil`; testes de
+    autorização existentes passam `nil` de propósito, mesma tolerância já usada pros outros
+    parâmetros desse construtor), com um `recordAudit()` interno que checa nil antes de chamar.
+  - **Gap fechado numa fase posterior — achado ao vivo pelo usuário, não só teórico**: o
+    History real (com dados de uso reais) mostrava TUDO como "root", mesmo ações que
+    manoel.medeiros claramente tinha feito (criar toggle, editar aplicação, configurar regra) e
+    root só tinha aprovado. Causa raiz: exatamente o gap documentado aqui antes — só
+    `ApproveRequest` gravava (`approval_approved`, actor = quem aprovou), o pedido original E a
+    execução de verdade não geravam entrada nenhuma. Duas pontas fechadas:
+    1. `CreateApprovalRequest` agora grava `approval_requested` ("Requested: {description}") com
+       o SOLICITANTE como actor — confirmado no protótipo real como o type "approval-request"
+       (`requestApproval`, ícone clock, dot off), que já estava mapeado em `lib/auditEvents.ts`
+       mas nunca tinha um evento correspondente sendo gravado de fato no backend.
+    2. `ExecuteApprovedAction` foi reestruturado (o `switch` de dispatch agora captura o erro em
+       vez de `return` direto em cada `case`) pra gravar o evento de domínio depois que a
+       execução de verdade roda — `auditEventForApprovalExecution()` mapeia `ActionType` pro
+       `AuditEventType` certo e reaproveita `request.Description` (já um texto legível, montado
+       na criação do pedido) + sufixo " (after approval)", igual ao protótipo real
+       (`executePendingAction` sempre grava com esse mesmo sufixo). Actor é `caller` (quem
+       chamou `.../execute` agora — normalmente o aprovador), nunca o solicitante original —
+       mesma escolha do protótipo (`logAudit` sempre usa `currentUser`, nunca quem pediu).
+       `AuditEventApplicationUpdated` (tipo novo, sem equivalente real — editar app no protótipo
+       não loga nada) precisou existir pra distinguir a edição via approval da criação, já que
+       as duas reusam o mesmo `ApprovalActionApplicationCreate` (docs/rest-flow.md §9.1).
+    Teste de integração novo (`TestAuditIntegration_ApprovalFlow_RecordsRequesterAndExecutionEvents`)
+    prova o fluxo inteiro: pedido → aprovação → execução, as 3 entradas certas com os actors
+    certos.
+  - **Kill switch (`POST /api/toggles/disable`) deliberadamente fora de cobertura**: autentica
+    por secret key, não por sessão — não existe `entity.User` ali pra ser o `actor` (`Record`
+    ignora `actor` nil). Cobrir isso exigiria inventar um ator sintético "a secret key", fora do
+    escopo combinado (auditoria de ações de usuário logado).
+  - **Paginação por cursor** (`repository.AuditLogCursor{CreatedAt, ID}`, codificado opaco em
+    base64 pelo handler) — nunca `page`/`offset`, pedido explícito do usuário. O handler pede
+    `limit+1` linhas pra saber se existe próxima página sem adivinhar pelo tamanho da página
+    devolvida (que empataria exatamente no fim real dos dados também).
+  - **Frontend consumindo o endpoint numa fase seguinte** — ver bullet "History" mais abaixo,
+    substitui o texto antigo desta seção ("Ainda não feito").
+
 ### Frontend (Protegido)
 - `GET /` - Interface principal
 - `GET /login` - Página de login
@@ -732,6 +811,28 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     "AP"`) — antes era só a primeira letra do nome. Nome do time (`app.team`) continua de fora:
     `GET /applications` não traz nome de time, exigiria uma query nova no backend (join com
     times) sem relação com o indicador de chave abaixo.
+  - **Cor do glifo (`applicationAccent`) corrigida numa fase posterior, achada numa auditoria
+    pedida pelo usuário ("diversidade de imagens e símbolos do protótipo não está refletindo")**.
+    A fórmula CSS (`oklch(0.75 0.15 ${hue})`) já vinha confirmada, mas de onde `hue` saía não —
+    a versão anterior assumia um hash determinístico do `id` cobrindo o círculo de cor inteiro
+    (0–359°), documentado no próprio código como um chute por falta da fonte real. Decodificando
+    `app.jsx` de novo, a fórmula real apareceu: `const HUES = [158, 230, 28, 274, 330, 195];
+    const hue = HUES[apps.length % HUES.length]` — uma paleta CURADA de 6 cores, indexada pela
+    ORDEM DE CRIAÇÃO da aplicação (quantas já existiam quando esta foi criada), não um hash do
+    id. Substituído por `HUES_CYCLE` (as mesmas 6 cores) + `creationOrderIndex()`, que deriva essa
+    posição a partir de `created_at` (a API não persiste um `hue` por app — não haveria como
+    replicar "gravado uma vez na criação" sem esse campo novo no backend, então a posição é
+    recalculada a cada carga a partir da ordenação por data, efeito idêntico na prática).
+    `AppCard` passou a receber `accentIndex` como prop (calculado uma vez pra lista inteira em
+    `ApplicationsScreen`) em vez de calcular sua própria cor a partir do `id`.
+  - **Demais ícones do protótipo auditados contra `icons.jsx` real e confirmados sem gap**: toda
+    entrada do `ICONS` do protótipo (29 glifos) que é usada em alguma tela de verdade já está
+    portada em `components/Icon.tsx`. As únicas ausências reais (`sun`/`shield` — linha "Light/
+    Dark mode" do rodapé da sidebar; `chevright` — só usado no `OnboardingModal`) pertencem a
+    features já deliberadamente fora de escopo (documentado mais acima, seção AppShell). `code` e
+    `flag` existem no objeto `ICONS` do protótipo mas não são usados em NENHUMA tela real dele —
+    confirmado por busca no bundle inteiro; entradas mortas do próprio protótipo, não um gap
+    nosso.
   - **3º stat "Key" e a faixa `.app-key-row` implementados** — o gap documentado antes aqui
     ("fecharia com uma query nova no backend") foi fechado: `entity.ApplicationWithCounts` ganhou
     `HasSecretKey bool` (`has_secret_key` no JSON), resolvido em
@@ -921,24 +1022,55 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     aparece pra TODO mundo, inclusive root, o que o protótipo real nunca faz. Registrado como gap
     confirmado, não corrigido nesta passada — mudar isso é uma alteração de estrutura de abas, não
     um ajuste de CSS/copy.
-- ✅ **History** (`/history`, `screens/HistoryScreen.tsx`) — o protótipo descreve "um audit trail de
-  toda mudança do sistema", mas o backend **não tem** um log de auditoria genérico — a única trilha
-  real é `GET /approval/requests` (qualquer status, qualquer role). Reaproveita `ApprovalRow` num
-  modo `readOnly` (chip de status sempre, nunca botão de ação — e ganhou um chip "Pending" que
-  faltava, antes qualquer status que não fosse approved/rejected virava "Expired" por engano).
-  Ordena por `created_at` desc no client. Com isso, **todo item de nav do AppShell aponta pra uma
-  tela real** — nenhum `NotMigratedScreen` sobrou, o componente foi removido (não tinha mais
-  nenhuma rota apontando pra ele).
-  - **Achado depois de decodificar o JSX real, NÃO corrigido ainda**: o `HistoryView` do protótipo
-    é uma coisa BEM diferente do que foi construído aqui — um audit log rico, categorizado
-    (`AUDIT_CAT`/`AUDIT_ICON`/`AUDIT_DOT` em `data.js`: toggles/keys/access/approvals, cada
-    entrada com ícone+dot colorido próprio, texto HTML inline tipo "Disabled **experiments**
-    branch", timeline com trilho vertical), filtrável por categoria — nada a ver com reaproveitar
-    `ApprovalRow` em modo leitura (que é, na prática, o mesmo dado da aba "Histórico" de
-    Approvals, não um audit log de verdade). Fechar esse gap de verdade exigiria um audit log
-    genérico no backend (o comentário original desta tela já dizia isso — "o backend não tem um
-    log de auditoria genérico" — mas a extensão real do gap só ficou clara depois de ver o
-    `HistoryView` de verdade, que é muito mais rico do que o texto do protótipo sugeria).
+- ✅ **History** (`/history`, `screens/HistoryScreen.tsx`) — reconstruído em 3 fases dentro da
+  mesma reescrita, cada uma um achado real:
+  1. Primeira versão reaproveitava `ApprovalRow` em modo `readOnly` sobre `GET /approval/requests`
+     — o único rastro real disponível na época, porque o backend não tinha nenhum log de
+     auditoria genérico.
+  2. Uma auditoria contra o `HistoryView` real do protótipo (decodificado do bundle — design-graph
+     não indexa esta tela, `get_screen_full("HistoryView")` só devolve o componente genérico
+     `Icon`, confirmado de novo ao vivo nesta fase) revelou que o real é BEM mais rico — audit log
+     categorizado (`AUDIT_CAT`/`AUDIT_ICON`/`AUDIT_DOT` em `data.js`: toggles/keys/access/
+     approvals, ícone+dot colorido por tipo de evento, timeline com trilho vertical) — nada a ver
+     com a lista plana da fase 1. Fechar isso de verdade exigia um audit log genérico no backend
+     (tabela nova + hooks em toda mutação do sistema), a maior mudança de escopo cogitada nesta
+     reescrita até então — decisão inicial (discutida com o usuário, 3 opções: faseado / completo
+     / não construir) foi NÃO construir ainda, só reenquadrar título/descrição pra não fingir um
+     audit trail que não existia ("Approval history" / "Not a full audit trail...").
+  3. Retomado numa fase seguinte: o backend ganhou o audit log genérico de verdade (ver bullet
+     "Rotas de Auditoria" acima — entidade, migration, `GET /api/audit` paginado por cursor,
+     escopado por time) e esta tela foi reconstruída sobre ele pra valer. `components/AuditRow.tsx`
+     é o item da timeline (`.audit-item`/`.audit-rail`/`.audit-dot`/`.audit-line`/`.audit-body`,
+     confirmados no CSS real do mesmo bundle — nenhuma dessas classes existia em `global.css` antes
+     desta fase). `lib/auditEvents.ts` mapeia `event_type` (granular, do backend) pro ícone/cor do
+     dot — **única divergência deliberada do protótipo mantida**: lá um `type` genérico
+     ("create"/"delete") é reusado entre domínios (apagar toggle E apagar usuário são ambos
+     "delete", mesma cor); aqui cada `event_type` tem sua entrada própria, sem essa ambiguidade,
+     mantendo a mesma intenção visual (verde=criado/ligado, âmbar=desligado/bloqueado,
+     vermelho=apagado) — só a CATEGORIA de `user_deleted` muda (vira "access", não "toggles").
+     Filtro por categoria (`.audit-filter`/`.chip`, já existentes,
+     reaproveitados de Approvals) é resolvido no SERVIDOR via query param — diferente do
+     protótipo, que filtra em memória sobre um array já carregado por inteiro; aqui, com paginação
+     infinita, só uma fatia dos dados está carregada por vez, então trocar de categoria reinicia a
+     paginação do zero. **Paginação infinita por `IntersectionObserver`** num sentinel no fim da
+     lista (pedido explícito do usuário: nunca número de página) — busca a próxima leva de
+     `GET /api/audit?cursor=...` quando o sentinel entra na viewport.
+  4. **Auditoria de ícones/cores/textos pedida pelo usuário, achados reais corrigidos** (releu
+     TODOS os 21 `logAudit(...)` reais do `app.jsx`, não uma amostra, pra montar a tabela de
+     referência definitiva): `key_revoked` usava ícone "trash" — errado, o protótipo usa "key"
+     pros dois lados de chave (gerar E revogar, mesmo type "key"; só o BOTÃO de revogar usa
+     trash, não o evento de auditoria). `approval_rejected`/`approval_system_toggled` tinham
+     ganhado um tratamento visual próprio numa passada anterior (ícone/cor distintos de
+     approved) sem que o usuário tivesse pedido — revertido pro que o protótipo realmente faz:
+     as três ações (aprovar/rejeitar/ligar-desligar o sistema) usam o MESMO type "approval"
+     (ícone check, dot verde), sem diferenciação visual — só o texto muda. Três textos também
+     incompletos, corrigidos no backend: regra de porcentagem não incluía o valor ("Set
+     percentage rule" virou "Set percentage rule to 40%", confirmado contra
+     `saveDrawer` real); gerar chave sempre dizia "Generated", nunca "Rotated" quando já existia
+     uma (`SecretKeyHandler.GenerateSecretKey` agora checa existência ANTES de regenerar, já que
+     regenerar sempre apaga a anterior primeiro); adicionar membro ao time não dizia QUEM foi
+     adicionado ("Added member" virou "Added @username" — `TeamHandler` ganhou `userUseCase`
+     como dependência nova só pra essa busca, ver comentário no construtor).
 - **Bug real de roteamento encontrado e corrigido (histórico)**: `isAPIRoute` usava
   `strings.HasPrefix(path, "/approval")` pra reconhecer a API de aprovação — mas `/approvals`
   (rota SPA de `screens/ApprovalsScreen.tsx`) também começa com essa string por acidente

@@ -191,6 +191,7 @@ func TestApprovalUseCase_NewConstructorWithApplicationUseCase(t *testing.T) {
 			toggleUseCase,
 			applicationUseCase, // This is the new parameter we added
 			nil, // secretKeyUseCase - not relevant for this test
+			nil, // auditUseCase - not relevant for this test
 		)
 		
 		// Verify

@@ -7,6 +7,7 @@ import (
 	"github.com/manorfm/totoogle/internal/app/config"
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/domain/policy"
 	"github.com/manorfm/totoogle/internal/app/infrastructure/database"
 	"github.com/manorfm/totoogle/internal/app/middleware"
 	"github.com/manorfm/totoogle/internal/app/usecase"
@@ -22,6 +23,7 @@ var (
 	teamHandler           *TeamHandler
 	secretKeyHandler      *SecretKeyHandler
 	approvalHandler       *ApprovalHandler
+	auditHandler          *AuditHandler
 	globalApprovalUseCase *usecase.ApprovalUseCase
 )
 
@@ -37,6 +39,7 @@ func InitHandlers(db *gorm.DB) {
 	approvalSettingsRepo := database.NewApprovalSettingsRepository(db)
 	teamApproverRepo := database.NewTeamApproverRepository(db)
 	sessionRepo := database.NewSessionRepository(db)
+	auditLogRepo := database.NewAuditLogRepository(db)
 
 	// Inicializa sistema de autenticação
 	authManager := auth.NewAuthManager()
@@ -54,6 +57,8 @@ func InitHandlers(db *gorm.DB) {
 	userUseCase := usecase.NewUserUseCase(userRepo, sessionRepo)
 	teamUseCase := usecase.NewTeamUseCase(teamRepo, userRepo, appRepo)
 	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)
+	auditAccess := policy.NewAuditAccess(teamRepo)
+	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, auditAccess, teamRepo)
 	approvalUseCase := usecase.NewApprovalUseCase(
 		approvalRequestRepo,
 		approvalSettingsRepo,
@@ -66,6 +71,7 @@ func InitHandlers(db *gorm.DB) {
 		toggleUseCase,
 		appUseCase,
 		secretKeyUseCase,
+		auditUseCase,
 	)
 	globalApprovalUseCase = approvalUseCase
 
@@ -73,14 +79,15 @@ func InitHandlers(db *gorm.DB) {
 	authUseCase.InitializeRootUser()
 
 	// Inicializa handlers
-	appHandler = NewApplicationHandler(appUseCase, toggleUseCase, teamUseCase)
-	toggleHandler = NewToggleHandler(toggleUseCase)
+	appHandler = NewApplicationHandler(appUseCase, toggleUseCase, teamUseCase, auditUseCase)
+	toggleHandler = NewToggleHandler(toggleUseCase, auditUseCase)
 	authHandler = NewAuthHandler(authUseCase)
 	userHandler = NewUserHandler(userUseCase)
-	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase, approvalUseCase)
-	teamHandler = NewTeamHandler(teamUseCase)
-	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase, appUseCase)
+	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase, approvalUseCase, auditUseCase)
+	teamHandler = NewTeamHandler(teamUseCase, userUseCase, auditUseCase)
+	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase, appUseCase, auditUseCase)
 	approvalHandler = NewApprovalHandler(approvalUseCase)
+	auditHandler = NewAuditHandler(auditUseCase)
 }
 
 // Funções globais para as rotas
@@ -359,6 +366,11 @@ func MarkExpiredRequests(c *gin.Context) {
 
 func ExecuteApprovedAction(c *gin.Context) {
 	approvalHandler.ExecuteApprovedAction(c)
+}
+
+// Auditoria
+func GetAuditLog(c *gin.Context) {
+	auditHandler.GetAuditLog(c)
 }
 
 // RequireApprovalAware cria um middleware que verifica aprovação antes de aplicar restrições de role

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
+	"github.com/manorfm/totoogle/internal/app/domain/repository"
 )
 
 type MockApplicationRepository struct {
@@ -295,18 +296,20 @@ func (m *MockUserRepository) GetUsersByApplicationID(applicationID string) ([]*e
 
 // MockTeamRepository represents a mock implementation of TeamRepository
 type MockTeamRepository struct {
-	Teams        map[string]*entity.Team
-	TeamsByUser  map[string][]string // userID -> teamIDs, backs GetTeamsByUserID
-	CreateError  error
-	GetByIDError error
-	UpdateError  error
-	DeleteError  error
+	Teams              map[string]*entity.Team
+	TeamsByUser        map[string][]string // userID -> teamIDs, backs GetTeamsByUserID
+	TeamsByApplication map[string][]string // applicationID -> teamIDs, backs GetTeamsByApplicationID
+	CreateError        error
+	GetByIDError       error
+	UpdateError        error
+	DeleteError        error
 }
 
 func NewMockTeamRepository() *MockTeamRepository {
 	return &MockTeamRepository{
-		Teams:       make(map[string]*entity.Team),
-		TeamsByUser: make(map[string][]string),
+		Teams:              make(map[string]*entity.Team),
+		TeamsByUser:        make(map[string][]string),
+		TeamsByApplication: make(map[string][]string),
 	}
 }
 
@@ -403,7 +406,15 @@ func (m *MockTeamRepository) GetApplicationsByTeamID(teamID string) ([]*entity.A
 }
 
 func (m *MockTeamRepository) GetTeamsByApplicationID(applicationID string) ([]*entity.Team, error) {
-	return []*entity.Team{}, nil
+	var teams []*entity.Team
+	for _, teamID := range m.TeamsByApplication[applicationID] {
+		if team, exists := m.Teams[teamID]; exists {
+			teams = append(teams, team)
+			continue
+		}
+		teams = append(teams, &entity.Team{ID: teamID})
+	}
+	return teams, nil
 }
 
 func (m *MockTeamRepository) GetTeamApplicationPermission(teamID, applicationID string) (entity.TeamPermissionLevel, error) {
@@ -714,4 +725,48 @@ func (m *MockApprovalSettingsRepository) RequiresApproval(ctx context.Context, a
 
 func (m *MockApprovalSettingsRepository) GetExpirationDays(ctx context.Context) (int, error) {
 	return 7, nil
+}
+
+// MockAuditLogRepository represents a mock implementation of repository.AuditLogRepository
+type MockAuditLogRepository struct {
+	Created     []*entity.AuditLog
+	CreateError error
+	ListResult  []*entity.AuditLog
+	ListError   error
+	// LastListCall captura os argumentos da última chamada a List, pra testar que o usecase
+	// repassa teamIDs/unrestricted/category/cursor/limit corretamente sem reimplementar a
+	// lógica de paginação/filtro aqui (isso já é coberto pelos testes do repositório real).
+	LastListCall *struct {
+		TeamIDs      []string
+		Unrestricted bool
+		Category     entity.AuditCategory
+		Cursor       *repository.AuditLogCursor
+		Limit        int
+	}
+}
+
+func NewMockAuditLogRepository() *MockAuditLogRepository {
+	return &MockAuditLogRepository{}
+}
+
+func (m *MockAuditLogRepository) Create(ctx context.Context, log *entity.AuditLog) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+	m.Created = append(m.Created, log)
+	return nil
+}
+
+func (m *MockAuditLogRepository) List(ctx context.Context, teamIDs []string, unrestricted bool, category entity.AuditCategory, cursor *repository.AuditLogCursor, limit int) ([]*entity.AuditLog, error) {
+	m.LastListCall = &struct {
+		TeamIDs      []string
+		Unrestricted bool
+		Category     entity.AuditCategory
+		Cursor       *repository.AuditLogCursor
+		Limit        int
+	}{teamIDs, unrestricted, category, cursor, limit}
+	if m.ListError != nil {
+		return nil, m.ListError
+	}
+	return m.ListResult, nil
 }

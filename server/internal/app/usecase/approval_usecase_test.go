@@ -25,7 +25,7 @@ func newApprovalUseCaseForAccessTests() (*ApprovalUseCase, *MockApprovalRequestR
 		teamApproverRepo,
 		userRepo,
 		teamRepo,
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil,
 	)
 	return uc, requestRepo, teamRepo, teamApproverRepo, userRepo
 }

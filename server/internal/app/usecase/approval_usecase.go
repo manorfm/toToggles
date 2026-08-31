@@ -39,6 +39,12 @@ type ApprovalUseCase struct {
 	applicationUseCase   *ApplicationUseCase
 	secretKeyUseCase     *SecretKeyUseCase
 	access               approvalAccessPolicy
+	// auditUseCase é opcional (pode ficar nil): testes de acesso/autorização não precisam de
+	// auditoria de verdade, e sempre checar nil aqui evita ter que passar um AuditUseCase real
+	// (com seus próprios mocks) só pra satisfazer a assinatura em todo teste que não é sobre
+	// isso — mesma tolerância a dependência opcional já usada nos outros parâmetros nil deste
+	// construtor em testes existentes.
+	auditUseCase *AuditUseCase
 }
 
 func NewApprovalUseCase(
@@ -53,6 +59,7 @@ func NewApprovalUseCase(
 	toggleUseCase *ToggleUseCase,
 	applicationUseCase *ApplicationUseCase,
 	secretKeyUseCase *SecretKeyUseCase,
+	auditUseCase *AuditUseCase,
 ) *ApprovalUseCase {
 	return &ApprovalUseCase{
 		approvalRequestRepo:  approvalRequestRepo,
@@ -67,7 +74,17 @@ func NewApprovalUseCase(
 		applicationUseCase:   applicationUseCase,
 		secretKeyUseCase:     secretKeyUseCase,
 		access:               policy.NewApprovalAccess(teamRepo, teamApproverRepo),
+		auditUseCase:         auditUseCase,
 	}
+}
+
+// recordAudit grava um evento se auditUseCase estiver configurado — nunca panica quando nil
+// (testes de autorização passam nil de propósito, ver o comentário no campo).
+func (uc *ApprovalUseCase) recordAudit(eventType entity.AuditEventType, text, target string, teamID *string, actor *entity.User) {
+	if uc.auditUseCase == nil {
+		return
+	}
+	uc.auditUseCase.Record(eventType, text, target, teamID, actor)
 }
 
 // ============================
@@ -99,6 +116,7 @@ func (uc *ApprovalUseCase) UpdateApprovalSettings(ctx context.Context, userID st
 	if err != nil {
 		return nil, err
 	}
+	wasEnabled := settings.ApprovalEnabled
 
 	// Aplicar mudanças
 	if err := settings.ApplyUpdate(req); err != nil {
@@ -108,6 +126,16 @@ func (uc *ApprovalUseCase) UpdateApprovalSettings(ctx context.Context, userID st
 	// Salvar
 	if err := uc.approvalSettingsRepo.Update(ctx, settings); err != nil {
 		return nil, err
+	}
+
+	// Evento global (team_id nil) — só root chega aqui (checado acima), e nenhum não-root
+	// nunca vê uma linha com team_id nil (AuditAccess), então isso já é root-only "de graça".
+	if req.ApprovalEnabled != nil && *req.ApprovalEnabled != wasEnabled {
+		verb := "disabled"
+		if settings.ApprovalEnabled {
+			verb = "enabled"
+		}
+		uc.recordAudit(entity.AuditEventApprovalSystemToggled, "Approval system "+verb, "", nil, user)
 	}
 
 	return settings.ToResponse()
@@ -176,6 +204,13 @@ func (uc *ApprovalUseCase) CreateApprovalRequest(ctx context.Context, actionType
 	if err := uc.approvalRequestRepo.Create(ctx, request); err != nil {
 		return nil, err
 	}
+
+	// Gravado com o SOLICITANTE (requester) como actor, não quem for aprovar depois — sem isso,
+	// o audit trail de uma ação que passa por aprovação só mostra "root aprovou X", nunca quem
+	// pediu X originalmente (gap real, achado numa auditoria pedida pelo usuário). Confirmado no
+	// protótipo real como o type "approval-request" (requestApproval).
+	teamIDCopy := teamID
+	uc.recordAudit(entity.AuditEventApprovalRequested, "Requested: "+description, "", &teamIDCopy, requester)
 
 	return request, nil
 }
@@ -262,7 +297,13 @@ func (uc *ApprovalUseCase) ApproveRequest(ctx context.Context, requestID string,
 		return err
 	}
 
-	return uc.approvalRequestRepo.Update(ctx, request)
+	if err := uc.approvalRequestRepo.Update(ctx, request); err != nil {
+		return err
+	}
+
+	teamID := request.TeamID
+	uc.recordAudit(entity.AuditEventApprovalApproved, "Approved: "+request.Description, "", &teamID, approver)
+	return nil
 }
 
 func (uc *ApprovalUseCase) RejectRequest(ctx context.Context, requestID string, rejector *entity.User, reason string) error {
@@ -287,7 +328,13 @@ func (uc *ApprovalUseCase) RejectRequest(ctx context.Context, requestID string, 
 		return err
 	}
 
-	return uc.approvalRequestRepo.Update(ctx, request)
+	if err := uc.approvalRequestRepo.Update(ctx, request); err != nil {
+		return err
+	}
+
+	teamID := request.TeamID
+	uc.recordAudit(entity.AuditEventApprovalRejected, "Rejected: "+request.Description, "", &teamID, rejector)
+	return nil
 }
 
 // ============================
@@ -423,44 +470,106 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	// Isso dependerá da integração com os outros use cases
 	// Por enquanto, apenas marcamos como processada (se necessário)
 
+	var execErr error
+	isApplicationEdit := false
+
 	switch request.ActionType {
 	case entity.ApprovalActionToggleCreate:
-		// Executar criação de toggle
-		return uc.executeToggleCreateAction(ctx, request)
+		execErr = uc.executeToggleCreateAction(ctx, request)
 	case entity.ApprovalActionToggleUpdate:
-		// Executar atualização de toggle
-		return uc.executeToggleUpdateAction(ctx, request)
+		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionToggleDelete:
-		// Executar exclusão de toggle
-		return uc.executeToggleDeleteAction(ctx, request)
+		execErr = uc.executeToggleDeleteAction(ctx, request)
 	case entity.ApprovalActionToggleEnable:
-		// Executar ativação de toggle (same as update)
-		return uc.executeToggleUpdateAction(ctx, request)
+		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionToggleDisable:
-		// Executar desativação de toggle (same as update)
-		return uc.executeToggleUpdateAction(ctx, request)
+		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionToggleRule:
-		// Executar alteração de regra de toggle (same as update)
-		return uc.executeToggleUpdateAction(ctx, request)
+		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionApplicationCreate:
 		// Não existe application_update (docs/rest-flow.md §9.1) — PUT /applications/:id também
 		// cai neste mesmo action_type. ApplicationID só é preenchido pra esse caso (edição);
 		// numa criação de verdade a aplicação ainda não existe, então fica nil.
 		if request.ApplicationID != nil {
-			return uc.executeApplicationUpdateAction(ctx, request)
+			isApplicationEdit = true
+			execErr = uc.executeApplicationUpdateAction(ctx, request)
+		} else {
+			execErr = uc.executeApplicationCreateAction(ctx, request)
 		}
-		return uc.executeApplicationCreateAction(ctx, request)
 	case entity.ApprovalActionApplicationDelete:
-		// Executar exclusão de aplicação
-		return uc.executeApplicationDeleteAction(ctx, request)
+		execErr = uc.executeApplicationDeleteAction(ctx, request)
 	case entity.ApprovalActionSecretKeyCreate:
-		// Executar criação de secret key
-		return uc.executeSecretKeyCreateAction(ctx, request)
+		execErr = uc.executeSecretKeyCreateAction(ctx, request)
 	case entity.ApprovalActionSecretKeyDelete:
-		// Executar exclusão de secret key
-		return uc.executeSecretKeyDeleteAction(ctx, request)
+		execErr = uc.executeSecretKeyDeleteAction(ctx, request)
 	default:
 		return fmt.Errorf("unsupported action type: %s", request.ActionType)
+	}
+
+	if execErr != nil {
+		return execErr
+	}
+
+	// Evento de domínio da ação que ACABOU de rodar de verdade — sem isso, o audit trail de uma
+	// ação que passou pelo workflow de aprovação só teria o "Approved: X" (ApproveRequest), nunca
+	// o "X aconteceu" em si; gap real encontrado numa auditoria pedida pelo usuário, comparando o
+	// History ao vivo (tudo aparecia como "root", porque só a aprovação era gravada — quem
+	// REQUISITOU a ação, o dado que mais importa aqui, nunca tinha entrada nenhuma). actor é
+	// `caller` (quem chamou .../execute agora, tipicamente o aprovador) — mesma escolha do
+	// protótipo real (executePendingActionsempre usa currentUser, nunca o requester original).
+	if eventType, text := auditEventForApprovalExecution(request, isApplicationEdit); eventType != "" {
+		teamID := request.TeamID
+		uc.recordAudit(eventType, text, "", &teamID, caller)
+	}
+
+	return nil
+}
+
+// auditEventForApprovalExecution decide o AuditEventType (pro ícone/cor/categoria certos) e o
+// texto do evento de execução — reaproveita request.Description (já um texto legível, montado
+// na hora que a solicitação foi criada, ex.: "Create toggle: payments.card.x") em vez de
+// re-derivar tudo de novo a partir de action_data, só adicionando "(after approval)" — mesmo
+// sufixo literal que o protótipo real usa (`executePendingAction`) pra marcar que essa execução
+// veio de uma aprovação, não de uma ação direta.
+func auditEventForApprovalExecution(request *entity.ApprovalRequest, isApplicationEdit bool) (entity.AuditEventType, string) {
+	text := request.Description + " (after approval)"
+
+	switch request.ActionType {
+	case entity.ApprovalActionToggleCreate:
+		return entity.AuditEventToggleCreated, text
+	case entity.ApprovalActionToggleDelete:
+		return entity.AuditEventToggleDeleted, text
+	case entity.ApprovalActionToggleEnable:
+		return entity.AuditEventToggleEnabled, text
+	case entity.ApprovalActionToggleDisable:
+		return entity.AuditEventToggleDisabled, text
+	case entity.ApprovalActionToggleRule:
+		return entity.AuditEventToggleRuleSet, text
+	case entity.ApprovalActionToggleUpdate:
+		// Endpoint plural sem regra (só `enabled` no corpo) — a mesma heurística de
+		// middleware/approval.go#getActionType, só que aqui pra decidir ícone/cor, não pra
+		// executar (a execução real já rodou em executeToggleUpdateAction, acima).
+		var data struct {
+			Enabled bool `json:"enabled"`
+		}
+		_ = request.GetActionDataAs(&data)
+		if data.Enabled {
+			return entity.AuditEventToggleEnabled, text
+		}
+		return entity.AuditEventToggleDisabled, text
+	case entity.ApprovalActionApplicationCreate:
+		if isApplicationEdit {
+			return entity.AuditEventApplicationUpdated, text
+		}
+		return entity.AuditEventApplicationCreated, text
+	case entity.ApprovalActionApplicationDelete:
+		return entity.AuditEventApplicationDeleted, text
+	case entity.ApprovalActionSecretKeyCreate:
+		return entity.AuditEventKeyGenerated, text
+	case entity.ApprovalActionSecretKeyDelete:
+		return entity.AuditEventKeyRevoked, text
+	default:
+		return "", text
 	}
 }
 

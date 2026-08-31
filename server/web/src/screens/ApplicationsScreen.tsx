@@ -7,6 +7,7 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
+import { creationOrderIndex } from "../lib/applicationAccent";
 import type { Application } from "../types/application";
 
 type LoadState =
@@ -102,9 +103,18 @@ export function ApplicationsScreen() {
       )}
       {state.status === "loaded" && state.applications.length > 0 && (
         <div className="grid">
-          {state.applications.map((application) => (
-            <AppCard key={application.id} application={application} canEdit={canCreate} onEdit={setEditing} />
-          ))}
+          {(() => {
+            const accentIndexByID = creationOrderIndex(state.applications);
+            return state.applications.map((application) => (
+              <AppCard
+                key={application.id}
+                application={application}
+                accentIndex={accentIndexByID.get(application.id) ?? 0}
+                canEdit={canCreate}
+                onEdit={setEditing}
+              />
+            ));
+          })()}
         </div>
       )}
 
