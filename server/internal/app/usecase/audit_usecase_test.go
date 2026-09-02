@@ -19,7 +19,7 @@ func TestAuditUseCase_Record(t *testing.T) {
 	t.Run("writes an entry derived from the event type", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		actor := &entity.User{ID: "u1", Username: "alice", Role: entity.UserRoleAdmin}
+		actor := &entity.User{ID: "u1", Name: "Alice Ribeiro", Username: "alice", Role: entity.UserRoleAdmin}
 		teamID := "team-1"
 
 		uc.Record(entity.AuditEventToggleDeleted, "Deleted toggle payments.card", "Checkout Service", &teamID, actor)
@@ -31,8 +31,10 @@ func TestAuditUseCase_Record(t *testing.T) {
 		if entry.EventType != entity.AuditEventToggleDeleted || entry.Category != entity.AuditCategoryToggles {
 			t.Errorf("unexpected event_type/category: %+v", entry)
 		}
-		if entry.ActorID != "u1" || entry.ActorName != "alice" {
-			t.Errorf("expected actor to be recorded, got %+v", entry)
+		// ActorName vem de actor.Name (nome completo), não actor.Username — confirmado no
+		// protótipo real (logAudit sempre usa currentUser.name).
+		if entry.ActorID != "u1" || entry.ActorName != "Alice Ribeiro" {
+			t.Errorf("expected actor name (not username) to be recorded, got %+v", entry)
 		}
 		if entry.TeamID == nil || *entry.TeamID != "team-1" {
 			t.Errorf("expected team_id to be recorded, got %+v", entry.TeamID)

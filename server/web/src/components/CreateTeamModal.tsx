@@ -88,7 +88,7 @@ export function CreateTeamModal({ onClose, onCreated }: CreateTeamModalProps) {
         />
       </div>
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
+        <div className="field-hint danger">
           {error}
         </div>
       )}

@@ -79,7 +79,11 @@ export function UserManagementScreen() {
   }
 
   const allUsers = state.status === "loaded" ? state.users : [];
-  const visible = allUsers.filter((u) => !search || u.username.toLowerCase().includes(search.toLowerCase()));
+  const visible = allUsers.filter((u) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return u.username.toLowerCase().includes(q) || u.name.toLowerCase().includes(q);
+  });
   const pendingCount = visible.filter((u) => u.status === "pending_first_login").length;
 
   return (
@@ -98,7 +102,7 @@ export function UserManagementScreen() {
       </div>
 
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)", marginBottom: 16 }}>
+        <div className="field-hint danger" style={{ marginBottom: 16 }}>
           {error}
         </div>
       )}
@@ -107,7 +111,7 @@ export function UserManagementScreen() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <div className="search" style={{ flex: 1, maxWidth: 320 }}>
             <Icon name="search" size={15} />
-            <input placeholder="Buscar por username" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input placeholder="Buscar por nome ou username" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <span className="badge">
             {visible.length} usuário{visible.length !== 1 ? "s" : ""}

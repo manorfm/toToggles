@@ -93,7 +93,7 @@ export function CreateToggleModal({ applicationId, onClose, onCreated, onPending
       </div>
 
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
+        <div className="field-hint danger">
           {error}
         </div>
       )}

@@ -10,10 +10,10 @@ import (
 )
 
 type SecretKeyHandler struct {
-	secretKeyUseCase    *usecase.SecretKeyUseCase
-	toggleUseCase       *usecase.ToggleUseCase
-	applicationUseCase  *usecase.ApplicationUseCase
-	auditUseCase        *usecase.AuditUseCase
+	secretKeyUseCase   *usecase.SecretKeyUseCase
+	toggleUseCase      *usecase.ToggleUseCase
+	applicationUseCase *usecase.ApplicationUseCase
+	auditUseCase       *usecase.AuditUseCase
 }
 
 // auditUseCase: sem cobertura pro kill switch (DisableToggleBySecret) de propósito — essa rota
@@ -85,13 +85,20 @@ func (h *SecretKeyHandler) GenerateSecretKey(c *gin.Context) {
 	if rotated {
 		keyEventText = "Rotated service key"
 	}
-	h.auditUseCase.RecordForApplication(entity.AuditEventKeyGenerated, keyEventText, "", applicationID, user)
+	// target é o nome da aplicação — confirmado no protótipo real (AUDIT_SEED au4: target
+	// "Checkout Service"); erro na busca (improvável, a chave acabou de ser gerada pra essa
+	// aplicação) só resulta num target vazio, nunca trava a resposta principal.
+	appName := ""
+	if app, err := h.applicationUseCase.GetApplicationByID(applicationID); err == nil {
+		appName = app.Name
+	}
+	h.auditUseCase.RecordForApplication(entity.AuditEventKeyGenerated, keyEventText, appName, applicationID, user)
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":     true,
-		"secret_key":  response.SecretKey,
-		"plain_key":   response.PlainTextKey,
-		"warning":     "This key will only be shown once. Please store it securely.",
+		"success":    true,
+		"secret_key": response.SecretKey,
+		"plain_key":  response.PlainTextKey,
+		"warning":    "This key will only be shown once. Please store it securely.",
 	})
 }
 
@@ -137,15 +144,15 @@ func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
 	simplifiedToggles := make([]gin.H, 0, len(toggles))
 	for _, toggle := range toggles {
 		simplifiedToggle := gin.H{
-			"id":                toggle.ID,
-			"value":             toggle.Value,
-			"enabled":           toggle.Enabled,
-			"path":              toggle.Path,
-			"level":             toggle.Level,
-			"parent_id":         toggle.ParentID,
-			"app_id":            toggle.AppID,
+			"id":                  toggle.ID,
+			"value":               toggle.Value,
+			"enabled":             toggle.Enabled,
+			"path":                toggle.Path,
+			"level":               toggle.Level,
+			"parent_id":           toggle.ParentID,
+			"app_id":              toggle.AppID,
 			"has_activation_rule": toggle.HasActivationRule,
-			"activation_rule":   toggle.ActivationRule,
+			"activation_rule":     toggle.ActivationRule,
 		}
 		simplifiedToggles = append(simplifiedToggles, simplifiedToggle)
 	}
@@ -274,7 +281,15 @@ func (h *SecretKeyHandler) DeleteSecretKey(c *gin.Context) {
 		return
 	}
 
-	h.auditUseCase.RecordForApplication(entity.AuditEventKeyRevoked, "Service key revoked", "", applicationID, auditActor(c))
+	// target é o nome da aplicação — mesmo padrão de GenerateSecretKey (confirmado no protótipo
+	// real: `logAudit("key", "Revoked service key", app?.name || "")`).
+	appName := ""
+	if applicationID != "" {
+		if app, err := h.applicationUseCase.GetApplicationByID(applicationID); err == nil {
+			appName = app.Name
+		}
+	}
+	h.auditUseCase.RecordForApplication(entity.AuditEventKeyRevoked, "Service key revoked", appName, applicationID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

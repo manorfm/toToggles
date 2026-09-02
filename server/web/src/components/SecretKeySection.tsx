@@ -107,7 +107,7 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
       </div>
 
       {state.status === "loading" && <div className="empty-ph">Carregando…</div>}
-      {state.status === "error" && <div className="field-hint" style={{ color: "var(--danger)" }}>{state.message}</div>}
+      {state.status === "error" && <div className="field-hint danger">{state.message}</div>}
 
       {state.status === "loaded" && !state.key && (
         <div className="key-empty">
@@ -131,7 +131,14 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
               <Icon name="key" size={17} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="ks-name">{state.key.name}</div>
+              {/* Confirmado no protótipo real (get_screen_full("KeysView")): label estático
+                  "Service key", não o nome dinâmico da chave — o backend também nunca deixou esse
+                  campo variar de fato (sempre "API Access Key", CreateSecretKey/
+                  CreatePendingSecretKey nunca recebem outro valor). "· Last used {when}" do real
+                  fica de fora de propósito: não existe rastreamento de último uso nenhum no
+                  backend (sem coluna/lógica de last-used em entity.SecretKey) — mostrar um valor
+                  aqui seria inventar dado, não uma correção de texto. */}
+              <div className="ks-name">Service key</div>
               <div className="ks-meta">Created {new Date(state.key.created_at).toLocaleDateString()}</div>
             </div>
             {canManage && (

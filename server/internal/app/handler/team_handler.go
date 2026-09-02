@@ -54,14 +54,14 @@ type UpdateApplicationPermissionRequest struct {
 }
 
 type TeamResponse struct {
-	Success bool        `json:"success"`
+	Success bool         `json:"success"`
 	Team    *entity.Team `json:"team,omitempty"`
-	Error   string      `json:"error,omitempty"`
+	Error   string       `json:"error,omitempty"`
 }
 
 type TeamsResponse struct {
-	Success bool                      `json:"success"`
-	Teams   []*entity.TeamWithCounts  `json:"teams,omitempty"`
+	Success bool                     `json:"success"`
+	Teams   []*entity.TeamWithCounts `json:"teams,omitempty"`
 	Error   string                   `json:"error,omitempty"`
 }
 
@@ -93,7 +93,9 @@ func (h *TeamHandler) CreateTeam(c *gin.Context) {
 	}
 
 	teamID := team.ID
-	h.auditUseCase.Record(entity.AuditEventTeamCreated, "Created team "+team.Name, "", &teamID, auditActor(c))
+	// <b>...</b> em volta do nome: confirmado no protótipo real (AUDIT_SEED literal, visto ao
+	// vivo num screenshot: "Created team <b>Teste</b>").
+	h.auditUseCase.Record(entity.AuditEventTeamCreated, "Created team <b>"+team.Name+"</b>", "", &teamID, auditActor(c))
 
 	c.JSON(http.StatusCreated, TeamResponse{
 		Success: true,
@@ -250,11 +252,17 @@ func (h *TeamHandler) AddUserToTeam(c *gin.Context) {
 		return
 	}
 
+	// Confirmado no protótipo real: `Added <b>{name}</b>`, target `{team} team` — bolda o NOME
+	// completo (não @username) do membro adicionado.
 	addedText := "Added member"
 	if addedUser, err := h.userUseCase.GetUserByID(req.UserID); err == nil {
-		addedText = "Added @" + addedUser.Username
+		addedText = "Added <b>" + addedUser.Name + "</b>"
 	}
-	h.auditUseCase.Record(entity.AuditEventMemberAdded, addedText, "", &teamID, auditActor(c))
+	target := ""
+	if team, err := h.teamUseCase.GetTeamByID(teamID); err == nil {
+		target = team.Name + " team"
+	}
+	h.auditUseCase.Record(entity.AuditEventMemberAdded, addedText, target, &teamID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

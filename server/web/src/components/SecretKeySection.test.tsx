@@ -33,12 +33,16 @@ describe("SecretKeySection", () => {
     expect(screen.queryByRole("button", { name: /generate service key/i })).not.toBeInTheDocument();
   });
 
-  it("shows the existing key's name, created date, and Rotate/Revoke actions", async () => {
+  it("shows the existing key's created date and Rotate/Revoke actions", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [EXISTING_KEY] })));
 
-    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
+    const { container } = render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
 
-    expect(await screen.findByText("API Access Key")).toBeInTheDocument();
+    // "Service key" aparece 2x de propósito (título da seção + nome estático da chave,
+    // confirmado no protótipo real — get_screen_full("KeysView")) — checa o `.ks-name`
+    // especificamente pra não depender da ordem em que os dois aparecem.
+    await screen.findByText(/created/i);
+    expect(container.querySelector(".ks-name")).toHaveTextContent("Service key");
     expect(screen.getByText(/created/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rotate key/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument();
@@ -50,7 +54,7 @@ describe("SecretKeySection", () => {
 
     render(<SecretKeySection applicationId="app1" canManage={false} />, { wrapper: ToastProvider });
 
-    await screen.findByText("API Access Key");
+    await screen.findAllByText("Service key");
     expect(screen.queryByRole("button", { name: /rotate key/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /revoke/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Lost the key?")).not.toBeInTheDocument();
@@ -96,7 +100,7 @@ describe("SecretKeySection", () => {
     const user = userEvent.setup();
 
     render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
-    await screen.findByText("API Access Key");
+    await screen.findAllByText("Service key");
 
     await user.click(screen.getByRole("button", { name: /revoke/i }));
 
@@ -108,7 +112,7 @@ describe("SecretKeySection", () => {
     const onKeyPresenceChange = vi.fn();
 
     render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
-    await screen.findByText("API Access Key");
+    await screen.findAllByText("Service key");
 
     expect(onKeyPresenceChange).toHaveBeenCalledWith(true);
   });
@@ -178,11 +182,11 @@ describe("SecretKeySection", () => {
     const user = userEvent.setup();
 
     render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
-    await screen.findByText("API Access Key");
+    await screen.findAllByText("Service key");
 
     await user.click(screen.getByRole("button", { name: /revoke/i }));
 
     expect(onPendingApproval).toHaveBeenCalledWith("secret_key_delete");
-    expect(screen.getByText("API Access Key")).toBeInTheDocument();
+    expect(screen.getAllByText("Service key").length).toBeGreaterThan(0);
   });
 });

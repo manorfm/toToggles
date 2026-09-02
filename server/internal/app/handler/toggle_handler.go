@@ -10,16 +10,33 @@ import (
 
 // ToggleHandler gerencia as requisições HTTP para toggles
 type ToggleHandler struct {
-	toggleUseCase *usecase.ToggleUseCase
-	auditUseCase  *usecase.AuditUseCase
+	toggleUseCase      *usecase.ToggleUseCase
+	applicationUseCase *usecase.ApplicationUseCase
+	auditUseCase       *usecase.AuditUseCase
 }
 
-// NewToggleHandler cria uma nova instância de ToggleHandler
-func NewToggleHandler(toggleUseCase *usecase.ToggleUseCase, auditUseCase *usecase.AuditUseCase) *ToggleHandler {
+// NewToggleHandler cria uma nova instância de ToggleHandler. applicationUseCase é usado só pra
+// resolver o nome da aplicação no `target` dos eventos de auditoria (confirmado no protótipo
+// real — AUDIT_SEED/app.jsx#logAudit: toggle create/enable/disable/delete sempre mostram o nome
+// da aplicação como terceira linha do item, não só texto+meta; achado real depois que o usuário
+// reportou que os itens do History estavam em 2 linhas em vez de 3).
+func NewToggleHandler(toggleUseCase *usecase.ToggleUseCase, applicationUseCase *usecase.ApplicationUseCase, auditUseCase *usecase.AuditUseCase) *ToggleHandler {
 	return &ToggleHandler{
-		toggleUseCase: toggleUseCase,
-		auditUseCase:  auditUseCase,
+		toggleUseCase:      toggleUseCase,
+		applicationUseCase: applicationUseCase,
+		auditUseCase:       auditUseCase,
 	}
+}
+
+// applicationName resolve o nome da aplicação pro `target` do audit log — nunca falha a
+// requisição principal se a busca der erro (mesma tolerância de RecordForApplication a falhas
+// de auditoria: a mutação já aconteceu, um `target` vazio é preferível a travar a resposta).
+func (h *ToggleHandler) applicationName(appID string) string {
+	app, err := h.applicationUseCase.GetApplicationByID(appID)
+	if err != nil {
+		return ""
+	}
+	return app.Name
 }
 
 // auditActor lê o usuário autenticado do contexto Gin pra gravar auditoria — nunca falha a
@@ -45,9 +62,9 @@ type CreateToggleRequest struct {
 
 // UpdateToggleRequest representa a requisição para atualizar um toggle
 type UpdateToggleRequest struct {
-	Enabled           bool                     `json:"enabled"`
-	HasActivationRule bool                     `json:"has_activation_rule"`
-	ActivationRule    *entity.ActivationRule   `json:"activation_rule,omitempty"`
+	Enabled           bool                   `json:"enabled"`
+	HasActivationRule bool                   `json:"has_activation_rule"`
+	ActivationRule    *entity.ActivationRule `json:"activation_rule,omitempty"`
 }
 
 // ToggleStatusResponse representa a resposta do status de um toggle
@@ -108,7 +125,14 @@ func (h *ToggleHandler) CreateToggle(c *gin.Context) {
 		return
 	}
 
-	h.auditUseCase.RecordForApplication(entity.AuditEventToggleCreated, "Created toggle "+req.Toggle, req.Toggle, appID, auditActor(c))
+	// <b>...</b> em volta do path: confirmado no protótipo real (app.jsx#logAudit e o AUDIT_SEED
+	// literal — "Created toggle <b>checkout.express</b>"). O frontend nunca usa
+	// dangerouslySetInnerHTML pra isso — lib/auditEvents.tsx#renderAuditText só reconhece esse
+	// marcador literal e monta um <b> React de verdade, então mesmo um path/nome controlado por
+	// quem chama a API não vira HTML executável (ver os testes de segurança daquele parser).
+	// Confirmado no protótipo real (AUDIT_SEED): target é o nome da aplicação ("Checkout
+	// Service"), não o path do toggle de novo (que já está em negrito no texto).
+	h.auditUseCase.RecordForApplication(entity.AuditEventToggleCreated, "Created toggle <b>"+req.Toggle+"</b>", h.applicationName(appID), appID, auditActor(c))
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "toggle created successfully",
@@ -213,10 +237,13 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 	if req.HasActivationRule && req.ActivationRule != nil {
 		// Confirmado no protótipo real (app.jsx#saveDrawer): "Set <b>{type}</b> rule" pra
 		// qualquer tipo, com um sufixo " to <b>{value}%</b>" só quando o tipo é percentage —
-		// os outros 6 tipos (parameter/user_id/canary/ip/country/time) não têm esse sufixo.
-		ruleText := "Set " + string(req.ActivationRule.Type) + " rule"
+		// os outros 6 tipos (parameter/user_id/canary/ip/country/time) não têm esse sufixo. O
+		// `<b>` é o marcador literal que lib/auditEvents.tsx#renderAuditText reconhece pra
+		// negrito real (nunca dangerouslySetInnerHTML) — não uma tag HTML de verdade sendo
+		// injetada.
+		ruleText := "Set <b>" + string(req.ActivationRule.Type) + "</b> rule"
 		if req.ActivationRule.Type == entity.ActivationRuleTypePercentage {
-			ruleText += " to " + req.ActivationRule.Value + "%"
+			ruleText += " to <b>" + req.ActivationRule.Value + "%</b>"
 		}
 		h.auditUseCase.RecordForApplication(entity.AuditEventToggleRuleSet, ruleText, updatedToggle.Path, appID, auditActor(c))
 	} else {
@@ -226,7 +253,10 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 			eventType = entity.AuditEventToggleEnabled
 			verb = "Enabled"
 		}
-		h.auditUseCase.RecordForApplication(eventType, verb+" "+updatedToggle.Path, "", appID, auditActor(c))
+		// Confirmado no protótipo real (app.jsx#saveDrawer): `${enabled?"Enabled":"Disabled"}
+		// <b>${seg}</b>` — bolda só o ÚLTIMO segmento (Value), não o path inteiro; target é
+		// `{app.name} · {path completo}`.
+		h.auditUseCase.RecordForApplication(eventType, verb+" <b>"+updatedToggle.Value+"</b>", h.applicationName(appID)+" · "+updatedToggle.Path, appID, auditActor(c))
 	}
 
 	c.JSON(http.StatusOK, updatedToggle)
@@ -251,9 +281,9 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 	// Path só existe pra montar a mensagem de auditoria (o próprio delete não devolve o toggle
 	// apagado) — buscado antes da exclusão, de propósito; se falhar, segue sem travar o delete
 	// (RecordForApplication com target vazio ainda é melhor que não gravar o evento).
-	var path string
+	var lastSegment string
 	if toggle, err := h.toggleUseCase.GetToggleByID(toggleID, appID); err == nil {
-		path = toggle.Path
+		lastSegment = toggle.Value
 	}
 
 	err := h.toggleUseCase.DeleteToggleByID(toggleID, appID)
@@ -274,7 +304,9 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 		return
 	}
 
-	h.auditUseCase.RecordForApplication(entity.AuditEventToggleDeleted, "Deleted toggle "+path, "", appID, auditActor(c))
+	// Confirmado no protótipo real (app.jsx#doDeleteToggle): bolda só o ÚLTIMO segmento do path
+	// (`label.split(".").pop()`), não o path inteiro; target é o nome da aplicação.
+	h.auditUseCase.RecordForApplication(entity.AuditEventToggleDeleted, "Deleted toggle <b>"+lastSegment+"</b>", h.applicationName(appID), appID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "toggle deleted successfully",
@@ -388,7 +420,10 @@ func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
 		eventType = entity.AuditEventToggleEnabled
 		verb = "Enabled"
 	}
-	h.auditUseCase.RecordForApplication(eventType, verb+" "+updatedToggle.Path, "", appID, auditActor(c))
+	// Confirmado no protótipo real (app.jsx#handleToggle): `${enabled?"Disabled":"Enabled"}
+	// <b>${seg}</b>`, target `{app.name} · {path completo}` — mesmo padrão do enable/disable via
+	// drawer acima, só que pelo endpoint recursivo (liga/desliga a subárvore inteira de uma vez).
+	h.auditUseCase.RecordForApplication(eventType, verb+" <b>"+updatedToggle.Value+"</b>", h.applicationName(appID)+" · "+updatedToggle.Path, appID, auditActor(c))
 
 	c.JSON(http.StatusOK, updatedToggle)
 }

@@ -97,6 +97,7 @@ func TestCreateUser_Success(t *testing.T) {
 	router, db, teamID := setupUserManagementTestRouter()
 
 	requestBody := CreateUserManagementRequest{
+		Name:     "New User",
 		Username: "newuser",
 		Role:     "admin",
 		TeamID:   teamID,
@@ -164,6 +165,7 @@ func TestCreateUser_CannotCreateRoot(t *testing.T) {
 	router, _, teamID := setupUserManagementTestRouter()
 
 	requestBody := CreateUserManagementRequest{
+		Name:     "Root User",
 		Username: "rootuser",
 		Role:     "root",
 		TeamID:   teamID,
@@ -198,7 +200,7 @@ func TestCreateUser_CannotCreateRoot(t *testing.T) {
 func TestCreateUser_DuplicateUsername(t *testing.T) {
 	router, _, teamID := setupUserManagementTestRouter()
 
-	requestBody := CreateUserManagementRequest{Username: "bob", Role: "admin", TeamID: teamID}
+	requestBody := CreateUserManagementRequest{Name: "Bob Test", Username: "bob", Role: "admin", TeamID: teamID}
 	jsonBody, _ := json.Marshal(requestBody)
 
 	w := httptest.NewRecorder()
@@ -223,6 +225,7 @@ func TestCreateUser_InvalidRole(t *testing.T) {
 	router, _, teamID := setupUserManagementTestRouter()
 
 	requestBody := CreateUserManagementRequest{
+		Name:     "Test User",
 		TeamID:   teamID,
 		Username: "testuser",
 		Role:     "invalid",
@@ -254,11 +257,11 @@ func TestCreateUser_InvalidRole(t *testing.T) {
 // Confirmado no protótipo (get_full_jsx("UserModal")): admin cria usuários, mas só nos times de
 // que já participa.
 func TestCreateUser_AdminCanCreateInOwnTeam(t *testing.T) {
-	admin := &entity.User{ID: "admin-1", Username: "admin1", Role: entity.UserRoleAdmin}
+	admin := &entity.User{ID: "admin-1", Name: "Admin One", Username: "admin1", Role: entity.UserRoleAdmin}
 	router, _, teamID := setupUserManagementTestRouterAs(admin)
 	admin.Teams = []*entity.Team{{ID: teamID}}
 
-	requestBody := CreateUserManagementRequest{Username: "newbie", Role: "user", TeamID: teamID}
+	requestBody := CreateUserManagementRequest{Name: "New Bie", Username: "newbie", Role: "user", TeamID: teamID}
 	jsonBody, _ := json.Marshal(requestBody)
 
 	w := httptest.NewRecorder()
@@ -272,11 +275,11 @@ func TestCreateUser_AdminCanCreateInOwnTeam(t *testing.T) {
 }
 
 func TestCreateUser_AdminCannotCreateOutsideOwnTeams(t *testing.T) {
-	admin := &entity.User{ID: "admin-1", Username: "admin1", Role: entity.UserRoleAdmin}
+	admin := &entity.User{ID: "admin-1", Name: "Admin One", Username: "admin1", Role: entity.UserRoleAdmin}
 	router, _, teamID := setupUserManagementTestRouterAs(admin)
 	// admin.Teams fica vazio de propósito — não é membro do time que está tentando usar.
 
-	requestBody := CreateUserManagementRequest{Username: "newbie", Role: "user", TeamID: teamID}
+	requestBody := CreateUserManagementRequest{Name: "New Bie", Username: "newbie", Role: "user", TeamID: teamID}
 	jsonBody, _ := json.Marshal(requestBody)
 
 	w := httptest.NewRecorder()
@@ -292,7 +295,7 @@ func TestCreateUser_AdminCannotCreateOutsideOwnTeams(t *testing.T) {
 func TestCreateUser_UnknownTeam(t *testing.T) {
 	router, _, _ := setupUserManagementTestRouter()
 
-	requestBody := CreateUserManagementRequest{Username: "newbie", Role: "user", TeamID: "does-not-exist"}
+	requestBody := CreateUserManagementRequest{Name: "New Bie", Username: "newbie", Role: "user", TeamID: "does-not-exist"}
 	jsonBody, _ := json.Marshal(requestBody)
 
 	w := httptest.NewRecorder()
@@ -311,7 +314,7 @@ func TestCreateUser_ApproverFlag(t *testing.T) {
 	t.Run("root creating an admin with is_approver sets it", func(t *testing.T) {
 		router, db, teamID := setupUserManagementTestRouter()
 
-		requestBody := CreateUserManagementRequest{Username: "newadmin", Role: "admin", TeamID: teamID, IsApprover: true}
+		requestBody := CreateUserManagementRequest{Name: "New Admin", Username: "newadmin", Role: "admin", TeamID: teamID, IsApprover: true}
 		jsonBody, _ := json.Marshal(requestBody)
 
 		w := httptest.NewRecorder()
@@ -335,7 +338,7 @@ func TestCreateUser_ApproverFlag(t *testing.T) {
 	t.Run("is_approver is ignored when creating a plain user, even for root", func(t *testing.T) {
 		router, db, teamID := setupUserManagementTestRouter()
 
-		requestBody := CreateUserManagementRequest{Username: "newuser2", Role: "user", TeamID: teamID, IsApprover: true}
+		requestBody := CreateUserManagementRequest{Name: "New User Two", Username: "newuser2", Role: "user", TeamID: teamID, IsApprover: true}
 		jsonBody, _ := json.Marshal(requestBody)
 
 		w := httptest.NewRecorder()
@@ -354,11 +357,11 @@ func TestCreateUser_ApproverFlag(t *testing.T) {
 	})
 
 	t.Run("is_approver is ignored when an admin (not root) creates another admin", func(t *testing.T) {
-		creatorAdmin := &entity.User{ID: "admin-1", Username: "admin1", Role: entity.UserRoleAdmin}
+		creatorAdmin := &entity.User{ID: "admin-1", Name: "Admin One", Username: "admin1", Role: entity.UserRoleAdmin}
 		router, db, teamID := setupUserManagementTestRouterAs(creatorAdmin)
 		creatorAdmin.Teams = []*entity.Team{{ID: teamID}}
 
-		requestBody := CreateUserManagementRequest{Username: "newadmin2", Role: "admin", TeamID: teamID, IsApprover: true}
+		requestBody := CreateUserManagementRequest{Name: "New Admin Two", Username: "newadmin2", Role: "admin", TeamID: teamID, IsApprover: true}
 		jsonBody, _ := json.Marshal(requestBody)
 
 		w := httptest.NewRecorder()
@@ -380,17 +383,17 @@ func TestCreateUser_ApproverFlag(t *testing.T) {
 // Confirmado no protótipo (page-desc de UsersView): sem isso, "admin cria usuários" não teria
 // como conferir o resultado — admin só vê a si mesmo e quem compartilha um time consigo.
 func TestListUsers_AdminSeesOnlySharedTeamMembers(t *testing.T) {
-	admin := &entity.User{ID: "admin-1", Username: "admin1", Role: entity.UserRoleAdmin}
+	admin := &entity.User{ID: "admin-1", Name: "Admin One", Username: "admin1", Role: entity.UserRoleAdmin}
 	router, db, teamID := setupUserManagementTestRouterAs(admin)
 	admin.Teams = []*entity.Team{{ID: teamID}}
 	db.Exec("INSERT INTO team_users (team_id, user_id, is_approver) VALUES (?, ?, false)", teamID, admin.ID)
 
-	teammate := &entity.User{ID: "teammate-1", Username: "teammate", Role: entity.UserRoleUser}
+	teammate := &entity.User{ID: "teammate-1", Name: "Team Mate", Username: "teammate", Role: entity.UserRoleUser}
 	teammate.SetPassword("password123")
 	db.Create(teammate)
 	db.Exec("INSERT INTO team_users (team_id, user_id, is_approver) VALUES (?, ?, false)", teamID, teammate.ID)
 
-	stranger := &entity.User{ID: "stranger-1", Username: "stranger", Role: entity.UserRoleUser}
+	stranger := &entity.User{ID: "stranger-1", Name: "A Stranger", Username: "stranger", Role: entity.UserRoleUser}
 	stranger.SetPassword("password123")
 	db.Create(stranger)
 
@@ -423,7 +426,7 @@ func TestListUsers_AdminSeesOnlySharedTeamMembers(t *testing.T) {
 func TestResetUserPassword_GeneratesNewPasswordAndForcesChange(t *testing.T) {
 	router, db, _ := setupUserManagementTestRouter()
 
-	target := &entity.User{ID: "u1", Username: "target", Role: entity.UserRoleUser}
+	target := &entity.User{ID: "u1", Name: "Target User", Username: "target", Role: entity.UserRoleUser}
 	target.SetPassword("originalpassword")
 	db.Create(target)
 
@@ -475,7 +478,7 @@ func TestResetUserPassword_CannotResetRoot(t *testing.T) {
 func TestSetUserStatus_DisableAndReactivate(t *testing.T) {
 	router, db, _ := setupUserManagementTestRouter()
 
-	target := &entity.User{ID: "u1", Username: "target", Role: entity.UserRoleUser, Active: true}
+	target := &entity.User{ID: "u1", Name: "Target User", Username: "target", Role: entity.UserRoleUser, Active: true}
 	target.SetPassword("password123")
 	db.Create(target)
 
@@ -534,17 +537,17 @@ func TestSetUserStatus_CannotDisableRoot(t *testing.T) {
 // usuário que compartilhe pelo menos um time consigo — inclusive outro admin — mas nunca a si
 // mesmo nem alguém fora do seu escopo.
 func TestResetUserPassword_AdminScopedToSharedTeam(t *testing.T) {
-	admin := &entity.User{ID: "admin-1", Username: "admin1", Role: entity.UserRoleAdmin}
+	admin := &entity.User{ID: "admin-1", Name: "Admin One", Username: "admin1", Role: entity.UserRoleAdmin}
 	router, db, teamID := setupUserManagementTestRouterAs(admin)
 	admin.Teams = []*entity.Team{{ID: teamID}}
 	db.Exec("INSERT INTO team_users (team_id, user_id, is_approver) VALUES (?, ?, false)", teamID, admin.ID)
 
-	teammate := &entity.User{ID: "teammate-1", Username: "teammate", Role: entity.UserRoleUser}
+	teammate := &entity.User{ID: "teammate-1", Name: "Team Mate", Username: "teammate", Role: entity.UserRoleUser}
 	teammate.SetPassword("password123")
 	db.Create(teammate)
 	db.Exec("INSERT INTO team_users (team_id, user_id, is_approver) VALUES (?, ?, false)", teamID, teammate.ID)
 
-	stranger := &entity.User{ID: "stranger-1", Username: "stranger", Role: entity.UserRoleUser}
+	stranger := &entity.User{ID: "stranger-1", Name: "A Stranger", Username: "stranger", Role: entity.UserRoleUser}
 	stranger.SetPassword("password123")
 	db.Create(stranger)
 
@@ -603,6 +606,7 @@ func TestListUsers(t *testing.T) {
 	// Criar alguns usuários de teste
 	user1 := &entity.User{
 		ID:       "user1",
+		Name:     "Test User One",
 		Username: "testuser1",
 		Role:     entity.UserRoleAdmin,
 	}
@@ -611,6 +615,7 @@ func TestListUsers(t *testing.T) {
 
 	user2 := &entity.User{
 		ID:       "user2",
+		Name:     "Test User Two",
 		Username: "testuser2",
 		Role:     entity.UserRoleUser,
 	}
@@ -644,6 +649,7 @@ func TestDeleteUser_Success(t *testing.T) {
 	// Criar um usuário de teste
 	user := &entity.User{
 		ID:       "user-to-delete",
+		Name:     "Delete User",
 		Username: "deleteuser",
 		Role:     entity.UserRoleUser,
 	}
@@ -715,6 +721,7 @@ func TestChangePassword_Success(t *testing.T) {
 	// Criar um usuário de teste
 	testUser := &entity.User{
 		ID:                 "test-user-id",
+		Name:               "Test User",
 		Username:           "testuser",
 		Role:               entity.UserRoleUser,
 		MustChangePassword: true,
@@ -784,6 +791,7 @@ func TestChangePassword_WrongCurrentPassword(t *testing.T) {
 	// Criar um usuário de teste
 	testUser := &entity.User{
 		ID:       "test-user-id",
+		Name:     "Test User",
 		Username: "testuser",
 		Role:     entity.UserRoleUser,
 	}

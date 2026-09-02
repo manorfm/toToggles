@@ -386,11 +386,18 @@ código):
     Diferente do protótipo real: lá um `type` genérico (`"create"`/`"delete"`) é reusado entre
     domínios — o que faz um evento de **apagar usuário** cair na categoria "toggles" no
     protótipo (`AUDIT_CAT["delete"] === "toggles"`), uma ambiguidade real não replicada aqui.
-    `text`/`target` são sempre texto puro, nunca HTML — o `HistoryView` real usa
-    `dangerouslySetInnerHTML` sobre `text` (ex.: `"Disabled <b>experiments</b> branch"`);
-    gravar HTML cru no banco a partir de um `target` que vem de nome escolhido pelo usuário
-    (path de toggle, nome de aplicação) seria abrir um vetor de XSS armazenado — decisão tomada
-    sem perguntar ao usuário, é uma correção de segurança, não uma divergência de produto.
+    `text` carrega o marcador literal `<b>...</b>` em volta do termo-chave (ex.: `"Disabled
+    <b>experiments</b> branch"`) — confirmado no protótipo real (`app.jsx#logAudit` e o
+    `AUDIT_SEED` literal em `data.jsx`), revisitado depois que o usuário apontou (com um
+    screenshot do protótipo real) que o negrito estava faltando na reconstrução. **Nunca é
+    renderizado via `dangerouslySetInnerHTML`** como o protótipo faz — isso seria abrir XSS
+    armazenado de verdade, já que `text` pode embutir um `target`/nome escolhido pelo usuário
+    (path de toggle, nome de time/aplicação/usuário). Em vez disso,
+    `server/web/src/lib/auditEvents.tsx#renderAuditText` reconhece SÓ o marcador literal
+    `<b>...</b>` e monta um elemento React de verdade a partir dele — qualquer outro caractere
+    (inclusive `<`/`>`/`&` de um nome malicioso) vira texto puro, nunca é interpretado como
+    markup; pior caso de abuso é puramente cosmético (um nome com `<b>` literal fica em
+    negrito), nunca execução de código. Ver os testes de segurança em `auditEvents.test.tsx`.
   - **Visibilidade**: `domain/policy.AuditAccess` — mesma regra já validada em `ApprovalAccess`
     (root irrestrito; não-root só vê `team_id` de times dos quais é membro), com nome/dono
     próprios porque auditoria e aprovação são domínios diferentes mesmo reaproveitando a mesma
@@ -1071,6 +1078,346 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
      regenerar sempre apaga a anterior primeiro); adicionar membro ao time não dizia QUEM foi
      adicionado ("Added member" virou "Added @username" — `TeamHandler` ganhou `userUseCase`
      como dependência nova só pra essa busca, ver comentário no construtor).
+  5. **Usuário apontou "disposições diferentes" do protótipo, com um screenshot real anexo**
+     (`prototipo.png`, na raiz do monorepo — não um caminho a reutilizar depois, era só o anexo
+     daquela conversa). Achados, todos confirmados contra o `HistoryView`/`AUDIT_SEED` reais
+     decodificados do bundle:
+     - O empty state ("Nothing here yet") era irmão de `.audit`, não filho — perdia
+       `position:relative;padding-left:6px` que `.audit` dá. Corrigido: agora sempre nasce
+       dentro de `.audit`, igual ao JSX real (`<div className="audit">{empty}{items.map...}</div>`).
+     - **Gap maior**: o protótipo bolda o termo-chave de cada linha (`"Disabled <b>experiments</b>
+       branch"`) via `dangerouslySetInnerHTML` — a reescrita nunca reproduziu isso (decisão de
+       segurança tomada na fase 3 acima, documentada no bullet "Rotas de Auditoria", mas sem uma
+       forma seguro de aplicar o negrito real). Fechado agora com um parser próprio
+       (`renderAuditText` em `lib/auditEvents.tsx`) que reconhece só o marcador literal
+       `<b>...</b>` e monta um `<b>` React de verdade — nunca `dangerouslySetInnerHTML` — então
+       XSS armazenado a partir de um nome de time/toggle/usuário malicioso continua impossível
+       (testado explicitamente). Todo backend que grava texto de auditoria (toggle create/delete/
+       rule/enable/disable, application create/delete, team create, member added, user create/
+       delete/reset-password/status-changed, approval requested/approved/rejected) passou a
+       embutir esse marcador em volta do termo-chave, igual ao protótipo real.
+     - **Achado sobre a própria ferramenta design-graph, reportado ao usuário pra ajudar a
+       melhorá-la** (não uma correção de UI): o buraco documentado no topo deste arquivo ("árvore
+       autenticada de `App` nunca é indexada") não explica sozinho por que `HistoryView`
+       aparece em `list_screens` mas devolve só o componente `Icon`. Causa mais específica,
+       confirmada comparando `list_components` (54 componentes indexados, incluindo `UserRow`/
+       `MemberRow`/`ApprovalRow` — sub-componentes de OUTRAS telas de lista) contra o JSX real: as
+       telas cujo item de lista foi fatorado numa função própria (`function UserRow(...)`,
+       referenciada como `<UserRow/>`) têm esse item indexado; `HistoryView` nunca fatorou o item
+       da timeline — é markup inline dentro do `.map()` (~40 linhas de `<div className=
+       "audit-item">`) — e o extrator não desce nessa árvore, só captura a única referência de
+       componente real que existe lá dentro (`<Icon/>`). Sugestão passada ao usuário: o extrator
+       deveria descer no corpo de um `.map()` mesmo quando ele não é uma chamada a outro
+       componente, não só quando é. **Atualização**: o usuário depois atualizou o design-graph de
+       verdade seguindo essa sugestão — `get_full_jsx("HistoryView")` e a seção "Audit item" de
+       `get_screen_full` agora devolvem a árvore inline inteira (confirmado ao vivo, comparado
+       linha a linha contra o que já tinha sido reconstruído via bundle: bate 1:1, só
+       `dangerouslySetInnerHTML` continua divergente de propósito). `get_screen_layout`/
+       `get_section` ainda não pegam essa seção — só `get_full_jsx` e a lista de "Sections" de
+       `get_screen_full`.
+  6. **Usuário apontou (de novo, sem imagem desta vez, descrevendo o problema) que cada item
+     ainda estava em 2 linhas, deveria ter 3** — achado real, não visual: o protótipo sempre
+     preenche `target` (linha do meio, entre texto e meta) pra praticamente todo tipo de evento
+     (confirmado no `AUDIT_SEED`: as 7 entradas têm `target` não-vazio), mas metade dos handlers
+     desta reescrita gravava `target: ""` — o item colapsava pra 2 linhas (texto+meta) por falta
+     de conteúdo, não por bug de CSS. Corrigido handler por handler, com o texto/target exatos
+     confirmados contra `app.jsx#logAudit`/`AUDIT_SEED` (não um padrão único — o protótipo real é
+     inconsistente entre tipos, então cada um foi conferido individualmente):
+     - `toggle_created`: target = nome da aplicação (não o path de novo, que já está em negrito
+       no texto). `ToggleHandler` ganhou `applicationUseCase` como dependência nova só pra isso
+       (não tinha nenhuma antes — só `toggleUseCase`/`auditUseCase`).
+     - `toggle_enabled`/`toggle_disabled` (as DUAS rotas que geram esse evento — a plural via
+       drawer, `UpdateToggle`, E a recursiva singular, `UpdateEnabled`/`UpdateEnabledRecursively`,
+       que **tinha ficado de fora da fase 5** sem querer): texto bolda só o ÚLTIMO segmento do
+       path (`Toggle.Value`), não o path inteiro (`Toggle.Path`) — confirmado
+       (`app.jsx#saveDrawer`/`handleToggle`: `<b>${seg}</b>`, nunca o path completo); target
+       combina nome da aplicação + path completo com `" · "`.
+     - `toggle_deleted`: mesmo ajuste — bolda só o último segmento (`label.split(".").pop()` no
+       protótipo), target é o nome da aplicação.
+     - `key_generated`/`key_revoked`: target = nome da aplicação.
+     - `application_created`/`application_deleted`: target = `"{team} team"`.
+     - `user_created`: target = `"{team} team"` (reaproveita a busca de time que a validação
+       "Time precisa existir" já fazia, só passou a capturar o resultado em vez de descartar com
+       `_`).
+     - `member_added` e `user_deleted`/`user_password_reset`/`user_status_changed` já tinham sido
+       corrigidos na fase 5 (target = `"{team} team"` e `"@{username}"`, respectivamente) — sem
+       mudança aqui.
+     - **Deliberadamente não mexido**: `team_created` continua sem target (confirmado — o
+       protótipo real nunca passa um terceiro argumento pra esse `logAudit`, e o próprio
+       screenshot da fase 5 mostra esse item específico em 2 linhas de propósito) e os eventos de
+       `approval_requested`/`approved`/`rejected` (sem uma fonte real inequívoca de `target` pra
+       toda ação possível — action types variados demais pra um padrão único; registrado como gap
+       conhecido, não corrigido nesta passada).
+     Testes novos em `audit_integration_test.go` travam texto+target juntos pra cada caso (não só
+     o texto como antes) — inclusive as duas rotas de enable/disable, que tinham 0 cobertura de
+     integração antes desta rodada.
+  7. **Usuário reportou (de novo) 2 linhas em vez de 3, pedindo pra checar se era o design-graph
+     que não estava trazendo informação suficiente**. `get_screen_full("HistoryView")` (design-graph
+     já atualizado desde a fase 5) devolve a seção "Audit item" e ela bate 1:1, campo por campo,
+     com o que já estava implementado em `AuditRow.tsx` — não era um buraco da ferramenta desta
+     vez. O achado real: a fase 6 só cobriu os handlers de **ação direta**; o fluxo de aprovação
+     tem seu PRÓPRIO ponto de gravação de auditoria, separado, em
+     `approval_usecase.go#ApproveRequest`/`ExecuteApprovedAction` — a função que registra o evento
+     de domínio da ação que efetivamente rodou (não o "Approved: X" da aprovação em si, esse
+     sempre esteve certo). Essa função (antes `auditEventForApprovalExecution`, agora
+     `resolveApprovalExecutionAudit`) reaproveitava `request.Description` (o texto de "Requested:
+     X", ex. `"Create toggle: payments.card.x"`) verbatim + `" (after approval)"` — nunca tinha o
+     marcador `<b>` (então nunca tinha negrito real) e nunca preenchia `target` (string vazia
+     sempre). Com aprovação ativada (comum em times reais — é o motivo de existir), TODA ação que
+     passa por aprovação caía nesse caminho quebrado, não só uma fração — daí o usuário continuar
+     vendo 2 linhas mesmo depois da fase 6 corrigir os handlers diretos.
+     Reescrito por tipo de ação, com texto/target reconstruídos do zero (não mais reaproveitando
+     `Description`) e confirmados contra `app.jsx#executePendingAction` do bundle real — que tem
+     um padrão PRÓPRIO, diferente do handler direto equivalente:
+     - `toggleEnable`/`deleteToggle`/`createToggle`: `target` = só o nome da aplicação — NUNCA
+       `"{app} · {path}"` como a ação direta equivalente faz. Confirmado lendo o `logAudit(...)`
+       de cada `case` do switch de `executePendingAction` (só 3 argumentos, o terceiro é sempre
+       `params.appName`, nunca uma string combinada).
+     - `deleteApp`: `logAudit("delete", ...)` é chamado com só 2 argumentos — **nenhum target**.
+       2 linhas aqui é o render correto do protótipo real pra este evento específico (mesmo
+       padrão do `team_created` da fase 6), não um gap; testado explicitamente
+       (`TestAuditIntegration_ApprovalFlow_ApplicationDelete_TargetIsEmptyByDesign`) pra não ser
+       "corrigido" de novo por engano numa rodada futura.
+     - `toggle_rule`/`application_create` (edição)/`secret_key_create`/`secret_key_delete`: sem
+       fonte real — o switch de `executePendingAction` não tem `case` nenhum pra esses tipos (o
+       próprio protótipo nunca executa de fato uma aprovação de regra/edição de app/chave — só
+       marca a solicitação como aprovada e para por aí, `pendingAction: null` nesses fluxos).
+       Nosso backend executa a ação de verdade nesses casos (mais completo que o protótipo), mas
+       como não há padrão real pra copiar, o `target` cai pro mesmo identificador que a ação
+       DIRETA equivalente usa (nome da app pra chave, path pro rule-set — mesma escolha da fase 6
+       pro evento direto).
+     Resolução acontece **antes** do `switch` que executa a ação (não depois) — `toggle_delete` e
+     `application_delete` apagam a entidade que o texto/target descrevem, então buscar nome/path
+     depois da exclusão já seria tarde demais (mesmo cuidado dos handlers diretos, fase 6).
+     Testes novos em `audit_integration_test.go` travam texto+target das duas exclusões via
+     aprovação, e o teste de fluxo completo (`TestAuditIntegration_ApprovalFlow_
+     RecordsRequesterAndExecutionEvents`) ganhou as mesmas asserções de negrito+target que os
+     eventos diretos já tinham.
+  8. **Usuário anexou DUAS imagens na raiz do monorepo (`prototipo.png` = protótipo real,
+     `sistema.png` = a reescrita), pedindo comparação direta**: parte do conteúdo errado, parte só
+     desproporcional (fontes/ícones/espaçamentos menores que o real). Dois achados distintos:
+     - **Confirmado um SEGUNDO buraco do design-graph, agora em VALORES de estilo, não estrutura**
+       (a estrutura já tinha sido corrigida na fase 5). `get_screen_full`/`get_section` pra
+       `HistoryView` devolvem a JSX completa e correta, mas a lista de "Estilos" vem achatada —
+       todas as classes aninhadas da seção (`.audit-item`, `.audit-dot`, `.audit-text`, `.audit-
+       target`, `.audit-meta`, `.audit-av`) misturadas num único bloco truncado ("+16 mais"), sem
+       dizer qual valor pertence a qual classe, e sem um `get_full_jsx`-equivalente pra pegar a
+       lista completa. `get_component_spec`/`get_component_full`/`list_components` confirmam que
+       `page-title`, `chip`, `empty`, `audit-*` nunca viram "componentes" de verdade (mesma causa-
+       raiz da fase 5: markup inline, nunca fatorado numa função própria) — só `App` (o componente
+       raiz, tipo "component" em `list_components`) chega perto, mas a própria ferramenta avisa
+       "Extração truncada em: classes, styles, texts" pra ele, sem alternativa. E o bundle estático
+       decodificado (fallback já documentado) só tem JSX, nunca CSS (confirmado varrendo todos os
+       blobs do manifest + os dois `<style>` da página — nenhum bate com essas classes). Ou seja:
+       pra estrutura/texto há fonte confiável agora; pra valor exato de font-size/padding, nenhuma
+       — nem design-graph, nem bundle. Achado repassado ao usuário como feedback de novo.
+     - **Correção aplicada** (`global.css`, classes compartilhadas por TODAS as telas de lista —
+       Applications/Teams/Approvals/Users/History, não só History): sem fonte numérica confiável,
+       recalibrado por julgamento visual comparando as duas imagens, ancorado nos tokens reais que
+       `get_tokens`/`get_component_spec` confirmam existir no protótipo (`text_sm=13/14,
+       text_base=15/16, text_lg=17, text_xl=20/21, weight_semibold=600, space_32`) — não valores
+       inventados soltos. `.page-title` 25→30px, `.page-desc` 14→15px, `.chip` altura 30→34px/
+       fonte 12.5→13px, `.audit-dot` 32→40px (ícone dentro continua `size={15}` — esse SIM é valor
+       real, confirmado na JSX: `<Icon ... size={15} />`, não mexido), `.audit-text` 14→15px,
+       `.audit-target` 12.5→13px, `.audit-meta` 12→12.5px, `.audit-av` 18→20px, `.page`/`.page-
+       head` padding/margin 26→32px (space_32). Sem fonte de verdade, isso é uma primeira
+       aproximação — pode precisar de outra rodada com um novo screenshot de comparação.
+     - **Segundo achado real, de conteúdo (não de estilo)**: comparando `sistema.png` linha a
+       linha contra o `AUDIT_SEED` real decodificado do bundle, os textos de `approval_requested`/
+       `approval_approved`/`approval_rejected` — que a fase 6/7 tinham deixado como "gap conhecido,
+       sem padrão único" — na verdade TÊM um padrão único, só que ele nunca tinha sido comparado
+       contra o `AUDIT_SEED` (só contra a função `resolveApproval` do app.jsx, que diverge do seed
+       nesse ponto — mesmo tipo de discrepância seed-vs-runtime já visto na fase 5/6, resolvida
+       sempre a favor do seed por ser o que a screenshot realmente mostra):
+       - `AUDIT_SEED` au5: `{ text: "Approved <b>Enable toggle</b> request", target:
+         "home.recommendations" }` — sem ":" depois de "Approved" (a reescrita tinha), com um
+         sufixo literal " request" (a reescrita não tinha), e com `target` preenchido (a reescrita
+         sempre gravava `""`). `ApproveRequest`/`RejectRequest` corrigidos pra esse template
+         exato; `RejectRequest` não tem exemplo direto no seed, mas usa o mesmo template por
+         simetria de código-fonte (`${decision==="approved"?"Aprovou":"Rejeitou"} <b>${a.action}
+         </b>` no app.jsx — mesma string, só o verbo muda) — inferência direta, não um chute solto.
+       - O `target` de todo evento approval_requested/approved/rejected é o `path` que
+         `requestApproval(actionKey, desc, path, pendingAction)` recebe em CADA callsite real —
+         sempre o path/nome do que está sendo pedido (toggle path, nome de app), nunca o nome da
+         aplicação (diferente do padrão de `resolveApprovalExecutionAudit`, pra depois da
+         execução — os dois fluxos usam alvos diferentes de propósito, confirmado no código-fonte
+         real). Novo método `ApprovalUseCase.approvalRequestTarget` resolve isso por tipo de ação,
+         reaproveitando os mesmos repos já injetados.
+       - Isso só funcionava sem duplicar o dado porque `middleware/approval.go` também mudou: a
+         `description` de `toggle_create`/`application_create`/`application_update` (via aprovação
+         automática, `createApprovalRequest`) parou de embutir o nome/path ("Create toggle: X" →
+         só "Create toggle") — esse dado agora vive só no `target`, igual ao padrão real.
+       Testes novos em `audit_integration_test.go` travam texto+target de requested/approved/
+       rejected pros dois fluxos (toggle create, application create).
+  9. **Usuário atualizou o plugin do design-graph e pediu pra testar de novo** (reconectou o MCP
+     via `/mcp`). Apareceu uma tool nova, `get_full_styles(name= | screen=+section=)` — exatamente
+     o que faltava: devolve a lista de estilos SEM o corte em "+N mais" que `get_screen_full`/
+     `get_section`/`get_component` sempre aplicavam (mesmo buraco reportado na fase 8). Testado
+     contra `HistoryView`/"Audit item" e contra `App`: funciona, lista completa confirmada (22
+     propriedades pra "Audit item", antes cortado em 6+"+14/+16 mais").
+     **Mas resolve só METADE do buraco da fase 8**: a lista continua achatando TODAS as classes
+     aninhadas da seção (`audit-item`, `audit-rail`, `audit-dot`, `audit-line`, `audit-body`,
+     `audit-text`, `audit-target`, `audit-meta`, `audit-av`, `.who`) num único array sem dizer qual
+     propriedade pertence a qual seletor — `get_full_styles(name="audit-av")` e
+     `name="audit-item"` devolvem "Componente não encontrado" (essas classes nunca viraram
+     "componentes" de verdade, mesma causa-raiz de sempre). E `page-title`/`page-desc`/`page-head`/
+     `chip`/`empty` continuam com ZERO estilos disponíveis por qualquer via — `get_screen("Users
+     View")` confirma "Seções: 0" (só bloco `list_item` vira seção; um cabeçalho de página nunca
+     vira). Ou seja: a lista completa ajuda MUITO quando dá pra atribuir por dedução (ver abaixo),
+     mas não substitui atribuição por seletor de verdade.
+     Ainda assim, cruzando essa lista completa contra os valores "recalibrados a olho" da fase 8,
+     consegui atribuir com alta confiança 6 propriedades a seletores específicos — E ISSO PROVOU
+     QUE PARTE DO AJUSTE VISUAL DA FASE 8 ESTAVA ERRADO, revertido nesta rodada:
+     - `.audit-av`: width/height 18px (não 20), border-radius 5px (não 6), font-size 9px (não 10)
+       — bate exatamente com um grupo coerente e completo (width+height+radius+font-size+weight+
+       place-items, tudo junto, sem sobrar nada pra outro seletor plausível).
+     - `.audit-item`: padding `4px 0` (não `5px 0`) — só esse valor de padding aparece na lista.
+     - `.audit-body`: `padding-bottom: 18px` (não 22px), e o `padding-top: 3px` que eu tinha
+       inventado na fase 8 não existe (o `margin-top: 3px` da lista pertence ao `.audit-meta`, não
+       ao `.audit-body` — `flex:1`+`min-width:0`+`padding-bottom:18px` formam um grupo coerente
+       sozinhos, sem `padding-top`).
+     - `.audit-meta`: `margin-top: 3px` (não 5px, ver acima), `font-size: 12px` — revertido pra
+       fase anterior à 8 por falta de qualquer evidência que justificasse o bump de 12.5px.
+     - `.audit-meta .who`: `gap: 5px` (não 6px) — só esse valor de gap aparece na lista (o `gap:
+       8px` do `.audit-meta` em si nunca aparece, então não mexi nele por falta de evidência
+       inversa também).
+     - `.audit-target`: `font-size: 12.5px` (não 13px) — revertido pela mesma razão do `.audit-
+       meta` (bump da fase 8 sem nenhuma evidência real por trás).
+     **Deliberadamente NÃO revertido** (bump da fase 8 mantido, por falta de qualquer evidência a
+     favor OU contra): `.audit-dot` 40px, `.audit-text` 15px, `.page-title` 30px, `.page-desc`
+     15px, `.chip` altura/fonte — nenhuma dessas propriedades apareceu de forma atribuível na lista
+     completa (as três últimas nem podiam, já que `page-title`/`chip` não são seção nem
+     componente). Continuam sendo julgamento visual, não confirmadas.
+     Reportado ao usuário: a atualização resolveu o truncamento (achado principal da fase 8), mas
+     não a atribuição por seletor — se quiser fechar esse resto, a ferramenta precisaria indexar
+     `page-head`/`page-title`/`chip`/`empty` como seção (ou algo equivalente) mesmo não sendo
+     `list_item`, e/ou atribuir cada propriedade da lista de `get_full_styles` ao seletor de
+     origem em vez de só concatenar tudo.
+  10. **Usuário: "acho que o banco estava desatualizado, tenta novamente"** — certo. O MCP tinha
+      sido reconectado (`/mcp`) mas os dados indexados do protótipo `toToggle` ainda eram os de
+      antes (mesmo `get_build_diff` "primeira build" da fase 9). Testando de novo nesta rodada, os
+      dados finalmente atualizaram: `get_full_styles(screen=, section=)` agora agrupa por seletor
+      de verdade (`## .audit-av`, `## .audit-body`, `## .audit-item` etc., cada um com só as
+      próprias propriedades — não mais um array achatado), e `get_component_spec`/`search` passam
+      a indexar classes CSS puras como um tipo próprio ("CssClass", rotulado explicitamente "não é
+      um componente React nomeado") — `page-title`, `page-desc`, `page-head`, `.page`, `.empty`,
+      `audit-filter`, `root-chip` todos resolvem agora.
+      **Resultado, comparando contra os valores "recalibrados a olho" das fases 8/9: TODOS
+      estavam errados.** `.page-title` 25px (não 30, valor da fase 8), `.page-desc` 14px/margin-
+      top 5px (não 15/6), `.page-head` margin-bottom 26px (não 32), `.page` padding-top 26px (não
+      32), `.audit-filter` gap 6px/margin-bottom 22px (não 8/26), `.audit-item` gap 14px (não 16),
+      `.audit-text` 14px (não 15) — e um `.audit-target { margin-top: 2px }` que eu tinha
+      inventado na fase 8 não existe em lugar nenhum. Todos revertidos pros valores ORIGINAIS
+      (os de antes de qualquer ajuste visual desta sessão) — `git diff` em `global.css` deu vazio
+      depois do revert: o arquivo bateu exatamente com o que já estava commitado, confirmando que
+      a implementação original já estava certa o tempo todo.
+      **`.chip` e `.audit-dot` continuam sem fonte real** — não por falta de indexação desta vez,
+      mas porque os dois usam className DINÂMICO/computado (`"chip" + (cond ? " on" : "")`,
+      `"audit-dot " + AUDIT_DOT[e.type]`), que o extrator de classe estática não segue. Dado o
+      histórico de 100% dos meus chutes visuais terem saído errados nesta sessão, revertidos pro
+      valor original também (32px/radius 9 pro dot, 30px/13px/13px pro chip), por Bayes — não por
+      evidência direta.
+      **Conclusão prática**: a diferença de tamanho que o usuário viu comparando `prototipo.png` x
+      `sistema.png` quase certamente NÃO era um bug de CSS — era diferença de escala/zoom de
+      captura entre as duas imagens (uma é preview isolado do design tool, a outra é screenshot de
+      app real numa janela de navegador). A implementação já batia com o protótipo real antes de
+      qualquer coisa desta sessão ser mexida. Fica registrado aqui pra não reabrir esse mesmo ciclo
+      de "ajustar visual → provar errado → reverter" numa próxima vez que uma screenshot parecer
+      diferente — antes de mexer em qualquer valor, chamar `get_component_spec`/`get_full_styles`
+      primeiro (a versão atual do plugin já resolve isso pra classes com className estático).
+  11. **Usuário: "analise só o sistema e o design graph, todas as páginas e a barra lateral, tem
+      diferenças ainda"** — sem imagens desta vez (as duas de antes tinham sumido da raiz do
+      repo), pedido pra auditar TODA a reescrita contra o design-graph diretamente, agora que ele
+      indexa classe CSS pura (fase 10). Varredura tela por tela via `get_screen_full` em todas as 8
+      telas indexadas (LoginScreen, TeamsView, ApprovalsView, FirstLoginScreen, UsersView,
+      KeysView, ApprovalSettingsView, HistoryView) + `AppList`/`AppCard` (via `get_component`, não
+      indexados em `list_screens` mas resolvem assim):
+      - **Barra lateral (`AppShell`)**: confirmado — vive na árvore autenticada de `App`, que o
+        design-graph NUNCA indexou, nem antes nem com a atualização (`sidebar`/`nav-item`/`brand`/
+        `user-chip`/`topbar`/`crumbs` — nenhum resolve, nem como CssClass). Não é uma lacuna nova;
+        a implementação já vem do bundle decodificado, documentado no próprio arquivo.
+      - **Achados reais, corrigidos** (confirmados contra `get_screen_full`, não chutados):
+        - `UserManagementScreen`: placeholder do campo de busca dizia "Buscar por username", o
+          real é **"Buscar por nome ou username"** — E o filtro em si só olhava `username`, nunca
+          `name` (bug funcional escondido atrás do texto errado, não só cosmético). Corrigido os
+          dois; 2 testes novos travam busca por username E por nome.
+        - `ApprovalRow`: botões "Approve"/"Reject" e chip de status "Approved"/"Rejected"/
+          "Expired" estavam em inglês; o real (`get_screen_full("ApprovalsView")` → textos de
+          `ApprovalRow`/`ApprovalStatusChip`) é **"Aprovar"/"Rejeitar"/"Aprovado"/"Rejeitado"/
+          "Expirado"** — mesmo padrão bilíngue já usado no resto do app (a maioria dos textos
+          descritivos é PT, alguns rótulos são EN; aqui o real é PT e a reescrita tinha ido pro
+          inglês por engano). O branch "Pendente" do chip não existe no componente real (ele
+          devolve `null` pra pending — quem chama já mostra os botões de ação nesse caso), mantido
+          aqui só como extra deliberado pros usos read-only (aba "Mine", History), documentado
+          como tal. Ícone "settings" vs. "gear" real CONFIRMADO como já documentado de propósito
+          em `Icon.tsx` (mesmo glifo, nome diferente) — não é um bug, não mexido.
+        - `SecretKeySection` (`.ks-name`): mostrava `state.key.name` (dinâmico); o real é um
+          rótulo ESTÁTICO **"Service key"** — o campo `name` do backend nunca varia de fato (
+          sempre `"API Access Key"`, nunca setável pelo usuário), então exibir o valor dinâmico só
+          divergia do protótipo sem ganhar nada em troca. `.ks-meta` do real também mostra
+          "· Last used {when}" — **não copiado**: não existe rastreamento de último uso nenhum no
+          backend (sem coluna/lógica em `entity.SecretKey`); inventar um valor aqui seria pior que
+          omitir. Registrado como gap de FEATURE (precisa de trabalho de backend: nova coluna +
+          atualizar em toda autenticação por `X-API-Key`), não uma correção de texto.
+      - **Telas conferidas e já corretas** (nenhuma mudança): `TeamsView`/`MemberRow`/`RoleBadge`
+        (já citavam a fonte real em comentário, bateram 1:1), `ApprovalSettingsView`/
+        `ApprovalSettingsPanel` (bate literalmente palavra por palavra, inclusive o texto
+        condicional ativo/desativado), `AppList`/`AppCard`/`ApplicationsScreen` (já tinha o gap
+        conhecido de `app.team` documentado — API não traz nome de time nessa listagem — nada
+        novo), `LoginScreen`/`FirstLoginScreen` (já documentadas como reconstrução DELIBERADA, não
+        cópia literal, por causa da autenticação real via bcrypt vs. o login-demo do protótipo;
+        rótulo "Usuário" vs. "Username" do real é a única diferença de uma palavra, julgada baixo
+        valor numa tela já marcada como adaptação intencional — não mexida).
+      - **Não coberto nesta rodada** (não auditado, candidato a uma próxima passada se o usuário
+        pedir): `ToggleCard`/`TogglePaths`/`EditToggleDrawer`/`CreateToggleModal` (a aba "Toggles"
+        de `ApplicationDetailScreen`) e `AccountSecurityScreen`.
+      4 arquivos de teste atualizados (`UserManagementScreen.test.tsx`, `ApprovalRow.test.tsx`,
+      `ApprovalsScreen.test.tsx`, `SecretKeySection.test.tsx`) — `tsc`/`vitest`/`build` verdes
+      (395 testes).
+  12. **Usuário: "faca uma varredura em todas as telas... levante os gaps (evite css inline, faca
+      um mapa para organizar de forma global se houver)"** — fechou a cobertura que tinha ficado
+      de fora da fase 11 (`ToggleCard`/`TogglePaths`/`ChangePasswordForm`/`AccountSecurityScreen`)
+      e respondeu à parte de CSS inline com um levantamento, não um chute.
+
+      **Mapa: tela desta reescrita → fonte real no design-graph → status**
+      | Tela/componente (`server/web/src`) | Fonte real (design-graph) | Status |
+      |---|---|---|
+      | `HistoryScreen`/`AuditRow` | `HistoryView` | ✅ confere (fases 5–9) |
+      | `TeamsScreen`/`MemberRow`/`RoleBadge` | `TeamsView` | ✅ confere (fase 11) |
+      | `ApprovalsScreen`/`ApprovalRow` | `ApprovalsView` | ✅ corrigido (fase 11: labels PT) |
+      | `ApprovalSettingsPanel` | `ApprovalSettingsView` | ✅ confere literalmente (fase 11) |
+      | `UserManagementScreen`/`UserRow`/`StatusPill` | `UsersView` | ✅ corrigido (fase 11: busca) |
+      | `SecretKeySection` | `KeysView` | ✅ corrigido (fase 11: nome estático) |
+      | `ApplicationsScreen`/`AppCard` | `AppList`/`AppCard` | ✅ confere (fase 11) |
+      | `LoginScreen` | `LoginScreen` | ✅ reconstrução deliberada, documentada (auth real ≠ demo) |
+      | `ForcedPasswordChangeScreen` | `FirstLoginScreen` | ✅ idem |
+      | `ChangePasswordForm`/`AccountSecurityScreen` | `ChangePasswordModal` | ✅ confere (fase 12) — regra de senha mínima (4, não 8) é do backend de propósito |
+      | `TogglePaths`/`ToggleCard` | `TogglePaths`/`ToggleCard` | ✅ confere quase byte a byte (fase 12) |
+      | `AppShell` (barra lateral) | *(não indexado)* | ⚪ fora do alcance do design-graph — árvore autenticada de `App` nunca indexada; fonte é o bundle decodificado |
+      | `EditToggleDrawer`/`CreateToggleModal`/`StatusRing` | — | ⚪ não auditados ainda (candidatos a uma próxima passada) |
+
+      **CSS inline — achado, não um chute**: censo (`grep -rhoE 'style=\{\{[^}]+\}\}'`) mostrou
+      `style={{ color: "var(--danger)" }}` repetido 11–13× (sempre junto de `className="field-
+      hint"`, o padrão de mensagem de erro). Antes de "corrigir" isso, conferido contra várias
+      capturas de `get_screen_full` já feitas nesta sessão (`LoginScreen`, `FirstLoginScreen`,
+      `ChangePasswordModal`) — **o próprio protótipo real usa exatamente esse mesmo par inline**
+      (`{err && <div className="field-hint" style={{ color: "var(--danger)" }}>{err}</div>}`,
+      literal, confirmado). Ou seja, o inline aqui não é um desvio desta reescrita — é fidelidade
+      ao próprio protótipo, que também não tem uma classe dedicada pra erro. Extrair uma classe
+      nova pra isso teria sido inventar algo que o design system real não tem.
+      Dito isso, a repetição em 13 arquivos É uma oportunidade real de organização (o pedido do
+      usuário), sem risco de fidelidade: um modificador `.field-hint.danger` produz o MESMO CSS
+      computado que o inline produzia — invisível pra qualquer comparação visual ou de conteúdo
+      contra o protótipo. Adicionado em `global.css` e aplicado nos 13 arquivos (`className="field-
+      hint danger"` em vez de `className="field-hint" style={{ color: "var(--danger)" }}`,
+      preservando qualquer prop extra de `style` que existisse ao lado, ex.: `marginTop`).
+      Fora isso, o resto do inline styling do app (que é bastante — dezenas de `style={{...}}`
+      espalhados) reflete literalmente o que as capturas reais de `get_screen_full`/`get_full_jsx`
+      mostram: o protótipo em si usa inline pra ajuste de layout pontual (flex/gap/margin de um
+      elemento específico) e só promove pra classe CSS nomeada o que se repete em VÁRIAS telas
+      (`.btn`, `.badge`, `.field`, `.page-*`, `.audit-*` etc.). Eliminar todo inline restante
+      divergiria do próprio protótipo, não aproximaria dele — não foi feito.
+      `tsc`/`vitest`(395)/`build` verdes depois da consolidação.
 - **Bug real de roteamento encontrado e corrigido (histórico)**: `isAPIRoute` usava
   `strings.HasPrefix(path, "/approval")` pra reconhecer a API de aprovação — mas `/approvals`
   (rota SPA de `screens/ApprovalsScreen.tsx`) também começa com essa string por acidente

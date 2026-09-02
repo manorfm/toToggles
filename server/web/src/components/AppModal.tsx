@@ -173,7 +173,7 @@ export function AppModal({ isRoot, initial, onClose, onCreated, onUpdated, onPen
       )}
 
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
+        <div className="field-hint danger">
           {error}
         </div>
       )}

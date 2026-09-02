@@ -74,7 +74,7 @@ export function TeamsScreen() {
         )}
       </div>
 
-      {deleteError && <div className="field-hint" style={{ color: "var(--danger)", marginBottom: 16 }}>{deleteError}</div>}
+      {deleteError && <div className="field-hint danger" style={{ marginBottom: 16 }}>{deleteError}</div>}
 
       {state.status === "loading" && <div className="empty">Carregando times…</div>}
       {state.status === "error" && <div className="empty">{state.message}</div>}

@@ -76,7 +76,7 @@ export function RejectApprovalModal({ request, onClose, onRejected }: RejectAppr
       </div>
 
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
+        <div className="field-hint danger">
           {error}
         </div>
       )}

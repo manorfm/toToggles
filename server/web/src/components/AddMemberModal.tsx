@@ -104,7 +104,7 @@ export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, o
       </div>
 
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
+        <div className="field-hint danger">
           {error}
         </div>
       )}

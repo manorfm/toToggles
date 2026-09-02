@@ -15,6 +15,10 @@ export interface UserTeam {
 
 export interface User {
   id: string;
+  // Nome completo — distinto de username. Confirmado no protótipo real (get_full_jsx("UserModal"),
+  // UserRow): usado como label principal em telas de usuário e como base do actor/initials no
+  // audit trail. Campo real do backend desde a rodada que fechou esse gap (server/CLAUDE.md).
+  name: string;
   username: string;
   role: UserRole;
   must_change_password: boolean;
@@ -30,6 +34,9 @@ export interface User {
 // quem cria é root criando um admin — o servidor reforça isso mesmo que o client mande true
 // fora desse caso.
 export interface CreateUserInput {
+  // Nome completo — obrigatório, primeiro campo no protótipo real, gera a sugestão de username
+  // (lib/userDisplay.ts#slugUsername) até o usuário editar o username manualmente.
+  name: string;
   username: string;
   role: "admin" | "user";
   teamId: string;

@@ -34,7 +34,7 @@ export function ApprovalSettingsPanel({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28, maxWidth: 640 }}>
       {error && (
-        <div className="field-hint" style={{ color: "var(--danger)" }}>
+        <div className="field-hint danger">
           {error}
         </div>
       )}

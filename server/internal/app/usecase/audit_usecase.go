@@ -52,7 +52,11 @@ func (uc *AuditUseCase) Record(eventType entity.AuditEventType, text, target str
 	if actor == nil {
 		return
 	}
-	entry := entity.NewAuditLog(eventType, text, target, teamID, actor.ID, actor.Username)
+	// actor.Name (nome completo), não actor.Username — confirmado no protótipo real
+	// (logAudit sempre usa `currentUser.name`); ActorName também alimenta os initials mostrados
+	// na timeline (ver lib/userDisplay.ts#initialsOf no frontend), que só fazem sentido a partir
+	// do nome completo, não do username.
+	entry := entity.NewAuditLog(eventType, text, target, teamID, actor.ID, actor.Name)
 	if err := uc.repo.Create(context.Background(), entry); err != nil {
 		log.Printf("[ERROR] AuditUseCase.Record: failed to write audit log (event_type=%s): %v", eventType, err)
 	}

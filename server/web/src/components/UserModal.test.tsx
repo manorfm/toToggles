@@ -12,11 +12,11 @@ describe("UserModal", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads team options and creates a user with the selected team/role", async () => {
+  it("loads team options and creates a user with the full name, auto-suggested username, and selected team/role", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
       if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
       return Promise.resolve(
-        jsonResponse(201, { success: true, user: { id: "9", username: "ana.ribeiro", role: "user" }, password: "abc123" })
+        jsonResponse(201, { success: true, user: { id: "9", name: "Ana Ribeiro", username: "ana.ribeiro", role: "user" }, password: "abc123" })
       );
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -26,14 +26,51 @@ describe("UserModal", () => {
     render(<UserModal isRoot onClose={vi.fn()} onCreated={onCreated} />);
 
     expect(await screen.findByRole("option", { name: "Payments Squad" })).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/username/i), "ana.ribeiro");
+    await user.type(screen.getByLabelText(/nome completo/i), "Ana Ribeiro");
     await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
 
     await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ password: "abc123" })));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/users",
-      expect.objectContaining({ body: JSON.stringify({ username: "ana.ribeiro", role: "user", team_id: "t1", is_approver: false }) })
+      expect.objectContaining({
+        body: JSON.stringify({ name: "Ana Ribeiro", username: "ana.ribeiro", role: "user", team_id: "t1", is_approver: false }),
+      })
     );
+  });
+
+  it("auto-fills the username from the name (slugified) until the username is edited by hand", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] })));
+    const user = userEvent.setup();
+
+    render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
+    await screen.findByRole("option", { name: "Payments Squad" });
+
+    await user.type(screen.getByLabelText(/nome completo/i), "José Ávila");
+    expect(screen.getByLabelText(/^username$/i)).toHaveValue("jose.avila");
+
+    // Editar o username manualmente destrava a sugestão automática — digitar mais no nome não
+    // sobrescreve o que o usuário já escolheu.
+    await user.clear(screen.getByLabelText(/^username$/i));
+    await user.type(screen.getByLabelText(/^username$/i), "custom.handle");
+    await user.type(screen.getByLabelText(/nome completo/i), " Filho");
+
+    expect(screen.getByLabelText(/^username$/i)).toHaveValue("custom.handle");
+  });
+
+  it("requires the full name before submitting, even with a username already typed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
+    await screen.findByRole("option", { name: "Payments Squad" });
+
+    await user.clear(screen.getByLabelText(/^username$/i));
+    await user.type(screen.getByLabelText(/^username$/i), "ana.ribeiro");
+    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+
+    expect(await screen.findByText("Informe o nome completo.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/users", expect.anything());
   });
 
   it("keeps the 'Aprovador do time' field mounted (animated reveal) but hidden until root selects role Admin", async () => {
@@ -80,7 +117,7 @@ describe("UserModal", () => {
   it("sends is_approver true when the switch is toggled on", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
       if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
-      return Promise.resolve(jsonResponse(201, { success: true, user: { id: "9", username: "x" }, password: "abc" }));
+      return Promise.resolve(jsonResponse(201, { success: true, user: { id: "9", name: "X", username: "x" }, password: "abc" }));
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
@@ -89,13 +126,13 @@ describe("UserModal", () => {
     await screen.findByRole("option", { name: "Payments Squad" });
     await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
     await user.click(screen.getByRole("switch", { name: /aprovador do time/i }));
-    await user.type(screen.getByLabelText(/username/i), "x");
+    await user.type(screen.getByLabelText(/nome completo/i), "X");
     await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
 
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/users",
-        expect.objectContaining({ body: JSON.stringify({ username: "x", role: "admin", team_id: "t1", is_approver: true }) })
+        expect.objectContaining({ body: JSON.stringify({ name: "X", username: "x", role: "admin", team_id: "t1", is_approver: true }) })
       )
     );
   });
@@ -121,7 +158,7 @@ describe("UserModal", () => {
 
     render(<UserModal isRoot onClose={onClose} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
-    await user.type(screen.getByLabelText(/username/i), "bob");
+    await user.type(screen.getByLabelText(/nome completo/i), "Bob Test");
     await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
 
     expect(await screen.findByText(/username already exists/i)).toBeInTheDocument();

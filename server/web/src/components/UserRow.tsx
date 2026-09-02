@@ -1,6 +1,7 @@
 import { Icon } from "./Icon";
 import { RoleBadge } from "./RoleBadge";
 import { StatusPill } from "./StatusPill";
+import { initialsOf } from "../lib/userDisplay";
 import type { User } from "../types/user";
 
 interface UserRowProps {
@@ -19,23 +20,27 @@ interface UserRowProps {
 }
 
 // Adaptado do UserRow real do protótipo (decodificado do bundle comprimido embutido em
-// docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método). Duas divergências
-// forçadas pelo que a API real tem/não tem:
-// - O protótipo mostra "{user.name}" (nome de exibição, separado do username) — entity.User só
-//   tem Username, sem campo de nome; aqui a linha principal é só "@{username}".
-// - O protótipo tem um botão "Ver senha" pra reler a senha já mostrada enquanto o usuário está
-//   pending_first_login — isso só é possível lá porque é tudo estado em memória. Com bcrypt, uma
-//   senha já mostrada nunca pode ser lida de novo, então aqui só existe "Resetar senha" (gera
-//   uma nova, invalida a anterior), sempre, independente do status.
+// docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método). O protótipo mostra
+// "{user.name}" (nome de exibição) como label principal e "@{user.username}" como linha
+// secundária, com o avatar usando os initials do NOME (lib/userDisplay.ts#initialsOf) — gap real
+// fechado nesta rodada: entity.User não tinha campo Name até então (server/CLAUDE.md), então essa
+// era a única divergência forçada aqui; agora reflete o protótipo 1:1.
+//
+// Uma divergência real (não de modelo) permanece: o protótipo tem um botão "Ver senha" pra reler
+// a senha já mostrada enquanto o usuário está pending_first_login — isso só é possível lá porque
+// é tudo estado em memória. Com bcrypt, uma senha já mostrada nunca pode ser lida de novo, então
+// aqui só existe "Resetar senha" (gera uma nova, invalida a anterior), sempre, independente do
+// status.
 export function UserRow({ user, isSelf, manageable, canDelete, onResetPassword, onToggleStatus, onDelete }: UserRowProps) {
   const teamNames = user.teams && user.teams.length > 0 ? user.teams.map((t) => t.name).join(", ") : "—";
 
   return (
     <div className="member">
-      <div className="avatar">{user.username.slice(0, 2).toUpperCase()}</div>
+      <div className="avatar">{initialsOf(user.name)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span className="mono" style={{ fontWeight: 600, fontSize: 14 }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>{user.name}</span>
+          <span className="mono" style={{ fontSize: 12, color: "var(--ink-4)" }}>
             @{user.username}
           </span>
           {isSelf && (

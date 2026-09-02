@@ -63,10 +63,10 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
       {!readOnly && request.status === "pending" ? (
         <div className="appr-btns">
           <button className="btn btn-soft btn-sm" onClick={onReject} disabled={busy}>
-            <Icon name="close" size={14} /> Reject
+            <Icon name="close" size={14} /> Rejeitar
           </button>
           <button className="btn btn-primary btn-sm" onClick={onApprove} disabled={busy}>
-            <Icon name="check" size={14} /> Approve
+            <Icon name="check" size={14} /> Aprovar
           </button>
         </div>
       ) : (
@@ -76,31 +76,37 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
   );
 }
 
+// Labels confirmados no protótipo real (get_screen_full("ApprovalsView") →
+// ApprovalStatusChip): "Aprovado"/"Rejeitado"/"Expirado". O branch "pending" não existe lá (o
+// componente real devolve null pra esse status — quem chama já garante que só renderiza o chip
+// quando NÃO está pending, mostrando os botões de ação no lugar); mantido aqui como um extra
+// deliberado, não do protótipo, pros usos read-only desta tela (ex.: aba "Mine", History) que
+// precisam mostrar ALGUMA coisa pra uma solicitação pendente sem botão de ação.
 function StatusChip({ status }: { status: ApprovalRequest["status"] }) {
   if (status === "approved") {
     return (
       <div className="appr-done ok">
-        <Icon name="check" size={14} /> Approved
+        <Icon name="check" size={14} /> Aprovado
       </div>
     );
   }
   if (status === "rejected") {
     return (
       <div className="appr-done no">
-        <Icon name="close" size={14} /> Rejected
+        <Icon name="close" size={14} /> Rejeitado
       </div>
     );
   }
   if (status === "pending") {
     return (
       <div className="appr-done" style={{ color: "var(--warn)" }}>
-        <Icon name="clock" size={14} /> Pending
+        <Icon name="clock" size={14} /> Pendente
       </div>
     );
   }
   return (
     <div className="appr-done" style={{ color: "var(--ink-4)" }}>
-      <Icon name="clock" size={14} /> Expired
+      <Icon name="clock" size={14} /> Expirado
     </div>
   );
 }

@@ -6,6 +6,7 @@ import type { User } from "../types/user";
 
 const baseUser: User = {
   id: "1",
+  name: "Ana Ribeiro",
   username: "ana.ribeiro",
   role: "user",
   must_change_password: false,
@@ -17,15 +18,26 @@ const baseUser: User = {
 };
 
 describe("UserRow", () => {
-  it("shows the username, role, status and team names", () => {
+  it("shows the full name, username, role, status and team names", () => {
     render(
       <UserRow user={baseUser} isSelf={false} manageable canDelete onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
 
+    expect(screen.getByText("Ana Ribeiro")).toBeInTheDocument();
     expect(screen.getByText("@ana.ribeiro")).toBeInTheDocument();
     expect(screen.getByText("User")).toBeInTheDocument();
     expect(screen.getByText("Ativo")).toBeInTheDocument();
     expect(screen.getByText("Payments Squad")).toBeInTheDocument();
+  });
+
+  // initials do avatar vêm do NOME completo (lib/userDisplay.ts#initialsOf), não do username —
+  // confirmado no protótipo real (currentUser.initials sempre derivado de .name).
+  it("derives the avatar initials from the full name, not the username", () => {
+    render(
+      <UserRow user={baseUser} isSelf={false} manageable canDelete onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
+    );
+
+    expect(screen.getByText("AR")).toBeInTheDocument();
   });
 
   it("shows a 'você' badge only for the current user's own row", () => {

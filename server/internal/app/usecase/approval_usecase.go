@@ -235,10 +235,68 @@ func (uc *ApprovalUseCase) CreateApprovalRequest(ctx context.Context, actionType
 	// o audit trail de uma ação que passa por aprovação só mostra "root aprovou X", nunca quem
 	// pediu X originalmente (gap real, achado numa auditoria pedida pelo usuário). Confirmado no
 	// protótipo real como o type "approval-request" (requestApproval).
+	// <b>...</b> em volta da descrição: mesmo tratamento de negrito usado pelo protótipo real em
+	// `Aprovou/Rejeitou <b>{action}</b>` — aplicado aqui também pro texto de solicitação, pela
+	// mesma razão (destacar o termo-chave da linha).
 	teamIDCopy := teamID
-	uc.recordAudit(entity.AuditEventApprovalRequested, "Requested: "+description, "", &teamIDCopy, requester)
+	uc.recordAudit(entity.AuditEventApprovalRequested, "Requested: <b>"+description+"</b>", uc.approvalRequestTarget(request), &teamIDCopy, requester)
 
 	return request, nil
+}
+
+// approvalRequestTarget resolve o target (linha do meio) dos eventos approval_requested/
+// approved/rejected — antes sempre `""`, gap conhecido e deixado de propósito nas fases 6/7 por
+// falta de um padrão único. Fechado agora com uma fonte real e inequívoca: o `AUDIT_SEED` do
+// protótipo (au5: `target: "home.recommendations"` pro texto "Approved <b>Enable toggle</b>
+// request") e o parâmetro `path` que TODO callsite real de `requestApproval(actionKey, desc,
+// path, pendingAction)` passa — sempre o path/nome do que está sendo pedido (nunca o nome da
+// aplicação, diferente do padrão usado em resolveApprovalExecutionAudit pra depois da execução).
+// `middleware/approval.go` foi ajustado pra parar de embutir esse mesmo dado dentro da
+// `description` (ex.: "Create toggle: X" virou só "Create toggle") — sem essa mudança o dado
+// apareceria duplicado, uma vez no texto (negrito) e outra no target.
+func (uc *ApprovalUseCase) approvalRequestTarget(request *entity.ApprovalRequest) string {
+	switch request.ActionType {
+	case entity.ApprovalActionToggleCreate:
+		var data struct {
+			Toggle string `json:"toggle"`
+		}
+		_ = request.GetActionDataAs(&data)
+		return data.Toggle
+
+	case entity.ApprovalActionToggleUpdate, entity.ApprovalActionToggleDelete,
+		entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable, entity.ApprovalActionToggleRule:
+		if request.ToggleID != nil {
+			if toggle, err := uc.toggleRepo.GetByID(*request.ToggleID); err == nil {
+				return toggle.Path
+			}
+		}
+		return ""
+
+	case entity.ApprovalActionApplicationCreate:
+		// Cobre tanto criação (ApplicationID nil, nome vem do corpo) quanto edição (ApplicationID
+		// setado — não existe application_update, PUT /applications/:id cai neste mesmo
+		// action_type, docs/rest-flow.md §9.1); sem nome no corpo (raro, mas o campo é opcional
+		// numa edição que só muda team), cai pro nome atual da aplicação.
+		var data struct {
+			Name string `json:"name"`
+		}
+		_ = request.GetActionDataAs(&data)
+		if data.Name != "" {
+			return data.Name
+		}
+		fallthrough
+
+	case entity.ApprovalActionApplicationDelete, entity.ApprovalActionSecretKeyCreate, entity.ApprovalActionSecretKeyDelete:
+		if request.ApplicationID != nil {
+			if app, err := uc.applicationRepo.GetByID(*request.ApplicationID); err == nil {
+				return app.Name
+			}
+		}
+		return ""
+
+	default:
+		return ""
+	}
 }
 
 // GetApprovalRequest busca uma solicitação por id. Retorna ErrApprovalAccessDenied quando o
@@ -328,7 +386,10 @@ func (uc *ApprovalUseCase) ApproveRequest(ctx context.Context, requestID string,
 	}
 
 	teamID := request.TeamID
-	uc.recordAudit(entity.AuditEventApprovalApproved, "Approved: "+request.Description, "", &teamID, approver)
+	// Sem ":" depois de "Approved" e com o sufixo " request" — confirmado literalmente no
+	// AUDIT_SEED real (au5: "Approved <b>Enable toggle</b> request"), diferente do que este texto
+	// tinha antes ("Approved: <b>X</b>", sem o sufixo).
+	uc.recordAudit(entity.AuditEventApprovalApproved, "Approved <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, approver)
 	return nil
 }
 
@@ -373,7 +434,11 @@ func (uc *ApprovalUseCase) RejectRequest(ctx context.Context, requestID string, 
 	}
 
 	teamID := request.TeamID
-	uc.recordAudit(entity.AuditEventApprovalRejected, "Rejected: "+request.Description, "", &teamID, rejector)
+	// Mesmo padrão de ApproveRequest (sem ":", sufixo " request") — o AUDIT_SEED real só tem um
+	// exemplo de "approved", não de "rejected", mas o par Aprovou/Rejeitou sempre compartilhou o
+	// mesmo template no protótipo (`${decision === "approved" ? "Aprovou" : "Rejeitou"} <b>...`),
+	// então a extensão do sufixo pro caso "rejected" é inferência direta, não um chute solto.
+	uc.recordAudit(entity.AuditEventApprovalRejected, "Rejected <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, rejector)
 	return nil
 }
 
@@ -510,8 +575,17 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	// Isso dependerá da integração com os outros use cases
 	// Por enquanto, apenas marcamos como processada (se necessário)
 
+	// Não existe application_update (docs/rest-flow.md §9.1) — PUT /applications/:id também cai
+	// neste mesmo action_type. ApplicationID só é preenchido pra esse caso (edição); numa criação
+	// de verdade a aplicação ainda não existe, então fica nil.
+	isApplicationEdit := request.ActionType == entity.ApprovalActionApplicationCreate && request.ApplicationID != nil
+
+	// Resolvido ANTES de executar a ação: toggle_delete/application_delete apagam a entidade que
+	// este texto/target descrevem, então buscar o nome/path DEPOIS da execução seria tarde demais
+	// (mesmo cuidado já tomado nos handlers diretos — ver toggle_handler.go/application_handler.go).
+	eventType, auditText, auditTarget := uc.resolveApprovalExecutionAudit(request, isApplicationEdit)
+
 	var execErr error
-	isApplicationEdit := false
 
 	switch request.ActionType {
 	case entity.ApprovalActionToggleCreate:
@@ -527,11 +601,7 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	case entity.ApprovalActionToggleRule:
 		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionApplicationCreate:
-		// Não existe application_update (docs/rest-flow.md §9.1) — PUT /applications/:id também
-		// cai neste mesmo action_type. ApplicationID só é preenchido pra esse caso (edição);
-		// numa criação de verdade a aplicação ainda não existe, então fica nil.
-		if request.ApplicationID != nil {
-			isApplicationEdit = true
+		if isApplicationEdit {
 			execErr = uc.executeApplicationUpdateAction(ctx, request)
 		} else {
 			execErr = uc.executeApplicationCreateAction(ctx, request)
@@ -556,60 +626,124 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	// History ao vivo (tudo aparecia como "root", porque só a aprovação era gravada — quem
 	// REQUISITOU a ação, o dado que mais importa aqui, nunca tinha entrada nenhuma). actor é
 	// `caller` (quem chamou .../execute agora, tipicamente o aprovador) — mesma escolha do
-	// protótipo real (executePendingActionsempre usa currentUser, nunca o requester original).
-	if eventType, text := auditEventForApprovalExecution(request, isApplicationEdit); eventType != "" {
+	// protótipo real (executePendingAction sempre usa currentUser, nunca o requester original).
+	if eventType != "" {
 		teamID := request.TeamID
-		uc.recordAudit(eventType, text, "", &teamID, caller)
+		uc.recordAudit(eventType, auditText, auditTarget, &teamID, caller)
 	}
 
 	return nil
 }
 
-// auditEventForApprovalExecution decide o AuditEventType (pro ícone/cor/categoria certos) e o
-// texto do evento de execução — reaproveita request.Description (já um texto legível, montado
-// na hora que a solicitação foi criada, ex.: "Create toggle: payments.card.x") em vez de
-// re-derivar tudo de novo a partir de action_data, só adicionando "(after approval)" — mesmo
-// sufixo literal que o protótipo real usa (`executePendingAction`) pra marcar que essa execução
-// veio de uma aprovação, não de uma ação direta.
-func auditEventForApprovalExecution(request *entity.ApprovalRequest, isApplicationEdit bool) (entity.AuditEventType, string) {
-	text := request.Description + " (after approval)"
+// resolveApprovalExecutionAudit decide o AuditEventType, o texto (com o marcador <b> real que
+// lib/auditEvents.tsx#renderAuditText reconhece) e o target do evento de execução — chamado
+// ANTES do switch que roda a ação em ApproveRequest, acima (ver comentário lá).
+//
+// Antes esta função reaproveitava request.Description (o texto do "Requested: X", ex. "Create
+// toggle: payments.card.x") verbatim + " (after approval)" — nunca tinha negrito e nunca tinha
+// target, o gap real por trás do History mostrar 2 linhas em vez de 3 pra qualquer ação que
+// passou por aprovação. Reconstruído por tipo de ação e confirmado contra o protótipo real
+// (app.jsx#executePendingAction): toggleEnable/deleteToggle/createToggle todos fazem logAudit
+// com target = SÓ o nome da aplicação (nunca "{app} · {path}" como as ações diretas
+// equivalentes), e deleteApp não passa target nenhum — 2 linhas ali é o render correto, não um
+// gap. Rule-set, application-create e secret-key não têm case nenhum em executePendingAction (o
+// protótipo real nunca de fato executa essas aprovações) — sem fonte real pra confirmar, o
+// target cai pro mesmo identificador que a ação direta equivalente usa.
+func (uc *ApprovalUseCase) resolveApprovalExecutionAudit(request *entity.ApprovalRequest, isApplicationEdit bool) (entity.AuditEventType, string, string) {
+	const suffix = " (after approval)"
+
+	appName := ""
+	if request.ApplicationID != nil {
+		if app, err := uc.applicationRepo.GetByID(*request.ApplicationID); err == nil {
+			appName = app.Name
+		}
+	}
+	teamName := ""
+	if team, err := uc.teamRepo.GetByID(request.TeamID); err == nil {
+		teamName = team.Name
+	}
+	togglePath := ""
+	if request.ToggleID != nil {
+		if toggle, err := uc.toggleRepo.GetByID(*request.ToggleID); err == nil {
+			togglePath = toggle.Path
+		}
+	}
 
 	switch request.ActionType {
 	case entity.ApprovalActionToggleCreate:
-		return entity.AuditEventToggleCreated, text
+		var data struct {
+			Toggle string `json:"toggle"`
+		}
+		_ = request.GetActionDataAs(&data)
+		return entity.AuditEventToggleCreated, "Created toggle <b>" + data.Toggle + "</b>" + suffix, appName
+
 	case entity.ApprovalActionToggleDelete:
-		return entity.AuditEventToggleDeleted, text
+		return entity.AuditEventToggleDeleted, "Deleted toggle <b>" + togglePath + "</b>" + suffix, appName
+
 	case entity.ApprovalActionToggleEnable:
-		return entity.AuditEventToggleEnabled, text
+		return entity.AuditEventToggleEnabled, "Enabled <b>" + togglePath + "</b>" + suffix, appName
+
 	case entity.ApprovalActionToggleDisable:
-		return entity.AuditEventToggleDisabled, text
-	case entity.ApprovalActionToggleRule:
-		return entity.AuditEventToggleRuleSet, text
+		return entity.AuditEventToggleDisabled, "Disabled <b>" + togglePath + "</b>" + suffix, appName
+
 	case entity.ApprovalActionToggleUpdate:
-		// Endpoint plural sem regra (só `enabled` no corpo) — a mesma heurística de
-		// middleware/approval.go#getActionType, só que aqui pra decidir ícone/cor, não pra
-		// executar (a execução real já rodou em executeToggleUpdateAction, acima).
+		// Endpoint plural sem regra (só `enabled` no corpo) — mesma heurística de
+		// middleware/approval.go#getActionType, aqui só pra escolher o verbo certo.
 		var data struct {
 			Enabled bool `json:"enabled"`
 		}
 		_ = request.GetActionDataAs(&data)
 		if data.Enabled {
-			return entity.AuditEventToggleEnabled, text
+			return entity.AuditEventToggleEnabled, "Enabled <b>" + togglePath + "</b>" + suffix, appName
 		}
-		return entity.AuditEventToggleDisabled, text
+		return entity.AuditEventToggleDisabled, "Disabled <b>" + togglePath + "</b>" + suffix, appName
+
+	case entity.ApprovalActionToggleRule:
+		var data struct {
+			HasActivationRule bool                   `json:"has_activation_rule"`
+			ActivationRule    *entity.ActivationRule `json:"activation_rule"`
+		}
+		_ = request.GetActionDataAs(&data)
+		if data.HasActivationRule && data.ActivationRule != nil {
+			// Mesmo texto de toggle_handler.go#UpdateToggle: "Set <b>{type}</b> rule", só com
+			// sufixo " to <b>{value}%</b>" pro tipo percentage. Target = só o path, igual ao
+			// handler direto (não "{app} · {path}") — decisão já tomada nessa mesma rodada pro
+			// evento direto, seguida aqui por consistência.
+			text := "Set <b>" + string(data.ActivationRule.Type) + "</b> rule"
+			if data.ActivationRule.Type == entity.ActivationRuleTypePercentage {
+				text += " to <b>" + data.ActivationRule.Value + "%</b>"
+			}
+			return entity.AuditEventToggleRuleSet, text + suffix, togglePath
+		}
+		verb, eventType := "Disabled", entity.AuditEventToggleDisabled
+		if data.HasActivationRule {
+			verb, eventType = "Enabled", entity.AuditEventToggleEnabled
+		}
+		return eventType, verb + " <b>" + togglePath + "</b>" + suffix, appName
+
 	case entity.ApprovalActionApplicationCreate:
 		if isApplicationEdit {
-			return entity.AuditEventApplicationUpdated, text
+			return entity.AuditEventApplicationUpdated, "Updated application <b>" + appName + "</b>" + suffix, appName
 		}
-		return entity.AuditEventApplicationCreated, text
+		var data struct {
+			Name string `json:"name"`
+		}
+		_ = request.GetActionDataAs(&data)
+		return entity.AuditEventApplicationCreated, "Created application <b>" + data.Name + "</b>" + suffix, teamName + " team"
+
 	case entity.ApprovalActionApplicationDelete:
-		return entity.AuditEventApplicationDeleted, text
+		// Confirmado no protótipo real: o pendingAction de deleteApp não passa target nenhum —
+		// 2 linhas é o render correto pra este evento específico, não um gap a corrigir.
+		return entity.AuditEventApplicationDeleted, "Deleted application <b>" + appName + "</b>" + suffix, ""
+
 	case entity.ApprovalActionSecretKeyCreate:
-		return entity.AuditEventKeyGenerated, text
+		return entity.AuditEventKeyGenerated, "Generated service key" + suffix, appName
+
 	case entity.ApprovalActionSecretKeyDelete:
-		return entity.AuditEventKeyRevoked, text
+		return entity.AuditEventKeyRevoked, "Service key revoked" + suffix, appName
+
 	default:
-		return "", text
+		return "", "", ""
 	}
 }
 

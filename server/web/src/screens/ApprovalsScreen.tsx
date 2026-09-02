@@ -268,7 +268,7 @@ export function ApprovalsScreen() {
                     <div style={{ flex: 1 }}>
                       <span className="appr-action">{request.toggle_path ?? request.application_name ?? request.id}</span>
                       {rowErrors[request.id] && (
-                        <div className="field-hint" style={{ color: "var(--danger)", marginTop: 6 }}>
+                        <div className="field-hint danger" style={{ marginTop: 6 }}>
                           {rowErrors[request.id]}
                         </div>
                       )}
@@ -288,7 +288,7 @@ export function ApprovalsScreen() {
                       isOwn={tab === "mine"}
                     />
                     {rowErrors[request.id] && (
-                      <div className="field-hint" style={{ color: "var(--danger)", marginTop: 6 }}>
+                      <div className="field-hint danger" style={{ marginTop: 6 }}>
                         {rowErrors[request.id]}
                       </div>
                     )}

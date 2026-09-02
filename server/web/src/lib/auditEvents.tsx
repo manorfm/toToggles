@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { IconName } from "../components/Icon";
 
 // Ícone + cor do dot da timeline por event_type — port do AUDIT_ICON/AUDIT_DOT reais
@@ -79,4 +80,22 @@ export function formatAuditWhen(isoDate: string, now: Date = new Date()): string
   if (diffDays < 7) return `${diffDays} days ago`;
 
   return then.toLocaleDateString();
+}
+
+// O protótipo real bolda o termo-chave de cada linha (ex.: `Disabled <b>experiments</b> branch`,
+// confirmado tanto em app.jsx#logAudit quanto no AUDIT_SEED literal — ver server/CLAUDE.md) via
+// dangerouslySetInnerHTML. NÃO reproduzimos isso com dangerouslySetInnerHTML: entry.text pode
+// conter um valor definido pelo usuário (nome de time, path de toggle, nome de usuário...), e
+// injetar HTML bruto a partir disso seria XSS armazenado de verdade — qualquer um com acesso ao
+// team veria o JS executar. Em vez disso, o backend só emite o marcador literal `<b>...</b>`
+// (nunca outra tag), e este parser reconhece SÓ esse marcador e monta elementos React de verdade
+// — qualquer outro caractere (inclusive `<`/`>`/`&` vindos de um nome malicioso) vira texto puro,
+// nunca é interpretado como markup. Pior caso de abuso (um nome que contenha literalmente
+// "<b>...</b>") só deixa aquele trecho em negrito — cosmético, não uma vulnerabilidade.
+export function renderAuditText(text: string): ReactNode[] {
+  const parts = text.split(/(<b>.*?<\/b>)/g);
+  return parts.map((part, i) => {
+    const match = /^<b>(.*)<\/b>$/.exec(part);
+    return match ? <b key={i}>{match[1]}</b> : part;
+  });
 }

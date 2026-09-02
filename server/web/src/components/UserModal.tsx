@@ -4,6 +4,7 @@ import { createUser } from "../api/users";
 import { listTeamOptions, type TeamOption } from "../api/teams";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { slugUsername } from "../lib/userDisplay";
 import type { CreateUserResult, UserRole } from "../types/user";
 
 interface UserModalProps {
@@ -17,9 +18,13 @@ type TeamOptionsState = { status: "loading" } | { status: "loaded"; options: Tea
 // Adaptado do UserModal real do protótipo (decodificado do bundle comprimido embutido em
 // docs/toToggle.html — ver o header de lib/toggleLeaves.ts pro método; design-graph nunca
 // indexou este componente sozinho porque só existe dentro da árvore autenticada de App).
-// Divergência forçada pelo modelo de dados real: o protótipo tem "Nome completo" (separado)
-// que vira o username via slug — nosso entity.User só tem Username (sem campo de nome de
-// exibição), então aqui só existe o campo Username, digitado direto.
+//
+// "Nome completo" (get_full_jsx("UserModal")) — gap real fechado nesta rodada: entity.User não
+// tinha campo de nome de exibição nenhum (só Username), então esta tela (e o audit trail, que
+// usa `currentUser.name`/`initials` como actor) tinham ficado sem esse campo. Fielmente portado
+// do protótipo: autoFocus no nome (não mais no username), digitar o nome sugere o username via
+// slugUsername() até o usuário editar o username manualmente (`touched`), e ambos são
+// obrigatórios ("Informe o nome completo." é checado antes até do username no submit real).
 //
 // Atualização confirmada na v2.2 do protótipo (get_full_jsx("UserModal")):
 // - O campo "Aprovador do time" deixou de ser montado/desmontado condicionalmente
@@ -37,7 +42,9 @@ type TeamOptionsState = { status: "loading" } | { status: "loaded"; options: Tea
 //   EditToggleDrawer já usa pro aviso de cascata (aqui com a variante `.danger`, nova).
 export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
   const [teamOptionsState, setTeamOptionsState] = useState<TeamOptionsState>({ status: "loading" });
+  const [name, setName] = useState("");
   const [username, setUsername] = useState("");
+  const [usernameTouched, setUsernameTouched] = useState(false);
   const [teamId, setTeamId] = useState("");
   const [role, setRole] = useState<UserRole & ("admin" | "user")>("user");
   const [isApprover, setIsApprover] = useState(false);
@@ -66,12 +73,17 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
   const selectedTeamName = teamOptions.find((t) => t.id === teamId)?.name;
 
   async function submit() {
-    const trimmed = username.trim();
-    if (!trimmed) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Informe o nome completo.");
+      return;
+    }
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
       setError("Informe um username.");
       return;
     }
-    if (!/^[a-z0-9._-]+$/.test(trimmed)) {
+    if (!/^[a-z0-9._-]+$/.test(trimmedUsername)) {
       setError("Username aceita apenas letras minúsculas, números, ponto, hífen e underscore.");
       return;
     }
@@ -83,7 +95,7 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createUser({ username: trimmed, role, teamId, isApprover });
+      const result = await createUser({ name: trimmedName, username: trimmedUsername, role, teamId, isApprover });
       onCreated(result);
       onClose();
     } catch (err) {
@@ -119,6 +131,25 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
       )}
 
       <div className="field">
+        <label className="field-label" htmlFor="new-user-name">
+          Nome completo
+        </label>
+        <input
+          className="input"
+          id="new-user-name"
+          placeholder="ex: Ana Ribeiro"
+          autoFocus
+          value={name}
+          onChange={(e) => {
+            const v = e.target.value;
+            setName(v);
+            if (!usernameTouched) setUsername(slugUsername(v));
+            setError(null);
+          }}
+        />
+      </div>
+
+      <div className="field">
         <label className="field-label" htmlFor="new-user-username">
           Username
         </label>
@@ -126,9 +157,9 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
           className="input mono"
           id="new-user-username"
           placeholder="ana.ribeiro"
-          autoFocus
           value={username}
           onChange={(e) => {
+            setUsernameTouched(true);
             setUsername(e.target.value.toLowerCase());
             setError(null);
           }}

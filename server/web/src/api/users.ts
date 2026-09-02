@@ -9,7 +9,13 @@ export async function listUsers(): Promise<User[]> {
 export async function createUser(input: CreateUserInput): Promise<CreateUserResult> {
   const body = await apiFetch<{ success: boolean; user: User; password: string; warning?: string }>("/users", {
     method: "POST",
-    body: JSON.stringify({ username: input.username, role: input.role, team_id: input.teamId, is_approver: input.isApprover ?? false }),
+    body: JSON.stringify({
+      name: input.name,
+      username: input.username,
+      role: input.role,
+      team_id: input.teamId,
+      is_approver: input.isApprover ?? false,
+    }),
   });
   return { user: body.user, password: body.password, warning: body.warning };
 }

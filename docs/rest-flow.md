@@ -340,11 +340,19 @@ POST /api/users
 ```
 
 ```json
-{ "username": "alice", "role": "admin", "team_id": "01TEAM000000000000000001", "is_approver": false }
+{ "name": "Alice Ribeiro", "username": "alice", "role": "admin", "team_id": "01TEAM000000000000000001", "is_approver": false }
 ```
 
 Rules:
 
+- `name` (full display name) is **required**, distinct from `username` (login) — confirmed in the real
+  prototype (`get_full_jsx("UserModal")`): it's the first field on the form, and its own validation runs
+  before even the username check. Stored on `entity.User.Name`. Used as the primary label wherever a user
+  is shown (`UserRow`: `{name}` bold, `@{username}` secondary) and, critically, as the `actor_name`/`initials`
+  basis for every audit-log entry that user causes as actor (`AuditUseCase.Record` uses `actor.Name`, not
+  `actor.Username` — matches the prototype's `logAudit(...)`, which always uses `currentUser.name`). Before
+  this field existed, `UserRow` could only show `@username` and the audit trail's avatar initials were derived
+  from the username, not a real name — closed gap, not a new feature.
 - `role` must be `"admin"` or `"user"` — `"root"` is rejected (`400`, "Cannot create additional root users").
 - `team_id` is **required** — the new user is associated with that team as part of the same request (not a
   separate step). The team must exist (`400` otherwise). When the caller is `admin` (not `root`), `team_id`
@@ -366,6 +374,7 @@ Response (`201`):
   "success": true,
   "user": {
     "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "name": "Alice Ribeiro",
     "username": "alice",
     "role": "admin",
     "must_change_password": true,
@@ -1284,11 +1293,16 @@ carry no team at all and are therefore only ever visible to root.
 }
 ```
 
-`next_cursor` is `""` when there is no further page. `text`/`target` are always plain text — never HTML
-(the prototype's `HistoryView` renders its `text` field via `dangerouslySetInnerHTML`; this API
-deliberately does not carry markup, since a `target` derived from a user-controlled name — a toggle path,
-an application name — becoming part of a stored HTML string would be a stored-XSS vector. The client
-decides how to present `text`/`target`, never trusts embedded markup because there isn't any).
+`next_cursor` is `""` when there is no further page. `text` may embed the literal marker `<b>...</b>`
+around the key term of the sentence (e.g. `"Disabled <b>experiments</b> branch"`), matching the real
+prototype's own audit text (`app.jsx#logAudit`, `AUDIT_SEED`). `target` never does. **This is not raw
+HTML** — the client never renders `text` via `dangerouslySetInnerHTML` (the prototype does; this API
+deliberately doesn't behave like that). Since `text` can embed a user-controlled value (a toggle path, an
+application/team/user name), rendering it as real HTML would be a stored-XSS vector — instead, the
+client (`server/web/src/lib/auditEvents.tsx#renderAuditText`) recognizes only the exact `<b>...</b>`
+marker and builds a real React `<b>` element from it; every other character — including `<`, `>`, `&`
+from a malicious name — renders as inert plain text. Worst case a malicious value contains a literal
+`<b>...</b>` itself: that portion renders bold, which is cosmetic, not a vulnerability.
 
 **Coverage — what actually writes an entry**: every *immediate* mutation (the approval workflow
 disabled, or that action type not configured to require it) writes an entry at the point of execution:

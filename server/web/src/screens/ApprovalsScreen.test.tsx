@@ -152,7 +152,7 @@ describe("ApprovalsScreen", () => {
     renderScreen(root);
     await screen.findByText(/delete toggle/i);
 
-    await user.click(screen.getByRole("button", { name: /approve/i }));
+    await user.click(screen.getByRole("button", { name: /aprovar/i }));
 
     expect(await screen.findByText(/tudo limpo/i)).toBeInTheDocument();
   });
@@ -214,7 +214,7 @@ describe("ApprovalsScreen", () => {
     renderScreen(root);
     await screen.findByText(/delete toggle/i);
 
-    await user.click(screen.getByRole("button", { name: /approve/i }));
+    await user.click(screen.getByRole("button", { name: /aprovar/i }));
 
     expect(await screen.findByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
@@ -236,7 +236,7 @@ describe("ApprovalsScreen", () => {
     renderScreen(root);
     await screen.findByText(/delete toggle/i);
 
-    await user.click(screen.getByRole("button", { name: /reject/i }));
+    await user.click(screen.getByRole("button", { name: /rejeitar/i }));
     await screen.findByRole("button", { name: /confirmar rejeição/i });
     await user.click(screen.getByRole("button", { name: /confirmar rejeição/i }));
 

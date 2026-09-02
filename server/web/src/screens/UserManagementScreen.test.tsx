@@ -31,12 +31,13 @@ function renderScreen(user: AuthenticatedUser = root) {
 }
 
 function rootFixture() {
-  return { id: "1", username: "root", role: "root", must_change_password: false, active: true, status: "active", teams: [], created_at: "", updated_at: "" };
+  return { id: "1", name: "Root", username: "root", role: "root", must_change_password: false, active: true, status: "active", teams: [], created_at: "", updated_at: "" };
 }
 
 function bobFixture(overrides: Record<string, unknown> = {}) {
   return {
     id: "2",
+    name: "Bob Test",
     username: "bob",
     role: "user",
     must_change_password: false,
@@ -71,14 +72,29 @@ describe("UserManagementScreen", () => {
     expect(await screen.findByText(/nenhum usuário encontrado/i)).toBeInTheDocument();
   });
 
-  it("filters the list by the search box", async () => {
+  it("filters the list by username in the search box", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] })));
     const user = userEvent.setup();
 
     renderScreen();
     await screen.findByText("@bob");
 
-    await user.type(screen.getByPlaceholderText(/buscar por username/i), "bob");
+    await user.type(screen.getByPlaceholderText(/buscar por nome ou username/i), "bob");
+
+    expect(screen.getByText("@bob")).toBeInTheDocument();
+    expect(screen.queryByText("@root")).not.toBeInTheDocument();
+  });
+
+  // Confirmado no protótipo real (get_screen_full("UsersView")): o placeholder diz "Buscar por
+  // nome ou username", mas o filtro só olhava username — gap real, não só de texto.
+  it("also filters the list by display name in the search box", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] })));
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("@bob");
+
+    await user.type(screen.getByPlaceholderText(/buscar por nome ou username/i), bobFixture().name);
 
     expect(screen.getByText("@bob")).toBeInTheDocument();
     expect(screen.queryByText("@root")).not.toBeInTheDocument();
@@ -114,7 +130,9 @@ describe("UserManagementScreen", () => {
 
     await user.click(screen.getByRole("button", { name: /criar usuário/i }));
     await screen.findByRole("option", { name: "Payments Squad" });
-    await user.type(screen.getByLabelText(/username/i), "bob");
+    await user.type(screen.getByLabelText(/nome completo/i), "Bob Test");
+    await user.clear(screen.getByLabelText(/^username$/i));
+    await user.type(screen.getByLabelText(/^username$/i), "bob");
     await user.click(screen.getAllByRole("button", { name: /^criar usuário$/i })[1]);
 
     expect(await screen.findByText("Xk9$mQ2pLw#T")).toBeInTheDocument();

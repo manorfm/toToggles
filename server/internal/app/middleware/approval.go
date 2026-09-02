@@ -221,7 +221,10 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		}
 		if err := json.Unmarshal(body, &toggleData); err == nil {
 			actionData = toggleData
-			description = "Create toggle: " + toggleData.Toggle
+			// Confirmado no protótipo real (app.jsx#createToggle): a descrição da solicitação é
+			// só o nome curto da ação — o path vai no `target` do evento de auditoria
+			// (ApprovalUseCase#approvalRequestTarget), não embutido aqui.
+			description = "Create toggle"
 		}
 
 	case entity.ApprovalActionToggleUpdate:
@@ -272,11 +275,9 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 			if applicationID != nil {
 				verb = "Update"
 			}
-			if name, ok := appData["name"].(string); ok {
-				description = verb + " application: " + name
-			} else {
-				description = verb + " application"
-			}
+			// Nome curto só — o nome da aplicação vai no `target` do evento de auditoria
+			// (ApprovalUseCase#approvalRequestTarget), mesmo padrão do toggle create acima.
+			description = verb + " application"
 		}
 
 	case entity.ApprovalActionApplicationDelete:

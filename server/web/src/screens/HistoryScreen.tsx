@@ -105,15 +105,19 @@ export function HistoryScreen() {
 
       {state.status === "loading" && <div className="empty">Carregando…</div>}
       {state.status === "error" && <div className="empty">{state.message}</div>}
-      {state.status === "loaded" && state.entries.length === 0 && (
-        <div className="empty">
-          <Icon name="history" size={40} />
-          <div className="et">Nothing here yet</div>
-          <div className="ed">No events in this category.</div>
-        </div>
-      )}
-      {state.status === "loaded" && state.entries.length > 0 && (
+      {state.status === "loaded" && (
+        // O empty state fica DENTRO de .audit no protótipo real (get_full_jsx via bundle
+        // decodificado: `<div className="audit">{items.length === 0 && <div className="empty">
+        // ...}{items.map(...)}</div>`), não como irmão — herda o position:relative;
+        // padding-left:6px de .audit, que um empty solto no nível de .page não tem.
         <div className="audit">
+          {state.entries.length === 0 && (
+            <div className="empty">
+              <Icon name="history" size={40} />
+              <div className="et">Nothing here yet</div>
+              <div className="ed">No events in this category.</div>
+            </div>
+          )}
           {state.entries.map((entry, i) => (
             <AuditRow key={entry.id} entry={entry} isLast={i === state.entries.length - 1} />
           ))}

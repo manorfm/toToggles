@@ -26,12 +26,14 @@ func NewUserManagementHandler(userUseCase *usecase.UserUseCase, teamUseCase *use
 	}
 }
 
-
 // CreateUserManagementRequest representa a requisição de criação de usuário. Confirmado no
 // protótipo (get_full_jsx("UserModal")): time é escolhido na própria criação (não é mais um
 // passo separado), e "Aprovador do time" só existe quando quem cria é root criando um admin —
 // o handler reforça essa regra no servidor, não confia só no que o client mandou.
 type CreateUserManagementRequest struct {
+	// Name (nome completo) é obrigatório — confirmado no protótipo real (get_full_jsx("UserModal"):
+	// "Informe o nome completo." é a primeira validação do submit, antes até do username.
+	Name       string `json:"name" binding:"required"`
 	Username   string `json:"username" binding:"required"`
 	Role       string `json:"role" binding:"required"`
 	TeamID     string `json:"team_id" binding:"required"`
@@ -103,8 +105,9 @@ func (h *UserManagementHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	// Time precisa existir
-	if _, err := h.teamUseCase.GetTeamByID(req.TeamID); err != nil {
+	// Time precisa existir — team.Name é reaproveitado abaixo pra montar o target do audit log.
+	team, err := h.teamUseCase.GetTeamByID(req.TeamID)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, CreateUserManagementResponse{
 			Success: false,
 			Error:   "Team not found",
@@ -137,6 +140,7 @@ func (h *UserManagementHandler) CreateUser(c *gin.Context) {
 
 	// Criar usuário
 	user := &entity.User{
+		Name:               req.Name,
 		Username:           req.Username,
 		Role:               userRole,
 		MustChangePassword: true, // Obriga troca de senha no primeiro login
@@ -187,8 +191,11 @@ func (h *UserManagementHandler) CreateUser(c *gin.Context) {
 		}
 	}
 
+	// Confirmado no protótipo real (app.jsx#doCreateUser): "Criou usuário <b>{name}</b>
+	// (@<username>)" — nome completo em negrito, username entre parênteses (não mais só
+	// "@username" sozinho, que nunca dizia quem era de verdade).
 	teamID := req.TeamID
-	h.auditUseCase.Record(entity.AuditEventUserCreated, "Created user @"+user.Username, "", &teamID, currentUser)
+	h.auditUseCase.Record(entity.AuditEventUserCreated, "Created user <b>"+user.Name+"</b> (@"+user.Username+")", team.Name+" team", &teamID, currentUser)
 
 	c.JSON(http.StatusCreated, CreateUserManagementResponse{
 		Success:  true,
@@ -328,7 +335,8 @@ func (h *UserManagementHandler) DeleteUser(c *gin.Context) {
 	if len(userToDelete.Teams) > 0 {
 		teamID = &userToDelete.Teams[0].ID
 	}
-	h.auditUseCase.Record(entity.AuditEventUserDeleted, "Deleted user @"+userToDelete.Username, "", teamID, currentUser)
+	// Confirmado no protótipo real: `Excluiu o usuário <b>{name}</b>`, target `@{username}`.
+	h.auditUseCase.Record(entity.AuditEventUserDeleted, "Deleted user <b>"+userToDelete.Name+"</b>", "@"+userToDelete.Username, teamID, currentUser)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -419,7 +427,8 @@ func (h *UserManagementHandler) ResetUserPassword(c *gin.Context) {
 	_ = h.userUseCase.InvalidateSessions(userID)
 	user.RefreshStatus()
 
-	h.auditUseCase.RecordForUser(entity.AuditEventUserPasswordReset, "Reset password for @"+user.Username, "", user.ID, currentUser)
+	// Confirmado no protótipo real: `Resetou a senha de <b>{name}</b>`, target `@{username}`.
+	h.auditUseCase.RecordForUser(entity.AuditEventUserPasswordReset, "Reset password for <b>"+user.Name+"</b>", "@"+user.Username, user.ID, currentUser)
 
 	c.JSON(http.StatusOK, ResetPasswordResponse{Success: true, User: user, Password: randomPassword})
 }
@@ -471,7 +480,8 @@ func (h *UserManagementHandler) SetUserStatus(c *gin.Context) {
 	if req.Active {
 		verb = "Reactivated"
 	}
-	h.auditUseCase.RecordForUser(entity.AuditEventUserStatusChanged, verb+" user @"+user.Username, "", user.ID, currentUser)
+	// Confirmado no protótipo real: `{Desativou/Reativou} <b>{name}</b>`, target `@{username}`.
+	h.auditUseCase.RecordForUser(entity.AuditEventUserStatusChanged, verb+" <b>"+user.Name+"</b>", "@"+user.Username, user.ID, currentUser)
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "user": user})
 }

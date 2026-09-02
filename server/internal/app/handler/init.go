@@ -80,7 +80,7 @@ func InitHandlers(db *gorm.DB) {
 
 	// Inicializa handlers
 	appHandler = NewApplicationHandler(appUseCase, toggleUseCase, teamUseCase, auditUseCase)
-	toggleHandler = NewToggleHandler(toggleUseCase, auditUseCase)
+	toggleHandler = NewToggleHandler(toggleUseCase, appUseCase, auditUseCase)
 	authHandler = NewAuthHandler(authUseCase)
 	userHandler = NewUserHandler(userUseCase)
 	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase, approvalUseCase, auditUseCase)

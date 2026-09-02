@@ -39,41 +39,46 @@ describe("createUser", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts username/role/team_id and returns the created user with its one-time password", async () => {
-    const user = { id: "2", username: "bob", role: "admin", must_change_password: true, active: true, status: "pending_first_login", created_at: "", updated_at: "" };
+  it("posts name/username/role/team_id and returns the created user with its one-time password", async () => {
+    const user = { id: "2", name: "Bob Test", username: "bob", role: "admin", must_change_password: true, active: true, status: "pending_first_login", created_at: "", updated_at: "" };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { success: true, user, password: "Xk9$mQ2pLw#T" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await createUser({ username: "bob", role: "admin", teamId: "t1" });
+    const result = await createUser({ name: "Bob Test", username: "bob", role: "admin", teamId: "t1" });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/users",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ username: "bob", role: "admin", team_id: "t1", is_approver: false }) })
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "Bob Test", username: "bob", role: "admin", team_id: "t1", is_approver: false }),
+      })
     );
     expect(result).toEqual({ user, password: "Xk9$mQ2pLw#T", warning: undefined });
   });
 
   it("sends is_approver true when requested (only meaningful for root creating an admin, enforced server-side)", async () => {
-    const user = { id: "3", username: "carol", role: "admin", must_change_password: true, active: true, status: "pending_first_login", created_at: "", updated_at: "" };
+    const user = { id: "3", name: "Carol Test", username: "carol", role: "admin", must_change_password: true, active: true, status: "pending_first_login", created_at: "", updated_at: "" };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { success: true, user, password: "abc" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await createUser({ username: "carol", role: "admin", teamId: "t1", isApprover: true });
+    await createUser({ name: "Carol Test", username: "carol", role: "admin", teamId: "t1", isApprover: true });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/users",
-      expect.objectContaining({ body: JSON.stringify({ username: "carol", role: "admin", team_id: "t1", is_approver: true }) })
+      expect.objectContaining({
+        body: JSON.stringify({ name: "Carol Test", username: "carol", role: "admin", team_id: "t1", is_approver: true }),
+      })
     );
   });
 
   it("surfaces a warning when the user was created but team association failed", async () => {
-    const user = { id: "2", username: "bob", role: "user", must_change_password: true, active: true, status: "pending_first_login", created_at: "", updated_at: "" };
+    const user = { id: "2", name: "Bob Test", username: "bob", role: "user", must_change_password: true, active: true, status: "pending_first_login", created_at: "", updated_at: "" };
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(jsonResponse(201, { success: true, user, password: "x", warning: "User created, but failed to add to the team" }))
     );
 
-    const result = await createUser({ username: "bob", role: "user", teamId: "t1" });
+    const result = await createUser({ name: "Bob Test", username: "bob", role: "user", teamId: "t1" });
 
     expect(result.warning).toBe("User created, but failed to add to the team");
   });
@@ -81,7 +86,7 @@ describe("createUser", () => {
   it("propagates ApiError on a duplicate username", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(409, { code: "T0003", message: "username already exists" })));
 
-    await expect(createUser({ username: "bob", role: "user", teamId: "t1" })).rejects.toMatchObject({ status: 409 });
+    await expect(createUser({ name: "Bob Test", username: "bob", role: "user", teamId: "t1" })).rejects.toMatchObject({ status: 409 });
   });
 });
 

@@ -79,7 +79,12 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 		return
 	}
 
-	h.auditUseCase.Record(entity.AuditEventApplicationCreated, "Created application "+app.Name, "", &req.TeamID, auditActor(c))
+	// Confirmado no protótipo real: `Created application <b>{name}</b>`, target `{team} team`.
+	teamTarget := ""
+	if team, err := h.teamUseCase.GetTeamByID(req.TeamID); err == nil {
+		teamTarget = team.Name + " team"
+	}
+	h.auditUseCase.Record(entity.AuditEventApplicationCreated, "Created application <b>"+app.Name+"</b>", teamTarget, &req.TeamID, auditActor(c))
 
 	c.JSON(http.StatusCreated, app)
 }
@@ -274,11 +279,13 @@ func (h *ApplicationHandler) DeleteApplication(c *gin.Context) {
 	// aplicação apagada) — buscados antes da exclusão, de propósito.
 	name := id
 	var teamID *string
+	teamTarget := ""
 	if app, err := h.appUseCase.GetApplicationByID(id); err == nil {
 		name = app.Name
 	}
 	if teams, err := h.teamUseCase.GetApplicationTeams(id); err == nil && len(teams) > 0 {
 		teamID = &teams[0].ID
+		teamTarget = teams[0].Name + " team"
 	}
 
 	err := h.appUseCase.DeleteApplication(id)
@@ -296,7 +303,8 @@ func (h *ApplicationHandler) DeleteApplication(c *gin.Context) {
 		return
 	}
 
-	h.auditUseCase.Record(entity.AuditEventApplicationDeleted, "Deleted application "+name, "", teamID, auditActor(c))
+	// Confirmado no protótipo real: `Deleted application <b>{name}</b>`.
+	h.auditUseCase.Record(entity.AuditEventApplicationDeleted, "Deleted application <b>"+name+"</b>", teamTarget, teamID, auditActor(c))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "application deleted successfully",

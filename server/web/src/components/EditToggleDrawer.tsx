@@ -93,7 +93,7 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
 
         <div className="drawer-body">
           {loadState.status === "loading" && <div className="empty-ph">Carregando…</div>}
-          {loadState.status === "error" && <div className="field-hint" style={{ color: "var(--danger)" }}>{loadState.message}</div>}
+          {loadState.status === "error" && <div className="field-hint danger">{loadState.message}</div>}
 
           {loadState.status === "loaded" && (
             <>
@@ -178,7 +178,7 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
               </div>
 
               {error && (
-                <div className="field-hint" style={{ color: "var(--danger)" }}>
+                <div className="field-hint danger">
                   {error}
                 </div>
               )}

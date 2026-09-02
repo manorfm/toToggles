@@ -107,7 +107,7 @@ export function ChangePasswordForm({ onSubmit, submitLabel = "Update password" }
         />
       </div>
 
-      {error && <div className="field-hint" style={{ color: "var(--danger)" }}>{error}</div>}
+      {error && <div className="field-hint danger">{error}</div>}
 
       <button type="submit" className="btn btn-primary" disabled={submitting}>
         {submitting ? "Salvando…" : submitLabel}

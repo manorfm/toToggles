@@ -96,6 +96,7 @@ func (uc *AuthUseCase) InitializeRootUser() error {
 
 	// Criar usuário root padrão
 	root := &entity.User{
+		Name:               "Root",
 		Username:           "root",
 		Role:               entity.UserRoleRoot,
 		MustChangePassword: true, // Obriga a troca de senha no primeiro login

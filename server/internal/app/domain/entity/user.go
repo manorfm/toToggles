@@ -19,7 +19,12 @@ const (
 )
 
 type User struct {
-	ID                 string    `json:"id" gorm:"primaryKey;type:varchar(26)"`
+	ID string `json:"id" gorm:"primaryKey;type:varchar(26)"`
+	// Name é o nome completo de exibição, distinto de Username (login) — confirmado no
+	// protótipo real (UserModal: "Nome completo", campo próprio, obrigatório). Usado como label
+	// principal em telas de usuário e como base do actor/initials no audit trail (ver
+	// AuditUseCase.Record) — Username sozinho não é o suficiente pra essas duas coisas.
+	Name               string    `json:"name" gorm:"not null;type:varchar(150)"`
 	Username           string    `json:"username" gorm:"uniqueIndex;not null;type:varchar(100)"`
 	Password           string    `json:"-" gorm:"not null;type:varchar(255)"` // Hash da senha
 	Role               UserRole  `json:"role" gorm:"not null;type:varchar(20);default:'user'"`
@@ -145,6 +150,10 @@ func (u *User) GetTeamCount() int {
 
 // Validate valida os dados do usuário
 func (u *User) Validate() error {
+	if u.Name == "" {
+		return errors.New("name is required")
+	}
+
 	if u.Username == "" {
 		return errors.New("username is required")
 	}

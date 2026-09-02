@@ -66,13 +66,13 @@ export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps
       </div>
 
       {actionError && (
-        <div className="field-hint" style={{ color: "var(--danger)", marginBottom: 8 }}>
+        <div className="field-hint danger" style={{ marginBottom: 8 }}>
           {actionError}
         </div>
       )}
 
       {state.status === "loading" && <div className="empty-ph">Carregando…</div>}
-      {state.status === "error" && <div className="field-hint" style={{ color: "var(--danger)" }}>{state.message}</div>}
+      {state.status === "error" && <div className="field-hint danger">{state.message}</div>}
       {state.status === "loaded" && state.members.length === 0 && <div className="field-hint">No members yet.</div>}
       {state.status === "loaded" &&
         state.members.map((member) => (
