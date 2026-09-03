@@ -134,6 +134,7 @@ func setupApprovalAccessFixture(t *testing.T) *approvalAccessFixture {
 	router.POST("/approval/requests/:id/approve", ApproveRequest)
 	router.POST("/approval/requests/:id/reject", RejectRequest)
 	router.POST("/approval/requests/:id/execute", ExecuteApprovedAction)
+	router.POST("/approval/requests/:id/withdraw", WithdrawRequest)
 
 	return &approvalAccessFixture{
 		router: router, db: db,
@@ -315,6 +316,51 @@ func TestApprovalAccess_ApproveRejectExecute_CrossTeamIsForbidden(t *testing.T) 
 		w = f.do(http.MethodPost, "/approval/requests/"+f.reqTeamA+"/execute")
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected execute to succeed for the team's approver, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestApprovalAccess_Withdraw_OnlyTheRequesterCan(t *testing.T) {
+	t.Run("the requester can withdraw their own pending request", func(t *testing.T) {
+		f := setupApprovalAccessFixture(t)
+		f.as(f.memberA)
+		w := f.do(http.MethodPost, "/approval/requests/"+f.reqTeamA+"/withdraw")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		// Confirms it's actually gone, not just a 200 with no effect.
+		f.as(f.root)
+		w = f.do(http.MethodGet, "/approval/requests/"+f.reqTeamA)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected the withdrawn request to be gone (404), got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("the team's own approver cannot withdraw someone else's request", func(t *testing.T) {
+		f := setupApprovalAccessFixture(t)
+		f.as(f.approverA)
+		w := f.do(http.MethodPost, "/approval/requests/"+f.reqTeamA+"/withdraw")
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("root cannot withdraw someone else's request either", func(t *testing.T) {
+		f := setupApprovalAccessFixture(t)
+		f.as(f.root)
+		w := f.do(http.MethodPost, "/approval/requests/"+f.reqTeamA+"/withdraw")
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("a member of an unrelated team cannot withdraw it", func(t *testing.T) {
+		f := setupApprovalAccessFixture(t)
+		f.as(f.memberB)
+		w := f.do(http.MethodPost, "/approval/requests/"+f.reqTeamA+"/withdraw")
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 }

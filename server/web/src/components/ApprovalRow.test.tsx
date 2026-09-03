@@ -103,4 +103,36 @@ describe("ApprovalRow", () => {
 
     expect(screen.queryByText(/aguardando revisão de um aprovador/i)).not.toBeInTheDocument();
   });
+
+  it("shows a Withdraw button instead of the status chip for your own pending request when onWithdraw is passed", async () => {
+    const onWithdraw = vi.fn();
+    const user = userEvent.setup();
+    render(<ApprovalRow request={pending} onApprove={vi.fn()} onReject={vi.fn()} readOnly isOwn onWithdraw={onWithdraw} />);
+
+    expect(screen.queryByText(/^pendente$/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /withdraw/i }));
+    expect(onWithdraw).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the status chip, not Withdraw, once your own request is resolved even with onWithdraw passed", () => {
+    render(
+      <ApprovalRow request={{ ...pending, status: "approved" }} onApprove={vi.fn()} onReject={vi.fn()} readOnly isOwn onWithdraw={vi.fn()} />
+    );
+
+    expect(screen.getByText(/aprovado/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /withdraw/i })).not.toBeInTheDocument();
+  });
+
+  it("never shows Withdraw for someone else's pending request, even if onWithdraw is passed", () => {
+    render(<ApprovalRow request={pending} onApprove={vi.fn()} onReject={vi.fn()} readOnly onWithdraw={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /withdraw/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/^pendente$/i)).toBeInTheDocument();
+  });
+
+  it("disables the Withdraw button while busy", () => {
+    render(<ApprovalRow request={pending} onApprove={vi.fn()} onReject={vi.fn()} readOnly isOwn onWithdraw={vi.fn()} busy />);
+
+    expect(screen.getByRole("button", { name: /withdraw/i })).toBeDisabled();
+  });
 });

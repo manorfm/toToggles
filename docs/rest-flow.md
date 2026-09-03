@@ -246,6 +246,7 @@ GET  /api/approval/requests/:id
 POST /api/approval/requests/:id/approve
 POST /api/approval/requests/:id/reject
 POST /api/approval/requests/:id/execute
+POST /api/approval/requests/:id/withdraw        # requester only, pending only
 GET  /api/approval/teams/:id/requests
 GET  /api/approval/stats
 GET  /api/approval/teams/:id/stats
@@ -1182,6 +1183,23 @@ so clients driving an approval UI must call this endpoint themselves after appro
 Same authorization rule as approve/reject (`403` if the caller is not `root` and not a registered approver
 for the request's team) — this endpoint used to have **no caller check at all**, letting any authenticated
 session execute any already-approved request regardless of team.
+
+```http
+POST /api/approval/requests/:id/withdraw
+```
+
+```json
+{}
+```
+
+Cancels a **pending** request the caller themself opened. Deliberately a different authorization rule from
+approve/reject/execute: those require being `root` or a registered approver for the team; this requires being
+the exact requester (`requested_by == caller.id`) — not even `root` or the team's own approver can withdraw
+someone else's request, matching the confirmed v2.6 prototype's "Withdraw" button, which only ever appears on
+the requester's own "Mine" tab. `403` if the caller isn't the requester, `400` if the request is no longer
+`pending`. The row is deleted outright (not a new `ApprovalStatus`), and — same as reject — if this was a
+`secret_key_create` request, the pending-inactive `SecretKey` row created inline at request time is deleted
+too, since it never became valid.
 
 ### 9.3 Approvers
 

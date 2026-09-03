@@ -341,6 +341,37 @@ func (h *ApprovalHandler) RejectRequest(ctx *gin.Context) {
 	})
 }
 
+// WithdrawRequest cancela uma solicitação PRÓPRIA ainda pendente. Diferente de approve/reject/
+// execute, aqui não passa pelo portão de aprovador (access.CanAct) — o portão é "ser o
+// solicitante", checado dentro do usecase.
+func (h *ApprovalHandler) WithdrawRequest(ctx *gin.Context) {
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
+	requestID := ctx.Param("id")
+	if requestID == "" {
+		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "request ID is required"))
+		return
+	}
+
+	err := h.approvalUseCase.WithdrawRequest(ctx.Request.Context(), requestID, user)
+	if err != nil {
+		if err.Error() == "only the requester can withdraw this request" {
+			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "request withdrawn successfully",
+	})
+}
+
 // ============================
 // Gerenciamento de Aprovadores
 // ============================

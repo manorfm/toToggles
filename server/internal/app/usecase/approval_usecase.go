@@ -442,6 +442,48 @@ func (uc *ApprovalUseCase) RejectRequest(ctx context.Context, requestID string, 
 	return nil
 }
 
+// WithdrawRequest cancela uma solicitação PRÓPRIA ainda pendente (v2.6 §2.8) — diferente de
+// Approve/Reject, aqui quem age precisa SER o solicitante (nem root pode retirar o pedido de
+// outra pessoa; a UI só mostra esse botão na aba "Mine", nunca em Pending/Approvable). O request
+// é apagado de vez (não vira um novo `ApprovalStatus`, mesma escolha do protótipo real —
+// `withdrawApproval` remove do array em vez de marcar um status "withdrawn").
+func (uc *ApprovalUseCase) WithdrawRequest(ctx context.Context, requestID string, requester *entity.User) error {
+	request, err := uc.approvalRequestRepo.GetByID(ctx, requestID)
+	if err != nil {
+		return err
+	}
+
+	if request.RequestedBy != requester.ID {
+		return errors.New("only the requester can withdraw this request")
+	}
+
+	if request.Status != entity.ApprovalStatusPending {
+		return errors.New("approval request is not pending")
+	}
+
+	// secret_key_create retirado: mesma limpeza de RejectRequest — a chave pendente (criada
+	// inativa já na hora da solicitação) nunca chegou a ficar válida, então o registro é apagado
+	// fisicamente em vez de ficar órfão no banco.
+	if request.ActionType == entity.ApprovalActionSecretKeyCreate {
+		var actionData struct {
+			SecretKeyID string `json:"secret_key_id"`
+		}
+		if err := request.GetActionDataAs(&actionData); err == nil && actionData.SecretKeyID != "" {
+			if err := uc.secretKeyUseCase.DeleteSecretKey(actionData.SecretKeyID); err != nil {
+				return fmt.Errorf("failed to delete withdrawn pending secret key: %w", err)
+			}
+		}
+	}
+
+	if err := uc.approvalRequestRepo.Delete(ctx, requestID); err != nil {
+		return err
+	}
+
+	teamID := request.TeamID
+	uc.recordAudit(entity.AuditEventApprovalWithdrawn, "Withdrew <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, requester)
+	return nil
+}
+
 // ============================
 // Gerenciamento de Aprovadores
 // ============================

@@ -146,6 +146,53 @@ func TestApprovalUseCase_RejectRequest(t *testing.T) {
 	})
 }
 
+func TestApprovalUseCase_WithdrawRequest(t *testing.T) {
+	t.Run("requester can withdraw their own pending request", func(t *testing.T) {
+		uc, requests, _, _, users := newApprovalUseCaseForAccessTests()
+		req := pendingRequest("req-1", "team-a", "requester-1")
+		requests.Requests[req.ID] = req
+		requester := &entity.User{ID: "requester-1", Role: entity.UserRoleAdmin}
+		users.Users[requester.ID] = requester
+
+		if err := uc.WithdrawRequest(context.Background(), req.ID, requester); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, exists := requests.Requests[req.ID]; exists {
+			t.Errorf("expected the request to be deleted, still present")
+		}
+	})
+
+	t.Run("someone other than the requester cannot withdraw it, even root", func(t *testing.T) {
+		uc, requests, _, _, users := newApprovalUseCaseForAccessTests()
+		req := pendingRequest("req-2", "team-a", "requester-1")
+		requests.Requests[req.ID] = req
+		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
+		users.Users[root.ID] = root
+
+		err := uc.WithdrawRequest(context.Background(), req.ID, root)
+		if err == nil || err.Error() != "only the requester can withdraw this request" {
+			t.Fatalf("expected 'only the requester can withdraw this request', got %v", err)
+		}
+		if _, exists := requests.Requests[req.ID]; !exists {
+			t.Errorf("expected the request to remain, was deleted")
+		}
+	})
+
+	t.Run("cannot withdraw a request that is no longer pending", func(t *testing.T) {
+		uc, requests, _, _, users := newApprovalUseCaseForAccessTests()
+		req := pendingRequest("req-3", "team-a", "requester-1")
+		req.Status = entity.ApprovalStatusApproved
+		requests.Requests[req.ID] = req
+		requester := &entity.User{ID: "requester-1", Role: entity.UserRoleAdmin}
+		users.Users[requester.ID] = requester
+
+		err := uc.WithdrawRequest(context.Background(), req.ID, requester)
+		if err == nil || err.Error() != "approval request is not pending" {
+			t.Fatalf("expected 'approval request is not pending', got %v", err)
+		}
+	})
+}
+
 func TestApprovalUseCase_ExecuteApprovedAction(t *testing.T) {
 	approvedRequest := func(id, teamID, requestedBy string) *entity.ApprovalRequest {
 		req := pendingRequest(id, teamID, requestedBy)

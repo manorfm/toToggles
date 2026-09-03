@@ -11,6 +11,7 @@ import {
   listApprovableApprovals,
   listMyApprovals,
   listPendingApprovals,
+  withdrawApproval,
 } from "../api/approvals";
 import { getApprovalSettings, updateApprovalSettings } from "../api/approvalSettings";
 import { useAppUser } from "../hooks/useAppUser";
@@ -111,6 +112,20 @@ export function ApprovalsScreen() {
       }
     } catch (err) {
       setRowErrors((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível aprovar." }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleWithdraw(id: string) {
+    setBusyId(id);
+    clearRowError(id);
+    try {
+      await withdrawApproval(id);
+      loadRequests();
+      toast("Request withdrawn");
+    } catch (err) {
+      setRowErrors((prev) => ({ ...prev, [id]: err instanceof ApiError ? err.message : "Não foi possível retirar a solicitação." }));
     } finally {
       setBusyId(null);
     }
@@ -286,6 +301,7 @@ export function ApprovalsScreen() {
                       busy={busyId === request.id}
                       readOnly={tab === "mine"}
                       isOwn={tab === "mine"}
+                      onWithdraw={tab === "mine" ? () => handleWithdraw(request.id) : undefined}
                     />
                     {rowErrors[request.id] && (
                       <div className="field-hint danger" style={{ marginTop: 6 }}>

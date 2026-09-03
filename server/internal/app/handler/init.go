@@ -368,6 +368,10 @@ func ExecuteApprovedAction(c *gin.Context) {
 	approvalHandler.ExecuteApprovedAction(c)
 }
 
+func WithdrawRequest(c *gin.Context) {
+	approvalHandler.WithdrawRequest(c)
+}
+
 // Auditoria
 func GetAuditLog(c *gin.Context) {
 	auditHandler.GetAuditLog(c)

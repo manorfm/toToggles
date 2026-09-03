@@ -11,6 +11,11 @@ interface UserModalProps {
   isRoot: boolean;
   onClose: () => void;
   onCreated: (result: CreateUserResult) => void;
+  // Portado do MemberModal real (onCreateNew abre o UserModal já travado no time do
+  // convite) — quando setado, o campo Time nem busca GET /profile/teams|/teams, fica
+  // fixo e desabilitado nesse time (ver o header de AddMemberModal.tsx).
+  presetTeamId?: string;
+  presetTeamName?: string;
 }
 
 type TeamOptionsState = { status: "loading" } | { status: "loaded"; options: TeamOption[] } | { status: "error"; message: string };
@@ -40,18 +45,23 @@ type TeamOptionsState = { status: "loading" } | { status: "loaded"; options: Tea
 // - Erro de submissão virou um banner `.notice.danger` (ícone + texto) no topo do corpo do
 //   modal, não mais um `field-hint` solto no rodapé — reusa a mesma classe `.notice` que
 //   EditToggleDrawer já usa pro aviso de cascata (aqui com a variante `.danger`, nova).
-export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
+export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeamName }: UserModalProps) {
   const [teamOptionsState, setTeamOptionsState] = useState<TeamOptionsState>({ status: "loading" });
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [usernameTouched, setUsernameTouched] = useState(false);
-  const [teamId, setTeamId] = useState("");
+  const [teamId, setTeamId] = useState(presetTeamId ?? "");
   const [role, setRole] = useState<UserRole & ("admin" | "user")>("user");
   const [isApprover, setIsApprover] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (presetTeamId) {
+      setTeamOptionsState({ status: "loaded", options: [{ id: presetTeamId, name: presetTeamName ?? presetTeamId }] });
+      setTeamId(presetTeamId);
+      return;
+    }
     let cancelled = false;
     listTeamOptions(isRoot)
       .then((options) => {
@@ -66,7 +76,7 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [isRoot]);
+  }, [isRoot, presetTeamId, presetTeamName]);
 
   const teamOptions = teamOptionsState.status === "loaded" ? teamOptionsState.options : [];
   const noTeamsAvailable = teamOptionsState.status === "loaded" && teamOptions.length === 0;
@@ -177,7 +187,7 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
           id="new-user-team"
           value={teamId}
           onChange={(e) => setTeamId(e.target.value)}
-          disabled={teamOptionsState.status !== "loaded" || noTeamsAvailable}
+          disabled={!!presetTeamId || teamOptionsState.status !== "loaded" || noTeamsAvailable}
         >
           {teamOptions.map((t) => (
             <option key={t.id} value={t.id}>
@@ -186,13 +196,15 @@ export function UserModal({ isRoot, onClose, onCreated }: UserModalProps) {
           ))}
         </select>
         <div className="field-hint">
-          {noTeamsAvailable
-            ? isRoot
-              ? "Nenhum time cadastrado ainda — crie um time primeiro."
-              : "Você precisa estar em um time para criar um usuário."
-            : isRoot
-              ? "Root pode criar em qualquer time."
-              : "Admin só cria usuários nos times em que participa."}
+          {presetTeamId
+            ? `Adicionando direto em ${selectedTeamName ?? presetTeamName ?? "este time"}.`
+            : noTeamsAvailable
+              ? isRoot
+                ? "Nenhum time cadastrado ainda — crie um time primeiro."
+                : "Você precisa estar em um time para criar um usuário."
+              : isRoot
+                ? "Root pode criar em qualquer time."
+                : "Admin só cria usuários nos times em que participa."}
         </div>
       </div>
 

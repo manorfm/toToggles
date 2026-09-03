@@ -7,6 +7,7 @@ import {
   listMyApprovals,
   listPendingApprovals,
   rejectApproval,
+  withdrawApproval,
 } from "./approvals";
 
 function jsonResponse(status: number, body: unknown) {
@@ -169,5 +170,20 @@ describe("rejectApproval", () => {
       "/api/approval/requests/1/reject",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ reason: "Toggle still in use" }) })
     );
+  });
+});
+
+describe("withdrawApproval", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts to /approval/requests/:id/withdraw", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await withdrawApproval("1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/1/withdraw", expect.objectContaining({ method: "POST" }));
   });
 });

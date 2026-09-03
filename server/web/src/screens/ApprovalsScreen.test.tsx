@@ -174,6 +174,32 @@ describe("ApprovalsScreen", () => {
     expect(await screen.findByText(/delete toggle/i)).toBeInTheDocument();
     expect(screen.getByText(/aguardando revisão de um aprovador/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /withdraw/i })).toBeInTheDocument();
+  });
+
+  it("withdraws a pending request from the Mine tab, clearing it from the list", async () => {
+    let withdrawn = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
+      if (path === "/api/approval/requests/1/withdraw" && init?.method === "POST") {
+        withdrawn = true;
+        return Promise.resolve(jsonResponse(200, { message: "ok" }));
+      }
+      if (path === "/api/approval/requests/my") return Promise.resolve(jsonResponse(200, { message: "ok", data: withdrawn ? [] : [request] }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen(root);
+    await screen.findByText(/tudo limpo/i);
+    await user.click(screen.getByRole("button", { name: /^mine$/i }));
+    await screen.findByText(/delete toggle/i);
+
+    await user.click(screen.getByRole("button", { name: /withdraw/i }));
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/1/withdraw", expect.objectContaining({ method: "POST" }));
+    expect(await screen.findByText(/nenhum registro/i)).toBeInTheDocument();
   });
 
   it("saves an approval-settings change from the Settings tab", async () => {

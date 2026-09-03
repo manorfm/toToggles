@@ -52,3 +52,10 @@ export async function rejectApproval(id: string, reason?: string): Promise<void>
     body: JSON.stringify({ reason: reason ?? "" }),
   });
 }
+
+// Diferente de approve/reject/execute: só o próprio solicitante pode retirar um pedido
+// pendente (docs/rest-flow.md §9.2) — nem root, nem o aprovador do time. Usado só na
+// aba "Mine".
+export async function withdrawApproval(id: string): Promise<void> {
+  await apiFetch<{ message: string }>(`/approval/requests/${id}/withdraw`, { method: "POST" });
+}

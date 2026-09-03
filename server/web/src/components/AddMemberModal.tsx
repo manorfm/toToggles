@@ -12,6 +12,10 @@ interface AddMemberModalProps {
   existingMemberIds: string[];
   onClose: () => void;
   onAdded: (user: User) => void;
+  // Opcional: quando ausente, o botão "Create a new user for this team" some. Confirmado
+  // no MemberModal real (onPickExisting/onCreateNew) — decodificado de
+  // docs/toToggle v2.6.html (ver server/CLAUDE.md, seção Frontend, sobre a técnica).
+  onCreateNew?: () => void;
 }
 
 type CandidatesState = { status: "loading" } | { status: "loaded"; users: User[] } | { status: "error"; message: string };
@@ -20,7 +24,7 @@ type CandidatesState = { status: "loading" } | { status: "loaded"; users: User[]
 // pessoa nova ali mesmo); a API real só associa um usuário JÁ EXISTENTE
 // (POST /teams/:id/users {user_id}), então o formulário virou um <select> sobre
 // GET /users (root only) em vez de campos de nome/role.
-export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, onAdded }: AddMemberModalProps) {
+export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, onAdded, onCreateNew }: AddMemberModalProps) {
   const [candidatesState, setCandidatesState] = useState<CandidatesState>({ status: "loading" });
   const [userId, setUserId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +111,12 @@ export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, o
         <div className="field-hint danger">
           {error}
         </div>
+      )}
+
+      {onCreateNew && (
+        <button className="btn btn-soft" style={{ width: "100%", justifyContent: "center" }} onClick={onCreateNew} disabled={submitting}>
+          <Icon name="plus" size={16} /> Create a new user for this team
+        </button>
       )}
     </Modal>
   );

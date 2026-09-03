@@ -161,6 +161,7 @@ func Init(router *gin.Engine) {
 				approval.POST("/requests/:id/approve", handler.ApproveRequest)
 				approval.POST("/requests/:id/reject", handler.RejectRequest)
 				approval.POST("/requests/:id/execute", handler.ExecuteApprovedAction)
+				approval.POST("/requests/:id/withdraw", handler.WithdrawRequest)
 
 				// Solicitações por team
 				approval.GET("/teams/:id/requests", handler.GetApprovalRequestsByTeam)

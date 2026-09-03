@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { AddMemberModal } from "./AddMemberModal";
 import { Icon } from "./Icon";
 import { MemberRow } from "./MemberRow";
+import { TempPasswordModal } from "./TempPasswordModal";
+import { UserModal } from "./UserModal";
 import { useToast } from "./ToastProvider";
 import { ApiError } from "../api/client";
 import { listTeamApprovers, removeTeamMember, setTeamApprover } from "../api/teams";
@@ -21,6 +23,8 @@ type State = { status: "loading" } | { status: "loaded"; members: TeamApprover[]
 export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [adding, setAdding] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [tempPassword, setTempPassword] = useState<{ username: string; password: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const toast = useToast();
 
@@ -92,6 +96,38 @@ export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps
           onClose={() => setAdding(false)}
           onAdded={() => {
             load();
+            toast("Member added");
+          }}
+          onCreateNew={() => {
+            setAdding(false);
+            setCreatingUser(true);
+          }}
+        />
+      )}
+
+      {creatingUser && (
+        // TeamsScreen inteiro é root-only (ver comentário no topo), então isRoot=true sempre aqui —
+        // mesma justificativa já usada acima pra não ter uma prop canManage separada.
+        <UserModal
+          isRoot
+          presetTeamId={teamId}
+          presetTeamName={teamName}
+          onClose={() => setCreatingUser(false)}
+          onCreated={({ user, password }) => {
+            setCreatingUser(false);
+            setTempPassword({ username: user.username, password });
+            load();
+          }}
+        />
+      )}
+
+      {tempPassword && (
+        <TempPasswordModal
+          username={tempPassword.username}
+          password={tempPassword.password}
+          reset={false}
+          onClose={() => {
+            setTempPassword(null);
             toast("Member added");
           }}
         />

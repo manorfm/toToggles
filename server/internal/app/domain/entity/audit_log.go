@@ -64,6 +64,12 @@ const (
 	// aprovou (gap real encontrado numa auditoria pedida pelo usuário, comparando o History ao
 	// vivo: tudo aparecia como "root", o aprovador, porque só ApproveRequest gravava algo).
 	AuditEventApprovalRequested AuditEventType = "approval_requested"
+	// AuditEventApprovalWithdrawn: o próprio solicitante cancelou o pedido antes de qualquer
+	// decisão (v2.6 §2.8) — sem equivalente na v1 do protótipo real, mas confirmado no v2.6
+	// (withdrawApproval em app.jsx: mesmo type "approval" que approve/reject, texto "Withdrew
+	// request <b>{action}</b>"). Categoria própria aqui em vez de reusar approval_approved/
+	// rejected — são decisões distintas de quem toma a ação (aprovador vs. o próprio requester).
+	AuditEventApprovalWithdrawn AuditEventType = "approval_withdrawn"
 )
 
 // EventCategory devolve a categoria fixa de cada tipo — usada tanto pra gravar quanto pra
@@ -78,7 +84,7 @@ func (t AuditEventType) EventCategory() AuditCategory {
 	case AuditEventTeamCreated, AuditEventMemberAdded, AuditEventMemberRemoved,
 		AuditEventUserCreated, AuditEventUserDeleted, AuditEventUserStatusChanged, AuditEventUserPasswordReset:
 		return AuditCategoryAccess
-	case AuditEventApprovalApproved, AuditEventApprovalRejected, AuditEventApprovalSystemToggled, AuditEventApprovalRequested:
+	case AuditEventApprovalApproved, AuditEventApprovalRejected, AuditEventApprovalSystemToggled, AuditEventApprovalRequested, AuditEventApprovalWithdrawn:
 		return AuditCategoryApprovals
 	default:
 		return ""

@@ -12,6 +12,11 @@ interface ApprovalRowProps {
    * quando pendente, já que autoaprovação é proibida (docs/rest-flow.md §9.2:
    * "CanBeApprovedBy forbids self-approval"), então nunca há botões de ação pra ela. */
   isOwn?: boolean;
+  /** Só faz sentido junto de isOwn: quando presente, uma solicitação própria pendente mostra
+   * um botão "Withdraw" no lugar do chip de status (confirmado no ApprovalRow real —
+   * `canWithdraw = status==="pending" && isOwn`). Omitido em usos read-only que não têm essa
+   * ação disponível (ex.: HistoryScreen). */
+  onWithdraw?: () => void;
 }
 
 const ACTION_LABELS: Record<ApprovalActionType, string> = {
@@ -30,7 +35,8 @@ const ACTION_LABELS: Record<ApprovalActionType, string> = {
 // Adaptado de get_full_jsx("ApprovalRow"). "canAct" do protótipo já é garantido por
 // qual endpoint trouxe a lista (pending pra root, approvable pra quem mais) — ver
 // ApprovalsScreen — então aqui basta checar status === "pending".
-export function ApprovalRow({ request, onApprove, onReject, busy = false, readOnly = false, isOwn = false }: ApprovalRowProps) {
+export function ApprovalRow({ request, onApprove, onReject, busy = false, readOnly = false, isOwn = false, onWithdraw }: ApprovalRowProps) {
+  const canWithdraw = isOwn && request.status === "pending" && !!onWithdraw;
   const when = new Date(request.created_at).toLocaleDateString();
 
   return (
@@ -67,6 +73,12 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
           </button>
           <button className="btn btn-primary btn-sm" onClick={onApprove} disabled={busy}>
             <Icon name="check" size={14} /> Aprovar
+          </button>
+        </div>
+      ) : canWithdraw ? (
+        <div className="appr-btns">
+          <button className="btn btn-soft btn-sm" onClick={onWithdraw} disabled={busy}>
+            <Icon name="close" size={14} /> Withdraw
           </button>
         </div>
       ) : (

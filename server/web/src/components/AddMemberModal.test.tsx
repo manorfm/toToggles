@@ -35,6 +35,30 @@ describe("AddMemberModal", () => {
     expect(screen.getByRole("button", { name: /add member/i })).toBeDisabled();
   });
 
+  it("hides the 'create new user' button when onCreateNew isn't passed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users })));
+
+    render(<AddMemberModal teamId="team1" teamName="Payments Squad" existingMemberIds={["1"]} onClose={vi.fn()} onAdded={vi.fn()} />);
+    await screen.findByRole("option", { name: "bob" });
+
+    expect(screen.queryByRole("button", { name: /create a new user for this team/i })).not.toBeInTheDocument();
+  });
+
+  it("calls onCreateNew when the 'create new user' button is clicked", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users })));
+    const onCreateNew = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AddMemberModal teamId="team1" teamName="Payments Squad" existingMemberIds={["1"]} onClose={vi.fn()} onAdded={vi.fn()} onCreateNew={onCreateNew} />
+    );
+    await screen.findByRole("option", { name: "bob" });
+
+    await user.click(screen.getByRole("button", { name: /create a new user for this team/i }));
+
+    expect(onCreateNew).toHaveBeenCalledTimes(1);
+  });
+
   it("adds the selected user and calls onAdded", async () => {
     const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
       if (init?.method === "POST") return Promise.resolve(jsonResponse(200, { success: true, message: "User added to team successfully" }));

@@ -146,6 +146,34 @@ describe("UserModal", () => {
     expect(screen.getByRole("button", { name: /^criar usuário$/i })).toBeDisabled();
   });
 
+  it("locks the team to presetTeamId without fetching team options, and names it in the hint", async () => {
+    const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(jsonResponse(201, { success: true, user: { id: "9", name: "X", username: "x" }, password: "abc" }));
+      return Promise.resolve(jsonResponse(200, { success: true, teams: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<UserModal isRoot presetTeamId="t1" presetTeamName="Payments Squad" onClose={vi.fn()} onCreated={vi.fn()} />);
+
+    const select = screen.getByLabelText(/^time$/i) as HTMLSelectElement;
+    expect(select).toBeDisabled();
+    expect(select).toHaveValue("t1");
+    expect(screen.getByText(/adicionando direto em payments squad/i)).toBeInTheDocument();
+    // GET /teams (ou /profile/teams) nunca deveria ter sido chamado — o time já é conhecido.
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/teams", expect.anything());
+
+    await user.type(screen.getByLabelText(/nome completo/i), "X");
+    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/users",
+        expect.objectContaining({ body: JSON.stringify({ name: "X", username: "x", role: "user", team_id: "t1", is_approver: false }) })
+      )
+    );
+  });
+
   it("shows the server's error message without closing on a duplicate username", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
       if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));

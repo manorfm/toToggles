@@ -49,6 +49,45 @@ describe("TeamMembersSection", () => {
     expect(await screen.findByText("bob")).toBeInTheDocument();
   });
 
+  it("creates a brand-new user for the team from inside the add-member modal", async () => {
+    let created = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/users" && init?.method === "POST") {
+        created = true;
+        return Promise.resolve(jsonResponse(201, { success: true, user: { id: "9", name: "Ana Ribeiro", username: "ana.ribeiro", role: "user" }, password: "abc123" }));
+      }
+      if (path === "/api/users") return Promise.resolve(jsonResponse(200, { success: true, users: [] }));
+      return Promise.resolve(
+        jsonResponse(200, {
+          message: "ok",
+          data: created ? [{ team_id: "team1", user_id: "9", is_approver: false, username: "ana.ribeiro", role: "user" }] : [],
+        })
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
+    await screen.findByText(/no members yet/i);
+
+    await user.click(screen.getByRole("button", { name: /add member/i }));
+    await user.click(screen.getByRole("button", { name: /create a new user for this team/i }));
+
+    // O time já vem travado — sem seletor de time nenhum pra escolher aqui.
+    const select = screen.getByLabelText(/^time$/i) as HTMLSelectElement;
+    expect(select).toBeDisabled();
+    expect(select).toHaveValue("team1");
+
+    await user.type(screen.getByLabelText(/nome completo/i), "Ana Ribeiro");
+    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+
+    expect(await screen.findByText("abc123")).toBeInTheDocument(); // TempPasswordModal, reveal-once
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: /entendi/i }));
+
+    expect(await screen.findByText("ana.ribeiro")).toBeInTheDocument(); // lista recarregada
+  });
+
   it("removes a member", async () => {
     let removed = false;
     const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
