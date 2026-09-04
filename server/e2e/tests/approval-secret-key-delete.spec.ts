@@ -35,6 +35,10 @@ test("secret_key_delete is intercepted, shown to the approver, and applied after
   const revokeKeyButton = adminPage.getByRole("button", { name: "Revoke", exact: true });
   await expect(revokeKeyButton).toBeVisible();
   await revokeKeyButton.click();
+  // v2.6 §5.1: revogar a chave atual passa primeiro por uma confirmação própria ("Revoke service
+  // key?" — ver SecretKeySection.tsx) antes do guard de aprovação sequer rodar.
+  await adminPage.getByText("Revoke service key?").waitFor();
+  await adminPage.getByRole("button", { name: "Revoke key" }).click();
   await confirmApprovalIntercept(adminPage);
 
   await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();

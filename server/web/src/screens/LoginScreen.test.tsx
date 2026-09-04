@@ -45,4 +45,21 @@ describe("LoginScreen", () => {
 
     await waitFor(() => expect(screen.getByText(/primeiro acesso/i)).toBeInTheDocument());
   });
+
+  // v2.6 §5.5: link "Forgot password?" abre o modal correspondente.
+  it("opens the forgot-password modal from the link, and it closes independently of the login form", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { first_access: false })));
+    const user = userEvent.setup();
+    render(<LoginScreen />);
+
+    await user.click(screen.getByRole("button", { name: /forgot password/i }));
+
+    expect(await screen.findByText("Forgot your password?")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.queryByText("Forgot your password?")).not.toBeInTheDocument();
+    // O formulário de login continua intacto (o modal é uma camada separada).
+    expect(screen.getByRole("button", { name: /entrar/i })).toBeInTheDocument();
+  });
 });

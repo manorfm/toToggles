@@ -57,6 +57,12 @@ const (
 	AuditEventUserDeleted       AuditEventType = "user_deleted"
 	AuditEventUserStatusChanged AuditEventType = "user_status_changed"
 	AuditEventUserPasswordReset AuditEventType = "user_password_reset"
+	// AuditEventPasswordResetRequested (v2.6 §5.5): "forgot password" self-service, sem e-mail —
+	// só registra um evento que um root/admin vê em History e age sobre (POST
+	// /users/:id/reset-password já existe pra isso). Diferente de user_password_reset (gravado
+	// quando um admin de fato reseta), este é o PEDIDO em si, gravado ANTES de qualquer sessão
+	// existir — sem actor de verdade, ver AuditUseCase.RecordSystem.
+	AuditEventPasswordResetRequested AuditEventType = "password_reset_requested"
 
 	AuditEventApprovalApproved      AuditEventType = "approval_approved"
 	AuditEventApprovalRejected      AuditEventType = "approval_rejected"
@@ -85,7 +91,8 @@ func (t AuditEventType) EventCategory() AuditCategory {
 	case AuditEventKeyGenerated, AuditEventKeyRevoked:
 		return AuditCategoryKeys
 	case AuditEventTeamCreated, AuditEventMemberAdded, AuditEventMemberRemoved,
-		AuditEventUserCreated, AuditEventUserDeleted, AuditEventUserStatusChanged, AuditEventUserPasswordReset:
+		AuditEventUserCreated, AuditEventUserDeleted, AuditEventUserStatusChanged, AuditEventUserPasswordReset,
+		AuditEventPasswordResetRequested:
 		return AuditCategoryAccess
 	case AuditEventApprovalApproved, AuditEventApprovalRejected, AuditEventApprovalSystemToggled, AuditEventApprovalRequested, AuditEventApprovalWithdrawn:
 		return AuditCategoryApprovals

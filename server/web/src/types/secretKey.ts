@@ -1,10 +1,15 @@
 // Espelha entity.SecretKey (server/internal/app/domain/entity/secret_key.go) — key_hash nunca é
-// serializado (json:"-"), então isso é só metadado, nunca a chave em si.
+// serializado (json:"-"), então isso é só metadado, nunca a chave em si. is_current/last_used_at
+// são novos (v2.6 §5.1/§5.6): até 2 chaves por aplicação podem estar vivas ao mesmo tempo durante
+// uma janela de overlap de rotação (current + previous), e last_used_at é tracking real (não
+// mock), atualizado a cada autenticação bem-sucedida via X-API-Key.
 export interface SecretKey {
   id: string;
   name: string;
   application_id: string;
   created_by: string;
+  is_current: boolean;
+  last_used_at: string | null;
   created_at: string;
   updated_at: string;
 }

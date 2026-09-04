@@ -377,3 +377,27 @@ func TestAuthUseCase_ChangePasswordFirstTime_NonRootDoesNotTouchRootPasswordFile
 		t.Error("a non-root user's password change must not touch the root's password file")
 	}
 }
+
+// v2.6 §5.5: "forgot password" precisa checar se um username existe, sem nunca revelar isso pro
+// chamador (ver AuthHandler.ForgotPassword, que sempre responde a mesma coisa independente do
+// resultado aqui) — só o handler decide o que fazer com o resultado.
+func TestAuthUseCase_GetUserByUsername(t *testing.T) {
+	uc, userRepo, _ := newTestAuthUseCase()
+	seedActiveUser(t, userRepo, "user-1", "alice", "password")
+
+	t.Run("returns the user when the username exists", func(t *testing.T) {
+		user, err := uc.GetUserByUsername("alice")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if user.ID != "user-1" {
+			t.Errorf("expected user-1, got %q", user.ID)
+		}
+	})
+
+	t.Run("returns an error when the username doesn't exist", func(t *testing.T) {
+		if _, err := uc.GetUserByUsername("nobody"); err == nil {
+			t.Error("expected an error for a nonexistent username")
+		}
+	})
+}

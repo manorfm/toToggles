@@ -14,6 +14,24 @@ import { confirmApprovalIntercept, ensureSwitchOff, ensureSwitchOn, goToApproval
 // enquanto "Service key" está ativa, então não há botão concorrente pra desambiguar.
 const GENERATE_OR_ROTATE = /^(Generate service key|Rotate key)$/i;
 
+// v2.6 §5.1: gerar a chave quando já existe uma (botão "Rotate key") passa primeiro por uma
+// confirmação ("Rotate service key?" — a atual não é revogada automaticamente, ver
+// SecretKeySection.tsx) antes de chamar a API; gerar a PRIMEIRA chave (botão "Generate service
+// key") vai direto, sem esse passo. Como este spec reusa a aplicação compartilhada com outros
+// specs da suíte completa, qual dos dois rótulos está visível — e portanto se o passo extra de
+// confirmação é necessário — depende do que já rodou antes neste mesmo servidor/banco.
+async function clickGenerateOrRotate(page: import("@playwright/test").Page): Promise<void> {
+  const button = page.getByRole("button", { name: GENERATE_OR_ROTATE });
+  const isRotating = (await button.textContent())?.includes("Rotate") ?? false;
+  await button.click();
+  if (isRotating) {
+    await page.getByText("Rotate service key?").waitFor();
+    // "Generate new key" also labels the always-visible "Lost the key?" card button behind the
+    // modal — scope to the modal's own confirm button to avoid Playwright's strict-mode error.
+    await page.getByTestId("modal-scrim").getByRole("button", { name: "Generate new key" }).click();
+  }
+}
+
 test.describe("secret key — generate/regenerate", () => {
   test("without approval: applies immediately and shows the reveal-once modal", async ({ browser }) => {
     const fixtures = readFixtures();
@@ -25,7 +43,7 @@ test.describe("secret key — generate/regenerate", () => {
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
     await adminPage.goto(`/applications/${fixtures.appId}?tab=keys`);
-    await adminPage.getByRole("button", { name: GENERATE_OR_ROTATE }).click();
+    await clickGenerateOrRotate(adminPage);
 
     await expect(adminPage.getByText("Service key generated")).toBeVisible();
     await expect(adminPage.locator(".skey-val")).toContainText("sk_");
@@ -50,7 +68,7 @@ test.describe("secret key — generate/regenerate", () => {
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
     await adminPage.goto(`/applications/${fixtures.appId}?tab=keys`);
-    await adminPage.getByRole("button", { name: GENERATE_OR_ROTATE }).click();
+    await clickGenerateOrRotate(adminPage);
     await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();

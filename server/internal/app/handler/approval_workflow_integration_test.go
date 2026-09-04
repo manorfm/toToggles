@@ -440,13 +440,14 @@ func TestApprovalWorkflow_SecretKeyCreate_RequesterGetsPlainKeyImmediately_ButIt
 }
 
 // TestApprovalWorkflow_SecretKeyCreate_ApprovedAndExecuted_ActivatesKeyAndRotatesOld verifica o
-// ciclo completo: uma chave já ativa preexistente continua funcionando durante a espera, e só é
-// substituída (apagada) quando a nova é de fato aprovada+executada.
+// ciclo completo: uma chave já ativa preexistente continua funcionando durante a espera, e só
+// vira "previous" (v2.6 §5.1 — continua autenticando durante a janela de overlap, não é apagada)
+// quando a nova é de fato aprovada+executada.
 func TestApprovalWorkflow_SecretKeyCreate_ApprovedAndExecuted_ActivatesKeyAndRotatesOld(t *testing.T) {
 	router, db, _ := setupApprovalWorkflowTestRouter(t)
 	root := enableApproval(t, db, entity.ApprovalConfig{SecretKeyCreate: true})
 
-	oldKey := &entity.SecretKey{ID: "old-key", Name: "API Access Key", ApplicationID: "app-1", CreatedBy: "admin-1", KeyHash: "old-hash", Active: true}
+	oldKey := &entity.SecretKey{ID: "old-key", Name: "API Access Key", ApplicationID: "app-1", CreatedBy: "admin-1", KeyHash: "old-hash", Active: true, IsCurrent: true}
 	if err := db.Create(oldKey).Error; err != nil {
 		t.Fatalf("failed to seed existing active key: %v", err)
 	}
@@ -476,19 +477,32 @@ func TestApprovalWorkflow_SecretKeyCreate_ApprovedAndExecuted_ActivatesKeyAndRot
 		t.Fatalf("failed to execute approved action: %v", err)
 	}
 
-	if err := db.First(&entity.SecretKey{}, "id = ?", "old-key").Error; err == nil {
-		t.Errorf("expected the old key to have been physically deleted after the new one was approved")
+	var rotatedOldKey entity.SecretKey
+	if err := db.First(&rotatedOldKey, "id = ?", "old-key").Error; err != nil {
+		t.Fatalf("expected the old key to still exist (as previous, not deleted), got: %v", err)
+	}
+	if rotatedOldKey.IsCurrent {
+		t.Error("expected the old key to no longer be current after rotation")
+	}
+	if rotatedOldKey.RevokedAt != nil {
+		t.Error("expected the old key to still be valid (not revoked) during the overlap window")
 	}
 
 	var newKeys []entity.SecretKey
-	if err := db.Where("application_id = ?", "app-1").Find(&newKeys).Error; err != nil {
+	if err := db.Where("application_id = ? AND revoked_at IS NULL", "app-1").Find(&newKeys).Error; err != nil {
 		t.Fatalf("failed to query keys after execute: %v", err)
 	}
-	if len(newKeys) != 1 {
-		t.Fatalf("expected exactly one secret key left for app-1 after rotation, got %d", len(newKeys))
+	if len(newKeys) != 2 {
+		t.Fatalf("expected exactly 2 live keys for app-1 after rotation (current + previous), got %d", len(newKeys))
 	}
-	if !newKeys[0].Active {
-		t.Errorf("expected the new key to be active after approve+execute, still inactive")
+	var sawNewCurrent bool
+	for _, k := range newKeys {
+		if k.ID != "old-key" {
+			sawNewCurrent = k.Active && k.IsCurrent
+		}
+	}
+	if !sawNewCurrent {
+		t.Error("expected the new key to be active and current after approve+execute")
 	}
 }
 

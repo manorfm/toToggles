@@ -50,7 +50,7 @@ func TestValidateToken_OnlyAcceptsCookie_NotAuthorizationHeaderFallback(t *testi
 		t.Fatalf("failed to store session: %v", err)
 	}
 
-	authHandler := NewAuthHandler(authUseCase)
+	authHandler := NewAuthHandler(authUseCase, nil) // auditUseCase not exercised in this test
 	router := gin.New()
 	router.GET("/protected", authHandler.ValidateToken(), func(c *gin.Context) {
 		c.Status(http.StatusOK)

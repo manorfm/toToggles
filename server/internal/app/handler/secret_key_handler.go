@@ -255,7 +255,10 @@ func (h *SecretKeyHandler) GetSecretKeys(c *gin.Context) {
 	})
 }
 
-// DeleteSecretKey remove uma secret key
+// DeleteSecretKey revoga uma secret key (current ou previous — v2.6 §5.1) — o registro continua
+// no banco (histórico), só passa a não autenticar mais nada e sumir da listagem. O caller decide
+// QUAL chave revogar passando o ID certo (o de "current" ou o de "previous", ambos vêm de
+// GET .../secret-keys); não há distinção de rota entre os dois casos.
 // DELETE /api/secret-keys/{secret_key_id}
 func (h *SecretKeyHandler) DeleteSecretKey(c *gin.Context) {
 	secretKeyID := c.Param("id")
@@ -266,17 +269,17 @@ func (h *SecretKeyHandler) DeleteSecretKey(c *gin.Context) {
 		return
 	}
 
-	// applicationID só existe pra montar o evento de auditoria (o delete em si não devolve a
-	// chave apagada) — buscado antes da exclusão, de propósito.
+	// applicationID só existe pra montar o evento de auditoria (revogar não devolve a chave em
+	// si) — buscado antes, de propósito.
 	var applicationID string
 	if key, err := h.secretKeyUseCase.GetSecretKeyByID(secretKeyID); err == nil {
 		applicationID = key.ApplicationID
 	}
 
-	err := h.secretKeyUseCase.DeleteSecretKey(secretKeyID)
+	err := h.secretKeyUseCase.RevokeSecretKey(secretKeyID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete secret key: " + err.Error(),
+			"error": "Failed to revoke secret key: " + err.Error(),
 		})
 		return
 	}
@@ -293,6 +296,6 @@ func (h *SecretKeyHandler) DeleteSecretKey(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Secret key deleted successfully",
+		"message": "Secret key revoked successfully",
 	})
 }

@@ -63,6 +63,42 @@ func TestAuditUseCase_Record(t *testing.T) {
 	})
 }
 
+// v2.6 §5.5: "forgot password" acontece ANTES de qualquer sessão existir — não há um
+// *entity.User de verdade pra ser o actor. RecordSystem grava com um actor sintético ("system"/
+// "System") e team_id sempre nil (evento global, root-only — mesma regra de
+// approval_system_toggled).
+func TestAuditUseCase_RecordSystem(t *testing.T) {
+	t.Run("writes an entry with a synthetic system actor and no team", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+
+		uc.RecordSystem(entity.AuditEventPasswordResetRequested, "Password reset requested for <b>@alice</b>", "Self-service (login screen)")
+
+		if len(auditRepo.Created) != 1 {
+			t.Fatalf("expected 1 audit entry, got %d", len(auditRepo.Created))
+		}
+		entry := auditRepo.Created[0]
+		if entry.EventType != entity.AuditEventPasswordResetRequested || entry.Category != entity.AuditCategoryAccess {
+			t.Errorf("unexpected event_type/category: %+v", entry)
+		}
+		if entry.TeamID != nil {
+			t.Errorf("expected a nil team_id (global event), got %v", *entry.TeamID)
+		}
+		if entry.ActorID == "" || entry.ActorName == "" {
+			t.Errorf("expected a non-empty synthetic actor, got %+v", entry)
+		}
+	})
+
+	t.Run("swallows a repository error instead of panicking or propagating", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		auditRepo.CreateError = errors.New("disk full")
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+
+		uc.RecordSystem(entity.AuditEventPasswordResetRequested, "text", "target")
+		// Não deve ter panicado — se chegou aqui, passou.
+	})
+}
+
 func TestAuditUseCase_RecordForApplication(t *testing.T) {
 	t.Run("resolves team_id from the application's first team", func(t *testing.T) {
 		teamRepo := NewMockTeamRepository()

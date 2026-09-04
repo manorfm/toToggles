@@ -843,3 +843,87 @@ func (m *MockAuditLogRepository) List(ctx context.Context, teamIDs []string, unr
 	}
 	return m.ListResult, nil
 }
+
+type MockSecretKeyRepository struct {
+	SecretKeys      map[string]*entity.SecretKey
+	CreateError     error
+	GetByIDError    error
+	GetByHashError  error
+	GetByAppIDError error
+	UpdateError     error
+	DeleteError     error
+}
+
+func NewMockSecretKeyRepository() *MockSecretKeyRepository {
+	return &MockSecretKeyRepository{
+		SecretKeys: make(map[string]*entity.SecretKey),
+	}
+}
+
+func (m *MockSecretKeyRepository) Create(secretKey *entity.SecretKey) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+	m.SecretKeys[secretKey.ID] = secretKey
+	return nil
+}
+
+func (m *MockSecretKeyRepository) GetByID(id string) (*entity.SecretKey, error) {
+	if m.GetByIDError != nil {
+		return nil, m.GetByIDError
+	}
+	secretKey, exists := m.SecretKeys[id]
+	if !exists {
+		return nil, errors.New("secret key not found")
+	}
+	return secretKey, nil
+}
+
+func (m *MockSecretKeyRepository) GetByHash(hash string) (*entity.SecretKey, error) {
+	if m.GetByHashError != nil {
+		return nil, m.GetByHashError
+	}
+	for _, secretKey := range m.SecretKeys {
+		if secretKey.KeyHash == hash {
+			return secretKey, nil
+		}
+	}
+	return nil, errors.New("secret key not found")
+}
+
+func (m *MockSecretKeyRepository) GetByApplicationID(applicationID string) ([]*entity.SecretKey, error) {
+	if m.GetByAppIDError != nil {
+		return nil, m.GetByAppIDError
+	}
+	var keys []*entity.SecretKey
+	for _, secretKey := range m.SecretKeys {
+		if secretKey.ApplicationID == applicationID {
+			keys = append(keys, secretKey)
+		}
+	}
+	return keys, nil
+}
+
+func (m *MockSecretKeyRepository) GetAll() ([]*entity.SecretKey, error) {
+	keys := make([]*entity.SecretKey, 0, len(m.SecretKeys))
+	for _, secretKey := range m.SecretKeys {
+		keys = append(keys, secretKey)
+	}
+	return keys, nil
+}
+
+func (m *MockSecretKeyRepository) Update(secretKey *entity.SecretKey) error {
+	if m.UpdateError != nil {
+		return m.UpdateError
+	}
+	m.SecretKeys[secretKey.ID] = secretKey
+	return nil
+}
+
+func (m *MockSecretKeyRepository) Delete(id string) error {
+	if m.DeleteError != nil {
+		return m.DeleteError
+	}
+	delete(m.SecretKeys, id)
+	return nil
+}

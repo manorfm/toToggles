@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ForgotPasswordModal } from "../components/ForgotPasswordModal";
 import { Icon } from "../components/Icon";
 import { ApiError, checkFirstAccess, login } from "../api/auth";
 
@@ -14,6 +15,7 @@ export function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDefaultCredentialsHint, setShowDefaultCredentialsHint] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
   const usernameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +115,12 @@ export function LoginScreen() {
           </button>
         </form>
 
+        <div className="auth-links center">
+          <button type="button" className="link-btn" onClick={() => setForgotPasswordOpen(true)}>
+            Forgot password?
+          </button>
+        </div>
+
         {showDefaultCredentialsHint && (
           <div className="auth-hint">
             Primeiro acesso: usuário <strong>root</strong> — a senha gerada foi impressa no console do servidor.
@@ -121,6 +129,8 @@ export function LoginScreen() {
 
         <div className="auth-foot">ToToggle · feature flag management</div>
       </div>
+
+      {forgotPasswordOpen && <ForgotPasswordModal onClose={() => setForgotPasswordOpen(false)} />}
     </div>
   );
 }

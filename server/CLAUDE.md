@@ -1067,6 +1067,67 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       (rechama `updateToggleRule` com o snapshot). Precisou bubbling explícito porque o drawer se
       fecha (`onClose()`) logo depois de salvar — um Undo preso ao `guard()` do drawer tentaria
       mexer em estado de um componente já desmontado.
+  - **v2.6 §5 (Keys & security) — Phase 3, numa fase seguinte.** Dois pontos do plano original
+    exigiam decisão explícita do usuário antes de começar (registrado aqui pra rastreabilidade):
+    (1) implementar `last_used_at` de verdade (em vez de deixar de fora) — decidido que sim; (2)
+    manter a postura mais estrita de reset de senha (sem armazenamento reversível de senha em
+    texto puro) em vez de igualar ao protótipo (que reexibe a senha temporária) — decidido manter
+    a postura atual, sem trabalho novo.
+    - **§5.1 — rotação de secret key com janela de overlap.** Antes, "gerar" era sempre "regerar":
+      toda chave existente era apagada na hora, sem chance de atualizar consumidores sem um
+      outage. Agora `entity.SecretKey` ganhou `IsCurrent bool`/`RevokedAt *time.Time` (migration
+      `20260904000000_add_secret_key_rotation_and_usage.sql`) — uma aplicação pode ter até 2
+      chaves vivas ao mesmo tempo (current + previous), a `previous` continuando a autenticar até
+      alguém revogar explicitamente ou até uma PRÓXIMA rotação empurrá-la pra fora (só há espaço
+      pra 1 previous por vez — `SecretKeyUseCase.rotateExistingKeys`, mesmo modelo 2-slots do
+      protótipo real `KEYS[appId] = {current, previous}`). `ValidateSecretKey` (autenticação
+      pública via X-API-Key) aceita QUALQUER chave não-revogada da aplicação, current ou previous
+      — a distinção só importa pra UI. `DELETE /secret-keys/:id` deixou de apagar fisicamente
+      (virou `RevokeSecretKey`, que só marca `RevokedAt` — histórico preservado); apagar de
+      verdade (`DeleteSecretKey`, código morto? não — ainda usado pelos caminhos de limpeza de
+      uma chave PENDENTE nunca aprovada, `RejectRequest`/`WithdrawRequest`, onde não há histórico
+      real a preservar). **Achado real de GORM ao escrever o teste de integração**: criar um
+      `entity.SecretKey{Enabled: false}`-equivalente (`IsCurrent`/booleans em geral) direto via
+      `db.Create` não grava `false` quando a coluna tem `default:true` — o zero-value de bool
+      também é `false`, então GORM não distingue "false explícito" de "não setado" na hora do
+      INSERT; corrigido nos testes com `db.Create(true)` + `db.Model(...).Update(campo, false)`
+      logo depois (mesmo bug/correção já documentado antes pra `toggles.enabled`, ver bullet
+      "v2.6 §3.3" acima). **Frontend**: `SecretKeySection.tsx` reconstruído pra mostrar até 2
+      "cartões" — o atual (`.key-single`, com "Last used" real agora) e, quando existe, um aviso
+      de overlap (`.notice`, texto confirmado "The **previous key** is still valid during the
+      rotation overlap window...") com um botão "Revoke previous now" **sem confirmação** (ação
+      de menor risco — a atual continua funcionando). Diferente disso, rotacionar/revogar a chave
+      ATUAL agora passa por um `ConfirmModal` primeiro (`"Rotate service key?"`/`"Revoke service
+      key?"`, cópias confirmadas no `app.jsx` real via `handleGenerateKey`/`handleRevokeKey`) —
+      gap real da versão anterior desta tela, que revogava a chave atual sem confirmação nenhuma;
+      corrigido na mesma passada por já estar reconstruindo o componente inteiro. Rotacionar a
+      PRIMEIRA chave de uma aplicação (nenhuma existente ainda) pula a confirmação — nada com que
+      sobrepor. `.confirm-app-row`/`.skey-warn` (CSS) já existiam ou foram extraídos do HTML cru
+      do protótipo (`.skey-warn` já estava, de uma fase anterior que construiu
+      `GeneratedKeyModal`).
+    - **§5.6 — `last_used_at` real.** Upgrade deliberado além do protótipo (que mostra "(demo —
+      not tracked)"): `ValidateSecretKey` atualiza `LastUsedAt` a cada autenticação bem-sucedida,
+      best-effort (nunca falha a leitura real por causa disso — é a rota pública mais quente do
+      sistema). `SecretKeySection` mostra "Last used {tempo relativo}" reaproveitando
+      `lib/auditEvents.tsx#formatAuditWhen` (mesma decisão de reuso já tomada pro `ArchivedModal`
+      — ver bullet "v2.6 §4" acima) ou "never" quando `null`.
+    - **§5.5 — "Forgot password?" (net-new).** Sem e-mail neste sistema — o pedido só vira um
+      evento de auditoria (`password_reset_requested`, categoria access, `team_id` sempre nil —
+      mesma regra root-only de `approval_system_toggled`) que um root/admin resolve de verdade via
+      `POST /users/:id/reset-password` (já existia). `POST /api/auth/forgot-password`
+      (`ForgotPasswordRateLimit()`, um limitador POR IP separado do de login — de propósito, pra
+      tentativas de reset não consumirem o orçamento de tentativas de login do mesmo IP e
+      vice-versa) sempre responde `200 {success:true}`, exista o username ou não (evita username
+      enumeration) — só grava o evento de auditoria quando o usuário existe de verdade, decidido
+      dentro do handler, nunca vazado pra resposta. Ator sintético (`AuditUseCase.RecordSystem`,
+      `"system"`/`"System"`) porque não existe `*entity.User` real nesse momento (a ação acontece
+      ANTES de qualquer sessão, na própria tela de login). `components/ForgotPasswordModal.tsx`
+      porta 1:1 `auth.jsx#ForgotPasswordModal` (dois estados — formulário / confirmação — cópia
+      confirmada "If **@{username}** exists, an administrator has been notified..."), aberto via
+      novo link `.link-btn` "Forgot password?" em `.auth-links.center` no rodapé do formulário de
+      `LoginScreen.tsx` (`.auth-links`/`.link-btn` extraídos do CSS cru do protótipo — não
+      existiam ainda, essa era a primeira tela a precisar deles).
+    - **§5.2/§5.3/§5.4 — sem mudança**, decisão/confirmação registradas acima.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

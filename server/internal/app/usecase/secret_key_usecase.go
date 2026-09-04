@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/domain/repository"
@@ -38,12 +39,7 @@ func (uc *SecretKeyUseCase) CreatePendingSecretKey(name, applicationID, createdB
 }
 
 func (uc *SecretKeyUseCase) createSecretKey(name, applicationID, createdBy string, active bool) (*CreateSecretKeyResponse, error) {
-	secretKey := &entity.SecretKey{
-		Name:          name,
-		ApplicationID: applicationID,
-		CreatedBy:     createdBy,
-		Active:        active,
-	}
+	secretKey := entity.NewSecretKey(name, applicationID, createdBy, active)
 
 	err := secretKey.Validate()
 	if err != nil {
@@ -67,24 +63,62 @@ func (uc *SecretKeyUseCase) createSecretKey(name, applicationID, createdBy strin
 	}, nil
 }
 
-// ActivateAndRotateSecretKey ativa a secret key pendente identificada por newKeyID e apaga
-// fisicamente qualquer outra chave da mesma aplicação — chamado só depois que uma solicitação de
-// secret_key_create é aprovada e executada (ApprovalUseCase.executeSecretKeyCreateAction). Uma
-// aplicação tem no máximo uma secret key ativa por vez, mesma invariante do fluxo imediato
-// (RegenerateSecretKey); a antiga continua funcionando normalmente até este momento.
-func (uc *SecretKeyUseCase) ActivateAndRotateSecretKey(newKeyID, applicationID string) error {
-	existingKeys, err := uc.secretKeyRepo.GetByApplicationID(applicationID)
+// rotateExistingKeys prepara o "slot" de overlap antes de uma nova chave nascer como a nova
+// atual (v2.6 §5.1) — chamado tanto pelo fluxo imediato (RegenerateSecretKey) quanto pela
+// execução de um secret_key_create aprovado (ActivateAndRotateSecretKey), mesma lógica pros dois
+// caminhos. Só há espaço pra 1 "previous" por vez (mesmo modelo do protótipo real: KEYS[appId] =
+// {current, previous}, nunca uma pilha): a chave CURRENT existente vira PREVIOUS (continua
+// autenticando durante a janela de overlap), e qualquer PREVIOUS que já existisse antes disso é
+// revogada de vez — ela está prestes a ser empurrada pra fora da janela de overlap de qualquer
+// forma. Chaves ainda pendentes de aprovação (Active=false) e chaves já revogadas nunca
+// participam — não são "a chave ativa" de propósito nenhum aqui.
+func (uc *SecretKeyUseCase) rotateExistingKeys(applicationID string) error {
+	keys, err := uc.secretKeyRepo.GetByApplicationID(applicationID)
 	if err != nil {
 		return err
 	}
 
-	for _, key := range existingKeys {
-		if key.ID == newKeyID {
+	for _, key := range keys {
+		if !key.Active || key.RevokedAt != nil {
 			continue
 		}
-		if err := uc.secretKeyRepo.Delete(key.ID); err != nil {
+		if key.IsCurrent {
+			key.IsCurrent = false
+			if err := uc.secretKeyRepo.Update(key); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := uc.RevokeSecretKey(key.ID); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// RevokeSecretKey marca uma chave como revogada de vez (v2.6 §5.1) — ela para de autenticar
+// (ValidateSecretKey) e some da listagem (GetSecretKeysByApplicationID), mas a linha continua no
+// banco (histórico), diferente de DeleteSecretKey (remoção física, usada só pra limpar uma chave
+// PENDENTE que nunca chegou a ser aprovada — nesse caso ela nunca foi real, não há histórico a
+// preservar).
+func (uc *SecretKeyUseCase) RevokeSecretKey(id string) error {
+	key, err := uc.secretKeyRepo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	key.RevokedAt = &now
+	return uc.secretKeyRepo.Update(key)
+}
+
+// ActivateAndRotateSecretKey ativa a secret key pendente identificada por newKeyID e coloca a
+// chave atual (se houver) na janela de overlap como "previous" — chamado só depois que uma
+// solicitação de secret_key_create é aprovada e executada
+// (ApprovalUseCase.executeSecretKeyCreateAction). A antiga continua autenticando normalmente
+// durante a janela de overlap (ver rotateExistingKeys).
+func (uc *SecretKeyUseCase) ActivateAndRotateSecretKey(newKeyID, applicationID string) error {
+	if err := uc.rotateExistingKeys(applicationID); err != nil {
+		return err
 	}
 
 	newKey, err := uc.secretKeyRepo.GetByID(newKeyID)
@@ -92,13 +126,15 @@ func (uc *SecretKeyUseCase) ActivateAndRotateSecretKey(newKeyID, applicationID s
 		return err
 	}
 	newKey.Active = true
+	newKey.IsCurrent = true
 	return uc.secretKeyRepo.Update(newKey)
 }
 
-// GetSecretKeysByApplicationID retorna as secret keys ATIVAS de uma aplicação — uma chave criada
-// por uma solicitação de aprovação ainda pendente não aparece aqui (não é "a chave da aplicação"
-// até ser aprovada; ver ActivateAndRotateSecretKey). Quem a gerou já tem o valor em texto puro
-// (devolvido na hora da solicitação), então não precisa dela aparecer nesta lista pra poder usá-la.
+// GetSecretKeysByApplicationID retorna as secret keys ATIVAS e NÃO-REVOGADAS de uma aplicação —
+// até 2 (current + previous) durante uma janela de overlap (v2.6 §5.1). Uma chave criada por uma
+// solicitação de aprovação ainda pendente não aparece aqui (não é "a chave da aplicação" até ser
+// aprovada; ver ActivateAndRotateSecretKey). Quem a gerou já tem o valor em texto puro (devolvido
+// na hora da solicitação), então não precisa dela aparecer nesta lista pra poder usá-la.
 func (uc *SecretKeyUseCase) GetSecretKeysByApplicationID(applicationID string) ([]*entity.SecretKey, error) {
 	keys, err := uc.secretKeyRepo.GetByApplicationID(applicationID)
 	if err != nil {
@@ -107,7 +143,7 @@ func (uc *SecretKeyUseCase) GetSecretKeysByApplicationID(applicationID string) (
 
 	active := make([]*entity.SecretKey, 0, len(keys))
 	for _, key := range keys {
-		if key.Active {
+		if key.Active && key.RevokedAt == nil {
 			active = append(active, key)
 		}
 	}
@@ -130,9 +166,11 @@ func (uc *SecretKeyUseCase) DeleteSecretKey(id string) error {
 }
 
 // ValidateSecretKey valida uma secret key fornecida. Uma chave pendente de aprovação
-// (Active == false) tem hash válido no banco mas não autentica nada até ser aprovada — mesmo
-// erro de "não encontrada" das duas situações, pra não vazar pra quem apresenta a chave se ela
-// existe e só está pendente, ou se nunca existiu.
+// (Active == false) ou revogada (RevokedAt != nil) tem hash válido no banco mas não autentica
+// nada — mesmo erro de "não encontrada" nos três casos (pendente/revogada/inexistente), pra não
+// vazar pra quem apresenta a chave qual dessas situações é a real. Tanto a chave CURRENT quanto a
+// PREVIOUS (durante a janela de overlap, v2.6 §5.1) autenticam aqui — a distinção current/previous
+// só importa pra UI, nunca pra este endpoint.
 func (uc *SecretKeyUseCase) ValidateSecretKey(secretKey string) (*entity.SecretKey, error) {
 	// Gerar hash da chave fornecida
 	hash := sha256.Sum256([]byte(secretKey))
@@ -143,28 +181,28 @@ func (uc *SecretKeyUseCase) ValidateSecretKey(secretKey string) (*entity.SecretK
 	if err != nil {
 		return nil, err
 	}
-	if !key.Active {
+	if !key.Active || key.RevokedAt != nil {
 		return nil, errors.New("secret key not found")
 	}
+
+	// v2.6 §5.6: tracking real de último uso — best-effort de propósito (nunca falha a
+	// autenticação por causa disso). Esta é a rota pública mais quente do sistema (toda leitura
+	// de toggles passa por aqui); um erro ao gravar o timestamp não deveria derrubar a resposta
+	// real que o chamador está esperando.
+	now := time.Now()
+	key.LastUsedAt = &now
+	_ = uc.secretKeyRepo.Update(key)
+
 	return key, nil
 }
 
-// RegenerateSecretKey regenera uma secret key existente, invalidando a anterior
+// RegenerateSecretKey regenera uma secret key existente — a atual vira "previous" e continua
+// autenticando durante a janela de overlap (v2.6 §5.1), em vez de ser apagada na hora (ver
+// rotateExistingKeys).
 func (uc *SecretKeyUseCase) RegenerateSecretKey(applicationID, createdBy string) (*CreateSecretKeyResponse, error) {
-	// Primeiro, delete todas as secret keys existentes da aplicação
-	existingKeys, err := uc.secretKeyRepo.GetByApplicationID(applicationID)
-	if err != nil {
+	if err := uc.rotateExistingKeys(applicationID); err != nil {
 		return nil, err
 	}
 
-	// Remove todas as chaves existentes
-	for _, key := range existingKeys {
-		err = uc.secretKeyRepo.Delete(key.ID)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Cria uma nova secret key
 	return uc.CreateSecretKey("API Access Key", applicationID, createdBy)
 }

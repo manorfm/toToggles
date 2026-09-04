@@ -237,6 +237,12 @@ func (uc *AuthUseCase) GetUserCount() (int, error) {
 	return len(users), nil
 }
 
+// GetUserByUsername busca um usuário pelo username — usado pelo fluxo "esqueci minha senha"
+// (v2.6 §5.5) pra checar existência sem autenticar (não valida senha nenhuma).
+func (uc *AuthUseCase) GetUserByUsername(username string) (*entity.User, error) {
+	return uc.userRepo.GetByUsername(username)
+}
+
 // GeneratePasswordChangeToken emite um token opaco de uso único (mesmo mecanismo de sessão,
 // Purpose: password_change) autorizando a troca de senha obrigatória no primeiro acesso —
 // substitui um formato anterior sem verificação nenhuma

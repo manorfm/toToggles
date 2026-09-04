@@ -43,3 +43,25 @@ func LoginRateLimit() gin.HandlerFunc {
 func ResetLoginRateLimit(clientIP string) {
 	defaultLoginRateLimiter.reset(clientIP)
 }
+
+// Instância própria (não a mesma de LoginRateLimit) — POST /auth/forgot-password sempre responde
+// 200 independente do username existir (evita username enumeration), então nunca chama
+// ResetLoginRateLimit; compartilhar o limitador de login faria tentativas de reset de senha
+// consumirem o mesmo orçamento de tentativas de login de um IP (e vice-versa), dois
+// comportamentos sem relação nenhuma entre si.
+var defaultForgotPasswordRateLimiter = newLoginRateLimiter(10, 15*time.Minute)
+
+// ForgotPasswordRateLimit limita POST /api/auth/forgot-password a 10 tentativas por IP a cada 15
+// minutos — mesmo limite do login, mas contabilizado à parte.
+func ForgotPasswordRateLimit() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !defaultForgotPasswordRateLimiter.allow(c.ClientIP()) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": "Too many requests. Try again later.",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { changePasswordFirstTime, checkFirstAccess, login } from "./auth";
+import { changePasswordFirstTime, checkFirstAccess, login, requestPasswordReset } from "./auth";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -98,5 +98,25 @@ describe("changePasswordFirstTime", () => {
     await expect(
       changePasswordFirstTime({ userId: "01ABC", username: "root", currentPassword: "wrong", newPassword: "NovaSenha123" })
     ).rejects.toMatchObject({ status: 401, message: "Invalid current password" });
+  });
+});
+
+// v2.6 §5.5: sempre responde 200/success — a distinção "existe ou não" nunca chega até aqui, o
+// backend absorve isso de propósito (evita username enumeration).
+describe("requestPasswordReset", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the username to /auth/forgot-password", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestPasswordReset("alice");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/forgot-password",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ username: "alice" }) })
+    );
   });
 });

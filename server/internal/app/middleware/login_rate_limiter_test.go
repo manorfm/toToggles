@@ -70,6 +70,41 @@ func TestLoginRateLimit_Middleware_BlocksAfterTheLimitWith429(t *testing.T) {
 	assert.Equal(t, http.StatusTooManyRequests, w.Code)
 }
 
+func TestForgotPasswordRateLimit_Middleware_BlocksAfterTheLimitWith429(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	defaultForgotPasswordRateLimiter = newLoginRateLimiter(2, time.Minute)
+
+	r := gin.New()
+	r.Use(ForgotPasswordRateLimit())
+	r.POST("/forgot-password", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
+
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/forgot-password", nil)
+		req.RemoteAddr = "9.9.9.9:1234"
+		r.ServeHTTP(w, req)
+		assert.Equal(t, 200, w.Code)
+	}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/forgot-password", nil)
+	req.RemoteAddr = "9.9.9.9:1234"
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+}
+
+// Contas separadas: esgotar o limitador de login não deve afetar o de forgot-password, e
+// vice-versa — são instâncias independentes, sem estado compartilhado.
+func TestForgotPasswordRateLimit_IsIndependentFromLoginRateLimit(t *testing.T) {
+	defaultLoginRateLimiter = newLoginRateLimiter(1, time.Minute)
+	defaultForgotPasswordRateLimiter = newLoginRateLimiter(1, time.Minute)
+
+	assert.True(t, defaultLoginRateLimiter.allow("9.9.9.9"))
+	assert.False(t, defaultLoginRateLimiter.allow("9.9.9.9"), "login limiter should now be exhausted")
+
+	assert.True(t, defaultForgotPasswordRateLimiter.allow("9.9.9.9"), "forgot-password limiter must have its own independent budget")
+}
+
 func TestResetLoginRateLimit_AllowsImmediateRetryAfterSuccess(t *testing.T) {
 	defaultLoginRateLimiter = newLoginRateLimiter(1, time.Minute)
 

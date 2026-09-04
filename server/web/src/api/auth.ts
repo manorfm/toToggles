@@ -43,6 +43,16 @@ export async function changePasswordFirstTime(input: ChangePasswordFirstTimeInpu
   });
 }
 
+// POST /auth/forgot-password (v2.6 §5.5) — sem sessão, sem e-mail. Sempre resolve com sucesso; o
+// backend nunca revela se o username existe (evita username enumeration), então não há um
+// "kind"/resultado a distinguir aqui além de erro de rede/validação.
+export async function requestPasswordReset(username: string): Promise<void> {
+  await apiFetch<{ success: boolean }>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
 export async function checkFirstAccess(): Promise<boolean> {
   try {
     const body = await apiFetch<{ first_access: boolean }>("/auth/check-first-access");

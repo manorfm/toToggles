@@ -62,6 +62,27 @@ func (uc *AuditUseCase) Record(eventType entity.AuditEventType, text, target str
 	}
 }
 
+// systemActorID/systemActorName identificam o ator sintético usado por RecordSystem — nenhum
+// entity.User de verdade existe (o pedido acontece antes de qualquer sessão), então não há um ID
+// real de usuário pra usar. Confirmado no protótipo real (app.jsx#requestPasswordReset:
+// `actor: "System", initials: "SY"`).
+const (
+	systemActorID   = "system"
+	systemActorName = "System"
+)
+
+// RecordSystem grava um evento que não tem um usuário autenticado por trás — hoje só o pedido de
+// "esqueci minha senha" (v2.6 §5.5), que acontece na tela de login, antes de qualquer sessão
+// existir. team_id é sempre nil (evento global, visível só a root — mesma regra de
+// approval_system_toggled, o outro evento sem team_id deste sistema). Mesma garantia de Record:
+// nunca falha a operação principal, um erro ao gravar é só logado.
+func (uc *AuditUseCase) RecordSystem(eventType entity.AuditEventType, text, target string) {
+	entry := entity.NewAuditLog(eventType, text, target, nil, systemActorID, systemActorName)
+	if err := uc.repo.Create(context.Background(), entry); err != nil {
+		log.Printf("[ERROR] AuditUseCase.RecordSystem: failed to write audit log (event_type=%s): %v", eventType, err)
+	}
+}
+
 // RecordForApplication resolve o team_id a partir da aplicação (o primeiro time com acesso a
 // ela — mesma simplificação de "um time só" já aceita em ApprovalRequest.TeamID/
 // GetUserTeamForApplication; uma aplicação pode ter mais de um time via team_applications, mas

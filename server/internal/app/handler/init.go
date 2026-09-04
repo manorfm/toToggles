@@ -81,7 +81,7 @@ func InitHandlers(db *gorm.DB) {
 	// Inicializa handlers
 	appHandler = NewApplicationHandler(appUseCase, toggleUseCase, teamUseCase, auditUseCase)
 	toggleHandler = NewToggleHandler(toggleUseCase, appUseCase, auditUseCase)
-	authHandler = NewAuthHandler(authUseCase)
+	authHandler = NewAuthHandler(authUseCase, auditUseCase)
 	userHandler = NewUserHandler(userUseCase)
 	userManagementHandler = NewUserManagementHandler(userUseCase, teamUseCase, approvalUseCase, auditUseCase)
 	teamHandler = NewTeamHandler(teamUseCase, userUseCase, auditUseCase)
@@ -150,6 +150,10 @@ func Login(c *gin.Context) {
 
 func Logout(c *gin.Context) {
 	authHandler.Logout(c)
+}
+
+func ForgotPassword(c *gin.Context) {
+	authHandler.ForgotPassword(c)
 }
 
 func CheckFirstAccess(c *gin.Context) {

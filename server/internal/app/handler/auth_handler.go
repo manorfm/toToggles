@@ -11,12 +11,14 @@ import (
 )
 
 type AuthHandler struct {
-	authUseCase *usecase.AuthUseCase
+	authUseCase  *usecase.AuthUseCase
+	auditUseCase *usecase.AuditUseCase
 }
 
-func NewAuthHandler(authUseCase *usecase.AuthUseCase) *AuthHandler {
+func NewAuthHandler(authUseCase *usecase.AuthUseCase, auditUseCase *usecase.AuditUseCase) *AuthHandler {
 	return &AuthHandler{
-		authUseCase: authUseCase,
+		authUseCase:  authUseCase,
+		auditUseCase: auditUseCase,
 	}
 }
 
@@ -124,6 +126,37 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, LoginResponse{
 		Success: true,
 		User:    userResponse,
+	})
+}
+
+// ForgotPasswordRequest representa o request do fluxo "esqueci minha senha" (v2.6 §5.5)
+type ForgotPasswordRequest struct {
+	Username string `json:"username" binding:"required"`
+}
+
+// ForgotPassword registra um pedido de reset de senha pra um root/admin ver e agir (não há
+// e-mail neste sistema — a resposta real é um humano chamando POST /users/:id/reset-password,
+// que já existe). Não autenticado de propósito (é a própria tela de login que expõe isto) e
+// SEMPRE responde a mesma coisa independente de o username existir ou não — checar a existência
+// e decidir se grava o evento é feito aqui dentro, mas nunca vaza pro chamador, pra não virar um
+// oráculo de enumeração de usernames.
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "username is required",
+		})
+		return
+	}
+
+	if user, err := h.authUseCase.GetUserByUsername(req.Username); err == nil {
+		text := "Password reset requested for <b>@" + user.Username + "</b>"
+		h.auditUseCase.RecordSystem(entity.AuditEventPasswordResetRequested, text, "Self-service (login screen)")
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
 	})
 }
 

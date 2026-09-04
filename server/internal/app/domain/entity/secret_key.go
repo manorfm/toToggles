@@ -28,9 +28,27 @@ type SecretKey struct {
 	// importante aqui) ser silenciosamente sobrescrita pelo default da coluna. O código sempre
 	// define Active explicitamente (createSecretKey), então não depende do default da coluna; ele
 	// só existe na migration como salvaguarda pras linhas legadas de antes desta coluna existir.
-	Active    bool      `json:"active" gorm:"not null"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Active bool `json:"active" gorm:"not null"`
+	// IsCurrent distingue, entre as chaves não-revogadas de uma aplicação, qual é a "atual"
+	// (mostrada como a chave de verdade na UI) da "anterior" (v2.6 §5.1 — sobrevive por uma
+	// janela de overlap depois de uma rotação, pra não quebrar consumidores que ainda não
+	// atualizaram). Mesma cautela do campo Active acima: SEM a tag `default:` de propósito —
+	// GORM pula do INSERT todo campo com tag `default` cujo valor Go seja o zero-value do tipo
+	// (`false` pra bool), então um `default:true` aqui faria qualquer tentativa futura de criar
+	// já como IsCurrent:false (hipotético, não usado hoje, mas não vale o risco) ser
+	// silenciosamente sobrescrita. O código sempre define IsCurrent explicitamente (createSecretKey
+	// sempre cria como true — é a nova chave "atual" por definição).
+	IsCurrent bool `json:"is_current" gorm:"not null"`
+	// RevokedAt marca revogação DEFINITIVA (v2.6 §5.1) — diferente de Active=false, que significa
+	// "ainda pendente de aprovação" (um estado transitório, nunca definitivo). Uma chave revogada
+	// nunca mais autentica (ValidateSecretKey) nem aparece em GetSecretKeysByApplicationID.
+	RevokedAt *time.Time `json:"-"`
+	// LastUsedAt (v2.6 §5.6) — atualizado a cada ValidateSecretKey bem sucedido; nil quando a
+	// chave nunca foi usada. Rastreamento real, não um mock — upgrade deliberado além do
+	// protótipo (que só mostra "(demo — not tracked)").
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 
 	// Relacionamentos
 	Application Application `json:"application,omitempty" gorm:"foreignKey:ApplicationID"`
@@ -43,6 +61,23 @@ func (sk *SecretKey) BeforeCreate(tx *gorm.DB) error {
 		sk.ID = generateULID()
 	}
 	return nil
+}
+
+// NewSecretKey cria uma nova instância de SecretKey com ID já gerado — mesmo padrão de
+// NewApplication/NewToggle/NewAuditLog: gerar o ID aqui (não só via BeforeCreate) permite que um
+// repositório que não passa pelos hooks do GORM (o mock usado nos testes de SecretKeyUseCase, por
+// exemplo) continue funcionando sem duplicar a lógica de geração de ID. Toda chave nova nasce
+// IsCurrent — é a nova chave "atual" por definição no momento em que é criada (ver
+// SecretKeyUseCase.rotateExistingKeys pra quando ela deixa de ser).
+func NewSecretKey(name, applicationID, createdBy string, active bool) *SecretKey {
+	return &SecretKey{
+		ID:            generateULID(),
+		Name:          name,
+		ApplicationID: applicationID,
+		CreatedBy:     createdBy,
+		Active:        active,
+		IsCurrent:     true,
+	}
 }
 
 // GenerateSecretKey gera uma nova chave secreta segura

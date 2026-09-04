@@ -412,14 +412,17 @@ func TestSecretKeyRegeneration(t *testing.T) {
 		t.Error("Regenerated key should be different from previous key")
 	}
 
-	// First key should no longer work
+	// v2.6 §5.1: regenerar deixou de apagar a chave anterior na hora — ela vira "previous" e
+	// continua autenticando durante a janela de overlap, pra não quebrar consumidores que ainda
+	// não atualizaram pra chave nova. Ver TestSecretKeyRegeneration_RotatingAgainRevokesTheOldestPreviousKey
+	// pro caso "e uma TERCEIRA chave", onde a primeira finalmente deixa de funcionar.
 	w3 := httptest.NewRecorder()
 	req3, _ := http.NewRequest("GET", "/api/toggles", nil)
 	req3.Header.Set("X-API-Key", firstKey)
 	router.ServeHTTP(w3, req3)
 
-	if w3.Code != http.StatusNotFound {
-		t.Errorf("Expected status 404 for old key, got %d", w3.Code)
+	if w3.Code != http.StatusOK {
+		t.Errorf("expected the previous key to still authenticate during the overlap window, got status %d", w3.Code)
 	}
 
 	// Second key should work
@@ -430,5 +433,58 @@ func TestSecretKeyRegeneration(t *testing.T) {
 
 	if w4.Code != http.StatusOK {
 		t.Errorf("Expected status 200 for new key, got %d", w4.Code)
+	}
+}
+
+// Só há espaço pra 1 "previous" por vez (mesmo modelo do protótipo real: KEYS[appId] =
+// {current, previous}) — uma TERCEIRA rotação empurra a mais antiga (a primeira chave gerada) pra
+// fora de vez, revogada.
+func TestSecretKeyRegeneration_RotatingAgainRevokesTheOldestPreviousKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db.AutoMigrate(&entity.Application{}, &entity.Toggle{}, &entity.User{}, &entity.SecretKey{}, &entity.Session{})
+	InitHandlers(db)
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("user", &entity.User{ID: "test-user-id", Username: "testuser"})
+		c.Next()
+	})
+	applications := router.Group("/applications")
+	{
+		applications.POST("/:id/generate-secret", GenerateSecretKey)
+	}
+	router.GET("/api/toggles", GetTogglesBySecret)
+
+	db.Create(&entity.Application{ID: "test-app-id", Name: "Test App"})
+
+	generate := func() string {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/applications/test-app-id/generate-secret", nil)
+		router.ServeHTTP(w, req)
+		var resp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		return resp["plain_key"].(string)
+	}
+	authenticates := func(key string) bool {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/api/toggles", nil)
+		req.Header.Set("X-API-Key", key)
+		router.ServeHTTP(w, req)
+		return w.Code == http.StatusOK
+	}
+
+	first := generate()
+	second := generate()
+	third := generate()
+
+	if authenticates(first) {
+		t.Error("expected the oldest key to have been revoked by the second rotation")
+	}
+	if !authenticates(second) {
+		t.Error("expected the now-previous key to still authenticate")
+	}
+	if !authenticates(third) {
+		t.Error("expected the current key to authenticate")
 	}
 }

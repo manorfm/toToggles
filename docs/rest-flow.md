@@ -175,6 +175,7 @@ GET  /ready
 # Auth (no auth, except change-password)
 POST /api/auth/login
 POST /api/auth/logout
+POST /api/auth/forgot-password               # always returns success, never reveals if the username exists
 GET  /api/auth/check-first-access
 POST /api/auth/change-password              # requires session
 POST /api/auth/change-password-first-time   # uses temporary password_change_token cookie or body user_id/username
@@ -304,6 +305,26 @@ POST /api/auth/logout
 ```
 
 Clears the `auth_token` cookie. Returns `{"success": true, "message": "Logged out successfully"}`.
+
+```http
+POST /api/auth/forgot-password
+```
+
+Unauthenticated (this is what the login screen's "Forgot password?" link calls), rate-limited per IP
+(10/15min, a separate budget from the login rate limit). There is no email in this system — the whole flow is
+"tell an admin to reset it for you" (v2.6 §5.5):
+
+```json
+{ "username": "alice" }
+```
+
+**Always** responds `{"success": true}`, regardless of whether `username` exists — this endpoint would
+otherwise be a username-enumeration oracle. When the username *does* exist, it writes a
+`password_reset_requested` audit event (`text`: `` `Password reset requested for <b>@{username}</b>` ``,
+`target`: `"Self-service (login screen)"`) with a synthetic system actor (there is no session yet to attribute
+it to) and a `null` `team_id` — root-only visibility in `GET /api/audit`, same rule as
+`approval_system_toggled`. A root/admin sees it in History and resolves it the ordinary way:
+`POST /api/users/:id/reset-password` (§3).
 
 ```http
 GET /api/auth/check-first-access
@@ -861,9 +882,17 @@ integrations (see the top-level project README for the companion Java/Kotlin cli
 POST /api/applications/:id/generate-secret
 ```
 
-Approval-aware, minimum role admin (root always bypasses). "Generate" is really "regenerate": **every existing secret key for the
-application is deleted first**, then exactly one new key named `"API Access Key"` is created. There is no way
-to have multiple concurrently valid keys per application through this endpoint.
+Approval-aware, minimum role admin (root always bypasses). "Generate" is really "regenerate": exactly one new
+key named `"API Access Key"` is created and becomes the application's **current** key.
+
+**Rotation has a manual overlap window (v2.6 §5.1)**: the previously-current key is **not** deleted — it
+becomes the **previous** key and keeps authenticating (`GET /api/toggles`, the kill switch) until someone
+explicitly revokes it (`DELETE /api/secret-keys/:id`, passing its own ID) or it gets pushed out by a *second*
+rotation. There is room for exactly one previous key per application at a time (current + previous, never a
+longer history) — regenerating again while a previous key already exists revokes that older previous key
+outright before demoting the current one. This exists so a consumer mid-deploy with the old key configured
+doesn't get a hard outage the moment someone rotates; it does mean two keys can authenticate for the same
+application simultaneously by design during that window.
 
 ```json
 {
@@ -873,6 +902,9 @@ to have multiple concurrently valid keys per application through this endpoint.
     "name": "API Access Key",
     "application_id": "01APP0000000000000000001",
     "created_by": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "active": true,
+    "is_current": true,
+    "last_used_at": null,
     "created_at": "2026-08-19T10:00:00Z",
     "updated_at": "2026-08-19T10:00:00Z"
   },
@@ -882,7 +914,10 @@ to have multiple concurrently valid keys per application through this endpoint.
 ```
 
 `plain_key` is never persisted or retrievable again — only its SHA-256 hash is stored (`key_hash`, which is
-never serialized in any response).
+never serialized in any response). `last_used_at` (v2.6 §5.6) is a real, live-tracked timestamp — updated on
+every successful `ValidateSecretKey` call (both `GET /api/toggles` and the kill switch), best-effort (a
+failure to persist it never fails the authenticated request itself). `null` means the key has never
+authenticated anything yet.
 
 **When approval is required for `secret_key_create`**, the `202` response below carries `plain_key` too — the
 key's row is created (hashed) immediately, at request time, not at execute time. This closes a real bug: the
@@ -904,23 +939,29 @@ auth path used by `GET /api/toggles` and the kill switch) rejects it exactly lik
 does not show up in `GET /api/applications/:id/secret-keys` either. The requester can copy the value and
 configure their service immediately; it just won't authenticate anything yet. Any previously-active key for
 the application keeps working unchanged throughout the wait — nothing is rotated until approval. On
-`.../execute`, the pending row is activated and every *other* key for the application is deleted (same
-one-active-key-per-application invariant as the immediate path). On `.../reject`, the pending row is deleted
-physically — it never became valid, so there is no reason to keep the hash. See
+`.../execute`, the pending row is activated and becomes current; the same overlap rule as the immediate path
+applies to whatever was current before (demoted to previous, not deleted). On `.../reject`, the pending row
+is deleted physically — it never became valid, so there is no reason to keep the hash. See
 `ApprovalUseCase.CreateApprovalRequest`/`RejectRequest`/`executeSecretKeyCreateAction` and
-`SecretKeyUseCase.CreatePendingSecretKey`/`ActivateAndRotateSecretKey`.
+`SecretKeyUseCase.CreatePendingSecretKey`/`ActivateAndRotateSecretKey`/`rotateExistingKeys`.
 
 ```http
 GET /api/applications/:id/secret-keys
 ```
 
-Admin/root only. Lists key metadata (no plaintext, no hash) for the application.
+Admin/root only. Lists key metadata (no plaintext, no hash) for the application — up to 2 entries during an
+overlap window (current + previous), distinguished by `is_current`. Revoked keys and still-pending
+(`active: false`) keys never appear here.
 
 ```http
 DELETE /api/secret-keys/:id
 ```
 
-Approval-aware, minimum role admin (root always bypasses).
+Approval-aware, minimum role admin (root always bypasses). **Revokes**, not deletes — the row stays in the
+database (audit history), `revoked_at` gets set, and it immediately stops authenticating and stops showing up
+in `GET /api/applications/:id/secret-keys`. Works on either the current or the previous key; the caller picks
+which by which `id` it passes (both come from the list endpoint above) — there's no separate route for
+"revoke the previous key specifically."
 
 ```http
 GET /api/toggles

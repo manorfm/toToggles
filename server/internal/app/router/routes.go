@@ -45,6 +45,9 @@ func Init(router *gin.Engine) {
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", middleware.LoginRateLimit(), handler.Login)
+			// Rate-limitado à parte do login (por IP) — sem sessão, sem CSRF, um endpoint que
+			// sempre responde 200 seria um alvo fácil de flood de eventos de auditoria sem isso.
+			auth.POST("/forgot-password", middleware.ForgotPasswordRateLimit(), handler.ForgotPassword)
 			auth.POST("/logout", handler.Logout)
 			auth.GET("/check-first-access", handler.CheckFirstAccess)
 			auth.POST("/change-password", handler.ValidateToken(), handler.ChangePassword)

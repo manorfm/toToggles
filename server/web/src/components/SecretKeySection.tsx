@@ -3,9 +3,11 @@ import { deleteSecretKey, generateSecretKey, listSecretKeys } from "../api/secre
 import { ApiError } from "../api/client";
 import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { ApprovalInterceptModal } from "./ApprovalInterceptModal";
+import { ConfirmModal } from "./ConfirmModal";
 import { GeneratedKeyModal } from "./GeneratedKeyModal";
 import { Icon } from "./Icon";
 import { useToast } from "./ToastProvider";
+import { formatAuditWhen } from "../lib/auditEvents";
 import type { SecretKey } from "../types/secretKey";
 
 interface SecretKeySectionProps {
@@ -24,10 +26,18 @@ interface SecretKeySectionProps {
   onPendingApproval?: (actionType: string) => void;
 }
 
-type State = { status: "loading" } | { status: "loaded"; key: SecretKey | null } | { status: "error"; message: string };
+type State =
+  | { status: "loading" }
+  | { status: "loaded"; current: SecretKey | null; previous: SecretKey | null }
+  | { status: "error"; message: string };
 
-// Uma aplicação tem no máximo uma secret key ativa por vez — "gerar" no servidor é
-// sempre "regerar" (apaga as anteriores primeiro), então só mostramos a mais recente.
+// Rodapé de confirmação exigido antes de agir na chave ATUAL (rotacionar ou revogar) — a chave
+// PREVIOUS não passa por isso, ver handleRevokePrevious.
+type Confirming = "rotate" | "revokeCurrent" | null;
+
+// v2.6 §5.1: rotação com janela de overlap — uma aplicação pode ter até 2 chaves vivas ao mesmo
+// tempo (current + previous), a anterior continuando a autenticar até ser revogada. Diferente do
+// modelo anterior desta reescrita, que assumia no máximo 1 chave por aplicação.
 export function SecretKeySection({ applicationId, applicationName, canManage, isRoot, onKeyPresenceChange, onPendingApproval }: SecretKeySectionProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
@@ -35,13 +45,16 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
   // muda o texto do modal pra deixar claro que ela ainda não está ativa.
   const [revealedKeyPending, setRevealedKeyPending] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState<Confirming>(null);
   const toast = useToast();
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(isRoot);
 
   const load = useCallback(() => {
     listSecretKeys(applicationId)
       .then((keys) => {
-        setState({ status: "loaded", key: keys[0] ?? null });
+        const current = keys.find((k) => k.is_current) ?? null;
+        const previous = keys.find((k) => !k.is_current) ?? null;
+        setState({ status: "loaded", current, previous });
         onKeyPresenceChange?.(keys.length > 0);
       })
       .catch((err) => {
@@ -53,7 +66,8 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
     load();
   }, [load]);
 
-  async function handleGenerate() {
+  async function doGenerate() {
+    setConfirming(null);
     await guard("secret_key_create", { actionDesc: "Generate secret key", path: applicationName }, async () => {
       setBusy(true);
       try {
@@ -80,7 +94,20 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
     });
   }
 
-  async function handleDelete(id: string) {
+  // v2.6 §5.1 (confirmado no protótipo real, app.jsx#handleGenerateKey): gerar a PRIMEIRA chave
+  // de uma aplicação vai direto (nada com que sobrepor ainda); gerar quando já existe uma chave
+  // viva (current OU previous) pede confirmação primeiro ("Rotate service key?") — a chave atual
+  // não é revogada automaticamente, então o usuário precisa entender isso antes de prosseguir.
+  function handleGenerateClick() {
+    if (state.status === "loaded" && (state.current || state.previous)) {
+      setConfirming("rotate");
+      return;
+    }
+    doGenerate();
+  }
+
+  async function doRevokeCurrent(id: string) {
+    setConfirming(null);
     await guard("secret_key_delete", { actionDesc: "Delete secret key", path: applicationName }, async () => {
       setBusy(true);
       try {
@@ -99,7 +126,27 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
     });
   }
 
-  const hasKey = state.status === "loaded" && !!state.key;
+  // v2.6 §5.1: revogar a chave PREVIOUS é imediato, sem confirmação (confirmado no protótipo
+  // real: revokePreviousKey() é chamado direto do botão do aviso de overlap) — menor risco que
+  // revogar a atual, já que a atual continua funcionando normalmente depois.
+  async function handleRevokePrevious(id: string) {
+    await guard("secret_key_delete", { actionDesc: "Delete secret key", path: applicationName }, async () => {
+      setBusy(true);
+      try {
+        const result = await deleteSecretKey(id);
+        if (result.kind === "pending_approval") {
+          onPendingApproval?.(result.actionType);
+          return;
+        }
+        load();
+        toast("Previous key revoked");
+      } catch (err) {
+        setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível remover a chave." });
+      } finally {
+        setBusy(false);
+      }
+    });
+  }
 
   return (
     <div>
@@ -110,8 +157,8 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
             One secret key per application. Shown only once when generated — cannot be retrieved later.
           </div>
         </div>
-        {hasKey && canManage && (
-          <button className="btn btn-soft btn-sm" onClick={handleGenerate} disabled={busy}>
+        {state.status === "loaded" && state.current && canManage && (
+          <button className="btn btn-soft btn-sm" onClick={handleGenerateClick} disabled={busy}>
             <Icon name="refresh" size={14} /> Rotate key
           </button>
         )}
@@ -120,7 +167,7 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
       {state.status === "loading" && <div className="empty-ph">Carregando…</div>}
       {state.status === "error" && <div className="field-hint danger">{state.message}</div>}
 
-      {state.status === "loaded" && !state.key && (
+      {state.status === "loaded" && !state.current && (
         <div className="key-empty">
           <div className="key-empty-icon">
             <Icon name="key" size={28} />
@@ -128,14 +175,14 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
           <div className="key-empty-t">No service key</div>
           <div className="key-empty-d">Generate a secret key to connect your services to this application.</div>
           {canManage && (
-            <button className="btn btn-primary" style={{ marginTop: 22 }} onClick={handleGenerate} disabled={busy}>
+            <button className="btn btn-primary" style={{ marginTop: 22 }} onClick={handleGenerateClick} disabled={busy}>
               <Icon name="plus" size={16} /> Generate service key
             </button>
           )}
         </div>
       )}
 
-      {state.status === "loaded" && state.key && (
+      {state.status === "loaded" && state.current && (
         <div className="key-single">
           <div className="key-single-head">
             <div className="ks-icon">
@@ -144,16 +191,16 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
             <div style={{ flex: 1, minWidth: 0 }}>
               {/* Confirmado no protótipo real (get_screen_full("KeysView")): label estático
                   "Service key", não o nome dinâmico da chave — o backend também nunca deixou esse
-                  campo variar de fato (sempre "API Access Key", CreateSecretKey/
-                  CreatePendingSecretKey nunca recebem outro valor). "· Last used {when}" do real
-                  fica de fora de propósito: não existe rastreamento de último uso nenhum no
-                  backend (sem coluna/lógica de last-used em entity.SecretKey) — mostrar um valor
-                  aqui seria inventar dado, não uma correção de texto. */}
+                  campo variar de fato (sempre "API Access Key"). "Last used" agora é tracking
+                  real (v2.6 §5.6) — nunca mais "(demo — not tracked)". */}
               <div className="ks-name">Service key</div>
-              <div className="ks-meta">Created {new Date(state.key.created_at).toLocaleDateString()}</div>
+              <div className="ks-meta">
+                Created {new Date(state.current.created_at).toLocaleDateString()} · Last used{" "}
+                {state.current.last_used_at ? formatAuditWhen(state.current.last_used_at) : "never"}
+              </div>
             </div>
             {canManage && (
-              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(state.key!.id)} disabled={busy}>
+              <button className="btn btn-danger btn-sm" onClick={() => setConfirming("revokeCurrent")} disabled={busy}>
                 <Icon name="trash" size={14} /> Revoke
               </button>
             )}
@@ -161,7 +208,27 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
         </div>
       )}
 
-      {state.status === "loaded" && state.key && canManage && (
+      {state.status === "loaded" && state.previous && (
+        <div className="notice" style={{ marginTop: 16 }}>
+          <Icon name="clock" size={16} />
+          <span style={{ flex: 1 }}>
+            The <b>previous key</b> is still valid during the rotation overlap window, so services that haven't switched
+            over yet won't break. Revoke it once every consumer is updated.
+          </span>
+          {canManage && (
+            <button
+              className="btn btn-danger btn-sm"
+              style={{ flexShrink: 0 }}
+              onClick={() => handleRevokePrevious(state.previous!.id)}
+              disabled={busy}
+            >
+              Revoke previous now
+            </button>
+          )}
+        </div>
+      )}
+
+      {state.status === "loaded" && state.current && canManage && (
         <div className="key-lost">
           <div className="key-lost-icon">
             <Icon name="refresh" size={16} />
@@ -169,13 +236,56 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="key-lost-t">Lost the key?</div>
             <div className="key-lost-d">
-              Generate a new one. The current key is revoked immediately and any service still using it loses access.
+              Generate a new one. The current key keeps working during a manual overlap window — revoke it yourself once
+              every consumer is updated.
             </div>
           </div>
-          <button className="btn btn-soft btn-sm" onClick={handleGenerate} disabled={busy}>
+          <button className="btn btn-soft btn-sm" onClick={handleGenerateClick} disabled={busy}>
             <Icon name="key" size={14} /> Generate new key
           </button>
         </div>
+      )}
+
+      {confirming === "rotate" && (
+        <ConfirmModal
+          danger
+          icon="key"
+          title="Rotate service key?"
+          sub="The current key keeps working during a manual overlap window"
+          confirmLabel="Generate new key"
+          onClose={() => setConfirming(null)}
+          onConfirm={doGenerate}
+          body={
+            <div className="skey-warn">
+              <Icon name="warn" size={16} />
+              <span>
+                A new key is generated now. The current one is <b>not</b> revoked automatically — update your consumers,
+                then revoke it yourself from the Service key tab.
+              </span>
+            </div>
+          }
+        />
+      )}
+
+      {confirming === "revokeCurrent" && state.status === "loaded" && state.current && (
+        <ConfirmModal
+          danger
+          icon="key"
+          title="Revoke service key?"
+          sub="All services using this key will lose access"
+          confirmLabel="Revoke key"
+          onClose={() => setConfirming(null)}
+          onConfirm={() => doRevokeCurrent(state.current!.id)}
+          body={
+            <div className="skey-warn">
+              <Icon name="warn" size={16} />
+              <span>
+                This will <b>immediately block</b> all services using this key. You will need to generate a new key to
+                restore access.
+              </span>
+            </div>
+          }
+        />
       )}
 
       {revealedKey && (

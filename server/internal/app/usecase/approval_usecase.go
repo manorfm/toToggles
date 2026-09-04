@@ -1046,9 +1046,10 @@ func (uc *ApprovalUseCase) executeSecretKeyDeleteAction(ctx context.Context, req
 		return errors.New("secret key ID is required for secret key deletion")
 	}
 
-	// Usar SecretKeyUseCase para deletar a chave
-	if err := uc.secretKeyUseCase.DeleteSecretKey(actionData.SecretKeyID); err != nil {
-		return fmt.Errorf("failed to delete secret key: %w", err)
+	// Revoga (não apaga fisicamente) — v2.6 §5.1: a chave já foi real (Active) até agora, então
+	// mantém o histórico, mesmo padrão de SecretKeyHandler.DeleteSecretKey.
+	if err := uc.secretKeyUseCase.RevokeSecretKey(actionData.SecretKeyID); err != nil {
+		return fmt.Errorf("failed to revoke secret key: %w", err)
 	}
 
 	return nil
