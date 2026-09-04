@@ -1025,6 +1025,48 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     ganhou suporte ao segundo marcador `<i>...</i>` do protótipo real, com a mesma garantia de
     segurança do `<b>` já existente (só esses dois literais viram elemento React de verdade;
     qualquer outra tag, inclusive vinda de um valor malicioso, vira texto inerte).
+  - **v2.6 §4 (Archived + Undo) — resto do Phase 2 fechado numa fase seguinte.**
+    `components/ArchivedModal.tsx` porta 1:1 o `modals.jsx#ArchivedModal` confirmado (ícone
+    `history`, `.confirm-app-row` por entrada, botão "Restore" com ícone `refresh`) — reusa
+    `lib/auditEvents.tsx#formatAuditWhen` pro "há quanto tempo" em vez de portar o `timeAgo`
+    próprio do `data.js` (as duas fontes confirmadas fazem exatamente a mesma coisa; duplicar só
+    pra bater o nome original violaria a instrução de não espalhar a mesma lógica em lugares
+    diferentes). Botão "Archived (N)" (`.btn.btn-soft.btn-sm`, ícone 14px) aparece entre o
+    contador e "New toggle" só quando `canEdit && archived.length > 0` — `ApplicationDetailScreen`
+    passou a buscar `GET .../toggles/archived` dentro do mesmo `Promise.all` de `load()`, mas só
+    quando `canEdit` (a rota exige role admin, então um `user` somente-leitura nunca dispara um
+    403 esperado). `api/toggles.ts` ganhou `restoreToggle`/`getArchivedToggles` (a última mapeia
+    `deleted_at`/`deleted_by_name` pra `deletedAt`/`deletedByName`, mesmo padrão de camelCase do
+    resto do client). Restaurar de dentro do modal NÃO fecha o modal (mesmo comportamento do
+    `restoreArchived` real, que só filtra a entrada da lista em vez de fechar `setModal(null)`) —
+    o modal relê `state.archived` (atualizado por `load()`) e re-renderiza a lista.
+  - **Toast com ação + Undo de verdade**: `components/ToastProvider.tsx` ganhou um segundo
+    parâmetro opcional em `notify(message, action?)` (`{label, onAction}`), com timeout 8000ms
+    quando há ação (vs. 3200ms sem — bump confirmado da v2.3 pra v2.6, `setTimeout(...,
+    action?8000:3200)` no `app.jsx` real) e um botão `.toast-action` que dispara `onAction()` e
+    dispensa o toast na hora, sem esperar o timer. **Divergência deliberada do protótipo**: lá o
+    Undo só reverte uma árvore em memória (`patchTree`), aqui é sempre uma chamada de API de
+    verdade reaplicando o estado anterior — e essa chamada NUNCA passa pelo hook de intercept de
+    aprovação (`useApprovalIntercept`), mesmo padrão do protótipo confirmado (seus fechamentos de
+    Undo nunca checam `requiresApproval`) e também a única forma prática de evitar reviver um
+    `guard()` de um componente que já desmontou (o caso do drawer, que fecha a si mesmo logo após
+    salvar). Isso não é um buraco de segurança: o servidor continua sendo a autoridade final —
+    se a aprovação estiver ligada, a chamada direta do Undo ainda volta `202`, e o handler mostra
+    "Undo submitted for approval" em vez de fingir que aplicou. Três pontos de Undo, todos em
+    `ApplicationDetailScreen.tsx`:
+    - **Liga/desliga** (`handleToggle`): toast novo, que não existia antes desta fase (sucesso
+      silencioso virou "Toggle enabled/disabled" com Undo) — `undoToggleEnabled` rechama
+      `setToggleEnabled` com o valor invertido.
+    - **Apagar toggle** (`confirmDeleteToggle`): `undoDeleteToggle` chama `restoreToggle` (não é
+      approval-aware — desfazer uma exclusão já decidida/auditada não é mutação nova a revisar,
+      então não há branch de `pending_approval` a tratar aqui).
+    - **Mudar regra/status via drawer** (`EditToggleDrawer`): a assinatura de `onSaved` mudou de
+      `() => void` pra `(previous: ToggleRuleSnapshot) => void` — o snapshot pré-edição
+      (`loadState.toggle`, nunca tocado pelas edições locais) é capturado no próprio drawer
+      (única fonte real dele) e repassado pro pai, que constrói o toast com `undoRuleChange`
+      (rechama `updateToggleRule` com o snapshot). Precisou bubbling explícito porque o drawer se
+      fecha (`onClose()`) logo depois de salvar — um Undo preso ao `guard()` do drawer tentaria
+      mexer em estado de um componente já desmontado.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

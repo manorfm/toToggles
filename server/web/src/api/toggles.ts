@@ -1,7 +1,9 @@
 import { apiFetch } from "./client";
 import type {
+  ArchivedToggle,
   CreateToggleResult,
   DeleteToggleResult,
+  RestoreToggleResult,
   SetToggleEnabledResult,
   ToggleDetail,
   ToggleHierarchy,
@@ -86,8 +88,9 @@ export async function updateToggleRule(
   return { kind: "updated", toggle: body };
 }
 
-// DELETE /applications/:id/toggles/:toggleId (plural — NÃO recursivo). Chamar só quando o
-// toggle não tem filhos (ver DeleteToggleResult) — a UI garante isso antes de chegar aqui.
+// DELETE /applications/:id/toggles/:toggleId (plural) — recursivo e reversível (v2.6 §3.4/4.1):
+// apaga o nó e toda a subárvore descendente num soft-delete só (ver RestoreToggleResult/
+// restoreToggle abaixo pra desfazer).
 export async function deleteToggle(applicationId: string, toggleId: string): Promise<DeleteToggleResult> {
   const body = await apiFetch<{ message: string } | ApprovalRequiredBody>(`/applications/${applicationId}/toggles/${toggleId}`, {
     method: "DELETE",
@@ -96,4 +99,27 @@ export async function deleteToggle(applicationId: string, toggleId: string): Pro
     return { kind: "pending_approval", actionType: body.action_type };
   }
   return { kind: "deleted" };
+}
+
+// POST .../toggles/:toggleId/restore — desfaz um delete (o nó e a subárvore inteira voltam).
+export async function restoreToggle(applicationId: string, toggleId: string): Promise<RestoreToggleResult> {
+  await apiFetch<{ message: string; id: string }>(`/applications/${applicationId}/toggles/${toggleId}/restore`, {
+    method: "POST",
+  });
+  return { kind: "restored" };
+}
+
+interface ArchivedToggleBody {
+  id: string;
+  path: string;
+  deleted_at: string;
+  deleted_by_name: string;
+}
+
+// GET .../toggles/archived — uma raiz de arquivamento por operação de delete, mais recente
+// primeiro (v2.6 §4.1). Slice nil no Go não serializa como `[]` — trata "toggles" ausente como
+// lista vazia, mesmo cuidado já documentado noutros endpoints opcionais deste backend.
+export async function getArchivedToggles(applicationId: string): Promise<ArchivedToggle[]> {
+  const body = await apiFetch<{ message: string; toggles?: ArchivedToggleBody[] }>(`/applications/${applicationId}/toggles/archived`);
+  return (body.toggles ?? []).map((t) => ({ id: t.id, path: t.path, deletedAt: t.deleted_at, deletedByName: t.deleted_by_name }));
 }

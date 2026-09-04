@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createToggle, deleteToggle, getToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled, updateToggleRule } from "./toggles";
+import {
+  createToggle,
+  deleteToggle,
+  getArchivedToggles,
+  getToggle,
+  getToggleHierarchy,
+  getTogglesFlat,
+  restoreToggle,
+  setToggleEnabled,
+  updateToggleRule,
+} from "./toggles";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -152,6 +162,49 @@ describe("deleteToggle", () => {
       kind: "pending_approval",
       actionType: "toggle_delete",
     });
+  });
+});
+
+describe("restoreToggle", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("POSTs the restore endpoint and resolves once done", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "toggle restored successfully", id: "tgl1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await restoreToggle("app1", "tgl1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles/tgl1/restore", expect.objectContaining({ method: "POST" }));
+    expect(result).toEqual({ kind: "restored" });
+  });
+});
+
+describe("getArchivedToggles", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches the archived list and maps snake_case fields to camelCase", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        message: "archived toggles retrieved successfully",
+        toggles: [{ id: "tgl1", path: "payments.card", deleted_at: "2026-09-03T12:00:00Z", deleted_by_name: "alice" }],
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getArchivedToggles("app1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles/archived", expect.anything());
+    expect(result).toEqual([{ id: "tgl1", path: "payments.card", deletedAt: "2026-09-03T12:00:00Z", deletedByName: "alice" }]);
+  });
+
+  it("returns an empty array when 'toggles' is omitted (nothing archived yet)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "archived toggles retrieved successfully" })));
+
+    await expect(getArchivedToggles("app1")).resolves.toEqual([]);
   });
 });
 

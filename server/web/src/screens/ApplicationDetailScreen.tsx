@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { deleteApplication, getApplication } from "../api/applications";
-import { deleteToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled } from "../api/toggles";
+import {
+  deleteToggle,
+  getArchivedToggles,
+  getToggleHierarchy,
+  getTogglesFlat,
+  restoreToggle,
+  setToggleEnabled,
+  updateToggleRule,
+} from "../api/toggles";
 import { ApiError } from "../api/client";
+import { ArchivedModal } from "../components/ArchivedModal";
 import { ApprovalInterceptModal } from "../components/ApprovalInterceptModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { CreateToggleModal } from "../components/CreateToggleModal";
-import { EditToggleDrawer } from "../components/EditToggleDrawer";
+import { EditToggleDrawer, type ToggleRuleSnapshot } from "../components/EditToggleDrawer";
 import { Icon } from "../components/Icon";
 import { SecretKeySection } from "../components/SecretKeySection";
 import { TogglePaths } from "../components/TogglePaths";
@@ -24,7 +33,7 @@ import {
   findToggleNode,
   flattenToLeaves,
 } from "../lib/toggleLeaves";
-import type { ToggleLeaf, ToggleNode } from "../types/toggle";
+import type { ArchivedToggle, ToggleLeaf, ToggleNode } from "../types/toggle";
 
 type LoadState =
   | {
@@ -34,6 +43,7 @@ type LoadState =
       leaves: ToggleLeaf[];
       childrenCountById: Map<string, number>;
       stats: { total: number; on: number };
+      archived: ArchivedToggle[];
     }
   | { status: "loading" }
   | { status: "error"; message: string };
@@ -76,13 +86,23 @@ export function ApplicationDetailScreen() {
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(
     user.role === "root"
   );
 
+  const canEdit = user.role === "root" || user.role === "admin";
+
   const load = useCallback(() => {
-    Promise.all([getApplication(applicationId), getToggleHierarchy(applicationId), getTogglesFlat(applicationId)])
-      .then(([application, hierarchy, flat]) => {
+    // GET .../toggles/archived exige role admin (docs/rest-flow.md §7) — só busca quando o
+    // usuário pode editar, pra não bater um 403 esperado pra quem só tem leitura (`user`).
+    Promise.all([
+      getApplication(applicationId),
+      getToggleHierarchy(applicationId),
+      getTogglesFlat(applicationId),
+      canEdit ? getArchivedToggles(applicationId) : Promise.resolve([]),
+    ])
+      .then(([application, hierarchy, flat, archived]) => {
         setState({
           status: "loaded",
           applicationName: application.name,
@@ -90,13 +110,14 @@ export function ApplicationDetailScreen() {
           leaves: flattenToLeaves(hierarchy, flat),
           childrenCountById: buildChildrenCountMap(hierarchy),
           stats: countToggleTree(hierarchy),
+          archived,
         });
       })
       .catch((err) => {
         const message = err instanceof ApiError ? err.message : "Não foi possível carregar a aplicação.";
         setState({ status: "error", message });
       });
-  }, [applicationId]);
+  }, [applicationId, canEdit]);
 
   useEffect(() => {
     load();
@@ -115,11 +136,69 @@ export function ApplicationDetailScreen() {
     return () => setOpenApp(null);
   }, [openAppName, openAppToggleCount, hasSecretKey, tab, setOpenApp]);
 
-  const canEdit = user.role === "root" || user.role === "admin";
   const canDeleteApp = user.role === "root";
+
+  // Undo (v2.6 §4.2/4.3): sempre uma chamada de API de verdade reaplicando o estado anterior
+  // (este app persiste num backend real, ao contrário do protótipo, que só reverte uma árvore em
+  // memória) — e NUNCA passa pelo guard de aprovação, mesmo padrão do protótipo confirmado (seus
+  // fechamentos de Undo nunca checam requiresApproval). O servidor continua sendo a autoridade
+  // final de qualquer jeito: se a aprovação estiver ligada, a chamada direta ainda volta 202 e o
+  // undo cai no mesmo aviso "enviado para aprovação" em vez de silenciosamente falhar.
+  async function undoToggleEnabled(leafId: string, previousEnabled: boolean) {
+    try {
+      const result = await setToggleEnabled(applicationId, leafId, previousEnabled);
+      if (result.kind === "pending_approval") {
+        toast("Undo submitted for approval");
+      } else {
+        load();
+      }
+    } catch {
+      toast("Could not undo — try again");
+    }
+  }
+
+  async function undoRuleChange(toggleId: string, previous: ToggleRuleSnapshot) {
+    try {
+      const result = await updateToggleRule(applicationId, toggleId, {
+        enabled: previous.enabled,
+        hasActivationRule: previous.hasActivationRule,
+        activationRule: previous.activationRule ?? undefined,
+      });
+      if (result.kind === "pending_approval") {
+        toast("Undo submitted for approval");
+      } else {
+        load();
+      }
+    } catch {
+      toast("Could not undo — try again");
+    }
+  }
+
+  // POST .../restore não é approval-aware (docs/rest-flow.md §7) — desfazer um delete já
+  // decidido/auditado não é uma mutação nova a revisar, então não há resposta pending_approval a
+  // tratar aqui.
+  async function undoDeleteToggle(toggleId: string) {
+    try {
+      await restoreToggle(applicationId, toggleId);
+      load();
+    } catch {
+      toast("Could not undo — try again");
+    }
+  }
+
+  async function restoreArchivedEntry(toggleId: string) {
+    try {
+      await restoreToggle(applicationId, toggleId);
+      load();
+      toast("Toggle restored");
+    } catch {
+      toast("Could not restore — try again");
+    }
+  }
 
   async function confirmDeleteToggle() {
     if (!deletingToggle) return;
+    const toggleId = deletingToggle.toggleId;
     await guard("toggle_delete", { actionDesc: "Delete toggle", path: deletingToggle.path }, async () => {
       setDeleting(true);
       try {
@@ -130,7 +209,7 @@ export function ApplicationDetailScreen() {
         } else {
           setPendingNotice(null);
           load();
-          toast("Toggle deleted");
+          toast("Toggle deleted", { label: "Undo", onAction: () => undoDeleteToggle(toggleId) });
         }
         setDeletingToggle(null);
       } catch (err) {
@@ -181,6 +260,10 @@ export function ApplicationDetailScreen() {
         } else {
           setPendingNotice(null);
           load();
+          toast(nextEnabled ? "Toggle enabled" : "Toggle disabled", {
+            label: "Undo",
+            onAction: () => undoToggleEnabled(leafId, !nextEnabled),
+          });
         }
       } catch (err) {
         setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível atualizar o toggle.");
@@ -225,6 +308,11 @@ export function ApplicationDetailScreen() {
                   </div>
                   <div style={{ fontSize: 11, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>active</div>
                 </div>
+                {canEdit && state.archived.length > 0 && (
+                  <button className="btn btn-soft btn-sm" onClick={() => setArchivedOpen(true)}>
+                    <Icon name="history" size={14} /> Archived ({state.archived.length})
+                  </button>
+                )}
                 {canEdit && (
                   <button className="btn btn-primary" onClick={() => setCreating(true)}>
                     <Icon name="plus" size={16} /> New toggle
@@ -312,10 +400,11 @@ export function ApplicationDetailScreen() {
           blockerSeg={configuring.blockerSeg}
           isRoot={user.role === "root"}
           onClose={() => setConfiguring(null)}
-          onSaved={() => {
+          onSaved={(previous) => {
+            const toggleId = configuring.toggleId;
             setPendingNotice(null);
             load();
-            toast("Changes saved");
+            toast("Changes saved", { label: "Undo", onAction: () => undoRuleChange(toggleId, previous) });
           }}
           onPendingApproval={() => {
             setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
@@ -368,6 +457,10 @@ export function ApplicationDetailScreen() {
           onClose={() => !deleting && setDeletingApp(false)}
           onConfirm={confirmDeleteApplication}
         />
+      )}
+
+      {archivedOpen && state.status === "loaded" && (
+        <ArchivedModal entries={state.archived} onClose={() => setArchivedOpen(false)} onRestore={restoreArchivedEntry} />
       )}
 
       {intercept && (

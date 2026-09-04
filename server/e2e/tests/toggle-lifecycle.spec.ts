@@ -194,12 +194,35 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await adminPage.goto(`/applications/${fixtures.appId}`);
     await adminPage.getByRole("switch", { name: "e2e.delete.direct" }).waitFor();
     await adminPage.locator(".tg-card", { hasText: "e2e.delete.direct" }).getByRole("button", { name: "Delete", exact: true }).click();
-    await modalButton(adminPage, "Delete", { dialogTitle: "Delete toggle" }).click();
+    await modalButton(adminPage, "Delete toggle", { dialogTitle: "Delete toggle" }).click();
 
     await expect(adminPage.getByRole("switch", { name: "e2e.delete.direct" })).toHaveCount(0);
 
     await rootContext.close();
     await adminContext.close();
+  });
+
+  // v2.6 §4.2: the success toast carries an "Undo" action that calls the real restore endpoint
+  // (not a client-side patch — this app persists to a real backend, unlike the prototype).
+  test("Undo on the delete toast restores the toggle via a real API call", async ({ browser }) => {
+    const fixtures = readFixtures();
+    const rootContext = await browser.newContext({ storageState: ROOT_STATE });
+    const rootPage = await rootContext.newPage();
+    await createToggle(rootContext.request, fixtures.appId, "e2e.delete.undo");
+    await goToApprovalSettings(rootPage);
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+
+    await rootPage.goto(`/applications/${fixtures.appId}`);
+    await rootPage.getByRole("switch", { name: "e2e.delete.undo" }).waitFor();
+    await rootPage.locator(".tg-card", { hasText: "e2e.delete.undo" }).getByRole("button", { name: "Delete", exact: true }).click();
+    await modalButton(rootPage, "Delete toggle", { dialogTitle: "Delete toggle" }).click();
+    await expect(rootPage.getByRole("switch", { name: "e2e.delete.undo" })).toHaveCount(0);
+
+    await rootPage.getByRole("button", { name: "Undo" }).click();
+
+    await expect(rootPage.getByRole("switch", { name: "e2e.delete.undo" })).toBeVisible();
+
+    await rootContext.close();
   });
 
   test("with approval: pending until root approves, then removed", async ({ browser }) => {
@@ -216,7 +239,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await adminPage.goto(`/applications/${fixtures.appId}`);
     await adminPage.getByRole("switch", { name: "e2e.delete.approved" }).waitFor();
     await adminPage.locator(".tg-card", { hasText: "e2e.delete.approved" }).getByRole("button", { name: "Delete", exact: true }).click();
-    await modalButton(adminPage, "Delete", { dialogTitle: "Delete toggle" }).click();
+    await modalButton(adminPage, "Delete toggle", { dialogTitle: "Delete toggle" }).click();
     await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();

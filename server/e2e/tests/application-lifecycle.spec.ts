@@ -154,7 +154,7 @@ test.describe("application lifecycle — delete", () => {
   });
 
   test("with approval: a non-root caller is intercepted (no UI entry point exists for this role)", async ({ browser }) => {
-    // Documented structural fact, same as toggle-delete-with-children.spec.ts: canDeleteApp
+    // Documented structural fact, same as toggle-cascade-delete-and-restore.spec.ts: canDeleteApp
     // (ApplicationDetailScreen) and canDelete (ApplicationsScreen) both gate the only "Delete
     // application" entry points to root only — and root always bypasses approval. There is no
     // way for a non-root user to reach this button in the real app, so this is API-level.

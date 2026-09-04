@@ -512,6 +512,13 @@ input[type="checkbox"] {
   height: 15px;
   color: var(--accent);
 }
+.toast-action {
+  margin-left: 4px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* --- Cards (applications, ...) --- */
 .card {
@@ -1583,6 +1590,15 @@ input[type="checkbox"] {
   color: var(--danger);
   background: color-mix(in oklab, var(--danger) 12%, transparent);
   border-color: color-mix(in oklab, var(--danger) 26%, transparent);
+}
+.confirm-app-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
 }
 .confirm-toggle-path {
   font-family: var(--font-mono);

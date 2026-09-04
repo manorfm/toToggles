@@ -5,7 +5,16 @@ import { ApiError } from "../api/client";
 import { getToggle, updateToggleRule } from "../api/toggles";
 import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { RULE_TYPES, deriveInitialRuleState } from "../lib/activationRuleTypes";
-import type { ActivationRuleType, ToggleDetail } from "../types/toggle";
+import type { ActivationRule, ActivationRuleType, ToggleDetail } from "../types/toggle";
+
+// Snapshot pré-edição de um toggle (bit próprio + regra) — capturado no load do drawer, antes de
+// qualquer edição local. Usado pra montar o Undo do toast "Changes saved" (v2.6 §4.3): reaplicar
+// exatamente esse estado desfaz a mudança, sem precisar guardar um histórico maior.
+export interface ToggleRuleSnapshot {
+  enabled: boolean;
+  hasActivationRule: boolean;
+  activationRule: ActivationRule | null;
+}
 
 interface EditToggleDrawerProps {
   applicationId: string;
@@ -15,7 +24,7 @@ interface EditToggleDrawerProps {
   blockerSeg: string | null;
   isRoot: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (previous: ToggleRuleSnapshot) => void;
   onPendingApproval: (actionType: string) => void;
 }
 
@@ -92,7 +101,11 @@ export function EditToggleDrawer({
         if (result.kind === "pending_approval") {
           onPendingApproval(result.actionType);
         } else {
-          onSaved();
+          onSaved({
+            enabled: loadState.toggle.enabled,
+            hasActivationRule: loadState.toggle.has_activation_rule,
+            activationRule: loadState.toggle.has_activation_rule ? loadState.toggle.activation_rule : null,
+          });
         }
         onClose();
       } catch (err) {

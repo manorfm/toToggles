@@ -74,10 +74,21 @@ export type UpdateToggleResult =
   | { kind: "updated"; toggle: ToggleDetail }
   | { kind: "pending_approval"; actionType: string };
 
-// DELETE /applications/:id/toggles/:toggleId — approval-aware. Nuance real (docs/rest-flow.md
-// §7): um toggle com filhos NÃO é apagado, mas o servidor ainda responde 200 — não há como o
-// client distinguir "apagado" de "sobreviveu por ter filhos" a partir da resposta em si, então a
-// UI evita a chamada quando há filhos em vez de fingir que sempre funciona.
+// DELETE /applications/:id/toggles/:toggleId — approval-aware, recursivo e reversível (v2.6
+// §3.4/4.1): apaga o nó alvo e toda a subárvore descendente num soft-delete só (ver
+// docs/rest-flow.md §7) — um nó com filhos não é mais recusado.
 export type DeleteToggleResult =
   | { kind: "deleted" }
   | { kind: "pending_approval"; actionType: string };
+
+// GET .../toggles/archived — uma raiz de arquivamento por operação de delete (v2.6 §4.1).
+export interface ArchivedToggle {
+  id: string;
+  path: string;
+  deletedAt: string;
+  deletedByName: string;
+}
+
+// POST .../toggles/:toggleId/restore — não é approval-aware (desfazer uma ação já decidida e
+// auditada não é uma mutação nova a revisar, ver docs/rest-flow.md §7).
+export type RestoreToggleResult = { kind: "restored" };
