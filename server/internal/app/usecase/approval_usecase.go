@@ -667,7 +667,7 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	case entity.ApprovalActionToggleUpdate:
 		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionToggleDelete:
-		execErr = uc.executeToggleDeleteAction(ctx, request)
+		execErr = uc.executeToggleDeleteAction(ctx, request, caller.ID)
 	case entity.ApprovalActionToggleEnable:
 		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionToggleDisable:
@@ -889,7 +889,7 @@ func (uc *ApprovalUseCase) executeToggleUpdateAction(ctx context.Context, reques
 	return nil
 }
 
-func (uc *ApprovalUseCase) executeToggleDeleteAction(ctx context.Context, request *entity.ApprovalRequest) error {
+func (uc *ApprovalUseCase) executeToggleDeleteAction(ctx context.Context, request *entity.ApprovalRequest, callerID string) error {
 	// Verificar se o toggle existe
 	if request.ToggleID == nil {
 		return errors.New("toggle ID is required for toggle deletion")
@@ -899,8 +899,10 @@ func (uc *ApprovalUseCase) executeToggleDeleteAction(ctx context.Context, reques
 		return errors.New("application ID is required for toggle deletion")
 	}
 
-	// Usar o ToggleUseCase para deletar o toggle com lógica apropriada
-	err := uc.toggleUseCase.DeleteToggleByID(*request.ToggleID, *request.ApplicationID)
+	// deletedBy é quem EXECUTOU a exclusão de verdade (o aprovador chamando .../execute), não o
+	// solicitante original — mesma escolha já usada pro actor do evento de auditoria da execução
+	// (resolveApprovalExecutionAudit, logo acima: "actor é caller, nunca o requester original").
+	err := uc.toggleUseCase.DeleteToggleByID(*request.ToggleID, *request.ApplicationID, callerID)
 	if err != nil {
 		return fmt.Errorf("failed to delete toggle: %w", err)
 	}

@@ -236,11 +236,43 @@ describe("ApplicationDetailScreen", () => {
     await screen.findByText("billing", { selector: ".root-chip" });
 
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
-    await screen.findByText(/delete toggle/i);
-    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+    await screen.findByText(/delete toggle/i, { selector: ".modal-title" });
+    await user.click(screen.getByRole("button", { name: /^delete toggle$/i }));
 
     await screen.findByText("No toggles yet");
     expect(deleted).toBe(true);
+  });
+
+  it("shows which path is currently serving traffic in the delete confirmation, when the leaf is on", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchMockFor([{ id: "3", value: "billing", enabled: true }])
+    );
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("billing", { selector: ".root-chip" });
+
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    expect(await screen.findByText(/currently serving traffic on/i)).toBeInTheDocument();
+    expect(screen.getByText("billing", { selector: ".confirm-info code" })).toBeInTheDocument();
+  });
+
+  it("omits the traffic notice in the delete confirmation when the leaf is already off", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchMockFor([{ id: "3", value: "billing", enabled: false }])
+    );
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("billing", { selector: ".root-chip" });
+
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+    await screen.findByText(/delete toggle/i, { selector: ".modal-title" });
+
+    expect(screen.queryByText(/currently serving traffic on/i)).not.toBeInTheDocument();
   });
 
   it("shows a pending-approval notice instead of removing the toggle when delete is intercepted", async () => {
@@ -266,8 +298,8 @@ describe("ApplicationDetailScreen", () => {
     await screen.findByText("billing", { selector: ".root-chip" });
 
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
-    await screen.findByText(/delete toggle/i);
-    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+    await screen.findByText(/delete toggle/i, { selector: ".modal-title" });
+    await user.click(screen.getByRole("button", { name: /^delete toggle$/i }));
 
     expect(await screen.findByText(/aguardando aprova/i)).toBeInTheDocument();
     expect(screen.getByText("billing", { selector: ".root-chip" })).toBeInTheDocument();
@@ -367,8 +399,8 @@ describe("ApplicationDetailScreen", () => {
     await screen.findByText("billing", { selector: ".root-chip" });
 
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
-    await screen.findByText(/delete toggle/i);
-    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+    await screen.findByText(/delete toggle/i, { selector: ".modal-title" });
+    await user.click(screen.getByRole("button", { name: /^delete toggle$/i }));
 
     expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
     expect(deleted).toBe(false);

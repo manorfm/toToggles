@@ -464,6 +464,90 @@ func TestAuditIntegration_ToggleDisableRecursive_TextBoldsLastSegmentAndTargetCo
 	}
 }
 
+// Confirmado no protótipo real (app.jsx#saveDrawer): o switch de Status do drawer não é
+// desabilitado quando um ancestral está off (diferente do switch do ToggleCard, que É
+// desabilitado nesse caso — por isso só o drawer alcança este caminho). Ligar um toggle cujo
+// ancestral segue desligado é permitido, mas o evento de auditoria ganha um sufixo avisando que
+// não teve efeito nenhum — v2.6 §3.3.
+func TestAuditIntegration_ToggleEnable_NoEffectSuffixWhenAnAncestorIsOff(t *testing.T) {
+	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
+
+	app := &entity.Application{ID: "app-1", Name: "Checkout Web"}
+	if err := db.Create(app).Error; err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	if err := db.Create(&entity.TeamApplication{TeamID: "team-1", ApplicationID: app.ID, Permission: entity.PermissionAdmin}).Error; err != nil {
+		t.Fatalf("failed to associate application to team: %v", err)
+	}
+	// Enabled: false na struct de criação não basta — GORM só grava um valor "diferente do zero
+	// value do tipo" na hora do INSERT quando decidindo aplicar um `gorm:"default:..."` da
+	// coluna (aqui, `default:true`); como o zero value de bool É false, um Create com
+	// Enabled:false é indistinguível de "não setado" e o banco aplica o default (true) mesmo
+	// assim. Update explícito depois do Create contorna isso (não é mais um INSERT).
+	parent := &entity.Toggle{ID: "parent-1", AppID: app.ID, Value: "payments", Path: "payments", Enabled: true}
+	if err := db.Create(parent).Error; err != nil {
+		t.Fatalf("failed to create parent toggle: %v", err)
+	}
+	if err := db.Model(parent).Update("enabled", false).Error; err != nil {
+		t.Fatalf("failed to disable parent toggle: %v", err)
+	}
+	child := &entity.Toggle{ID: "child-1", AppID: app.ID, ParentID: &parent.ID, Value: "card", Path: "payments.card", Enabled: false}
+	if err := db.Create(child).Error; err != nil {
+		t.Fatalf("failed to create child toggle: %v", err)
+	}
+
+	body := `{"enabled": true}`
+	req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/child-1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", teamAdmin.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 enabling the toggle, got %d: %s", w.Code, w.Body.String())
+	}
+
+	text := latestAuditText(t, router, teamAdmin.ID, "toggle_enabled")
+	if want := "Enabled <b>card</b> <i>(no effect — payments is off)</i>"; text != want {
+		t.Errorf("expected text with no-effect suffix naming the blocking ancestor %q, got %q", want, text)
+	}
+}
+
+// Contraprova do teste acima: sem ancestral desligado, nenhum sufixo é adicionado.
+func TestAuditIntegration_ToggleEnable_NoSuffixWhenNoAncestorIsOff(t *testing.T) {
+	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
+
+	app := &entity.Application{ID: "app-1", Name: "Checkout Web"}
+	if err := db.Create(app).Error; err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	if err := db.Create(&entity.TeamApplication{TeamID: "team-1", ApplicationID: app.ID, Permission: entity.PermissionAdmin}).Error; err != nil {
+		t.Fatalf("failed to associate application to team: %v", err)
+	}
+	parent := &entity.Toggle{ID: "parent-1", AppID: app.ID, Value: "payments", Path: "payments", Enabled: true}
+	if err := db.Create(parent).Error; err != nil {
+		t.Fatalf("failed to create parent toggle: %v", err)
+	}
+	child := &entity.Toggle{ID: "child-1", AppID: app.ID, ParentID: &parent.ID, Value: "card", Path: "payments.card", Enabled: false}
+	if err := db.Create(child).Error; err != nil {
+		t.Fatalf("failed to create child toggle: %v", err)
+	}
+
+	body := `{"enabled": true}`
+	req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/child-1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", teamAdmin.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 enabling the toggle, got %d: %s", w.Code, w.Body.String())
+	}
+
+	text := latestAuditText(t, router, teamAdmin.ID, "toggle_enabled")
+	if want := "Enabled <b>card</b>"; text != want {
+		t.Errorf("expected plain text with no suffix %q, got %q", want, text)
+	}
+}
+
 // Confirmado no protótipo real (app.jsx#doDeleteToggle): bolda só o ÚLTIMO segmento
 // (`label.split(".").pop()`), target é o nome da aplicação.
 func TestAuditIntegration_ToggleDelete_TextBoldsLastSegmentAndTargetIsApplicationName(t *testing.T) {

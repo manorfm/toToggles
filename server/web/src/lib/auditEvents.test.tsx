@@ -97,4 +97,19 @@ describe("renderAuditText", () => {
     render(<div>{renderAuditText("Created team <b>x</script><script>alert(1)</script></b>")}</div>);
     expect(document.querySelector("script")).not.toBeInTheDocument();
   });
+
+  // Confirmado no protótipo real (app.jsx#saveDrawer): o sufixo "(no effect — X is off)" de um
+  // enable sem efeito (v2.6 §3.3) vem em itálico via `<i>...</i>` — mesmo marcador literal
+  // reconhecido de forma segura que `<b>`, nunca dangerouslySetInnerHTML.
+  it("renders an <i>...</i> marker as a real italic element", () => {
+    render(<div>{renderAuditText("Enabled <b>card</b> <i>(no effect — payments is off)</i>")}</div>);
+    expect(screen.getByText("card").tagName).toBe("B");
+    expect(screen.getByText("(no effect — payments is off)").tagName).toBe("I");
+  });
+
+  it("never executes markup from a malicious value for the <i> marker either", () => {
+    const { container } = render(<div>{renderAuditText('Created team <i onmouseover="window.__pwned=true">x</i>')}</div>);
+    expect(container.querySelector("i[onmouseover]")).not.toBeInTheDocument();
+    expect(container.textContent).toContain('<i onmouseover="window.__pwned=true">x</i>');
+  });
 });

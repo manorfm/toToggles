@@ -980,6 +980,51 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     "Last used {data}" no meta da chave também ficou de fora — não há tracking de último uso no
     backend, só `created_at`. Ganhou o glifo `"refresh"` em `Icon.tsx` (confirmado no `icons.jsx`
     real do mesmo bundle v2.3), usado tanto no botão "Rotate key" quanto em "Generate new key".
+  - **v2.6 §3 (cascade delete/reversibilidade) — fatia de client-side landed** depois do backend
+    virar soft-delete (toggles ganharam `deleted_at`/`deleted_by`/`archived_root`, delete virou
+    recursivo-com-arquivamento em vez de recusar nó com filhos — ver bullet "Rotas de Toggles"/T0008
+    acima e `internal/app/usecase/toggle_usecase.go`). Portadas as duas funções puras confirmadas
+    do `data.js` real (bundle v2.6) pra `lib/toggleLeaves.ts`: `countDescendants`/
+    `activeLeavesUnder`/`findToggleNode` (o backend tinha ganhado um `ToggleUseCase.
+    CountDescendants` cedo demais nesta mesma sessão — removido de novo como código morto assim
+    que ficou confirmado, pelo próprio plano original, que essa contagem é client-side a partir da
+    árvore já carregada, sem endpoint novo). `ApplicationDetailScreen`'s `ConfirmModal` de deletar
+    toggle ganhou o body confirmado 1:1 (`.confirm-toggle-path` + notice de descendentes + "Currently
+    serving traffic on: {paths}") — na prática `descCount` é sempre 0 porque a UI só oferece apagar
+    FOLHAS (`ToggleCard`'s botão de lixeira, nunca um ancestral), então só a segunda parte
+    (`activeLeaves`) é realmente alcançável por aqui; as duas funções ficam prontas pra quando uma
+    UI de apagar branch existir. `confirmLabel` do modal também corrigido pro literal confirmado
+    "Delete toggle" (era um genérico "Delete" antes) — 3 testes existentes que clicavam o botão de
+    confirmação por `/^delete$/i` precisaram ser re-escopados (`.modal-title` no título, `/^delete
+    toggle$/i` no botão) porque o card também tem um botão "Delete" (ícone), agora ambíguo com o
+    footer do modal.
+  - **§3.3 (aviso "no effect right now")**: nova função pura `ancestorsEnabledFor(leaves, id)`
+    em `lib/toggleLeaves.ts` — diferente de `countDescendants`/`activeLeavesUnder` (que operam
+    sobre `ToggleNode`, cujo `enabled` já vem cascateado do endpoint hierarchy), esta opera sobre
+    `ToggleLeaf.enabledOwn` (bit PRÓPRIO, não cascateado) porque é a única fonte com o bit próprio
+    de um ancestral arbitrário — precisa saber qual segmento especificamente está desligado, não só
+    se está. `EditToggleDrawer` ganhou `ancestorsOn`/`blockerSeg` como props novas (calculadas em
+    `ApplicationDetailScreen` no momento de abrir o drawer, via `onEdit`) e o notice confirmado
+    ("This has **no effect right now** — `{blockerSeg}` above it is off...") quando `enabled &&
+    !ancestorsOn` — mesma condição `ineffective` do protótipo real. Só alcançável pelo drawer (o
+    switch de Status do `ToggleCard`, diferente do do drawer, já vem `disabled` quando um ancestral
+    está off — não dá pra chegar nesse estado por ali).
+  - **Sufixo de auditoria correspondente, backend**: novo `ToggleUseCase.AncestorBlocker(toggle)`
+    (equivalente Go do `ancestorsEnabledFor` do frontend, mas andando `ParentID` via
+    `toggleRepo.GetByID` em vez de reler uma lista de folhas já carregada) — só chamado em
+    `ToggleHandler.UpdateToggle` (o endpoint plural, não-recursivo, usado pelo drawer) quando
+    `req.Enabled` é true, produzindo o sufixo confirmado `` ` <i>(no effect — {blocker} is
+    off)</i>` `` no texto do evento `toggle_enabled`. **Achado escrevendo o teste de integração**:
+    criar um `entity.Toggle{Enabled: false}` direto via `db.Create` num teste com GORM real não
+    grava `false` — a coluna tem `gorm:"default:true"`, e como o zero-value de `bool` também é
+    `false`, GORM não consegue distinguir "false explícito" de "não setado" na hora do INSERT e
+    aplica o default do banco mesmo assim; corrigido fazendo `db.Create` com `true` e um
+    `db.Model(...).Update("enabled", false)` logo depois (um UPDATE de verdade, fora do caminho do
+    default). **Frontend**: `lib/auditEvents.tsx#renderAuditText` (o parser que reconhece só
+    marcadores literais, nunca `dangerouslySetInnerHTML` — ver bullet "Rotas de Auditoria" acima)
+    ganhou suporte ao segundo marcador `<i>...</i>` do protótipo real, com a mesma garantia de
+    segurança do `<b>` já existente (só esses dois literais viram elemento React de verdade;
+    qualquer outra tag, inclusive vinda de um valor malicioso, vira texto inerte).
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

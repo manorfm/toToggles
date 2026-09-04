@@ -3,9 +3,11 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/domain/repository"
+	"gorm.io/gorm"
 )
 
 type MockApplicationRepository struct {
@@ -132,7 +134,7 @@ func (m *MockToggleRepository) GetByID(id string) (*entity.Toggle, error) {
 		return nil, m.GetByIDError
 	}
 	toggle, exists := m.Toggles[id]
-	if !exists {
+	if !exists || toggle.DeletedAt.Valid {
 		return nil, errors.New("toggle not found")
 	}
 	return toggle, nil
@@ -143,7 +145,7 @@ func (m *MockToggleRepository) GetByPath(path string, appID string) (*entity.Tog
 		return nil, m.GetByPathError
 	}
 	for _, toggle := range m.Toggles {
-		if toggle.Path == path && toggle.AppID == appID {
+		if toggle.Path == path && toggle.AppID == appID && !toggle.DeletedAt.Valid {
 			return toggle, nil
 		}
 	}
@@ -153,7 +155,7 @@ func (m *MockToggleRepository) GetByPath(path string, appID string) (*entity.Tog
 func (m *MockToggleRepository) GetByAppID(appID string) ([]*entity.Toggle, error) {
 	var toggles []*entity.Toggle
 	for _, toggle := range m.Toggles {
-		if toggle.AppID == appID {
+		if toggle.AppID == appID && !toggle.DeletedAt.Valid {
 			toggles = append(toggles, toggle)
 		}
 	}
@@ -172,21 +174,28 @@ func (m *MockToggleRepository) Update(toggle *entity.Toggle) error {
 	return nil
 }
 
+// Delete espelha o repositório real: soft-delete recursivo (a linha continua no mapa, só marcada
+// com DeletedAt) — GetByID/GetByPath/GetByAppID/GetChildren passam a ignorá-la, mas
+// GetByIDUnscoped/GetChildrenUnscoped ainda a enxergam, igual ao GORM com Unscoped().
 func (m *MockToggleRepository) Delete(id string) error {
 	if m.DeleteError != nil {
 		return m.DeleteError
 	}
-	delete(m.Toggles, id)
-	return nil
-}
-
-func (m *MockToggleRepository) DeleteByPath(path string, appID string) error {
-	for _, toggle := range m.Toggles {
-		if toggle.Path == path && toggle.AppID == appID {
-			return m.Delete(toggle.ID)
+	toggle, exists := m.Toggles[id]
+	if !exists {
+		return nil
+	}
+	children, err := m.GetChildrenUnscoped(id)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := m.Delete(child.ID); err != nil {
+			return err
 		}
 	}
-	return errors.New("toggle not found")
+	toggle.DeletedAt = gorm.DeletedAt{Time: time.Now(), Valid: true}
+	return nil
 }
 
 func (m *MockToggleRepository) Exists(path string, appID string) (bool, error) {
@@ -194,7 +203,7 @@ func (m *MockToggleRepository) Exists(path string, appID string) (bool, error) {
 		return false, m.ExistsError
 	}
 	for _, toggle := range m.Toggles {
-		if toggle.Path == path && toggle.AppID == appID {
+		if toggle.Path == path && toggle.AppID == appID && !toggle.DeletedAt.Valid {
 			return true, nil
 		}
 	}
@@ -204,11 +213,75 @@ func (m *MockToggleRepository) Exists(path string, appID string) (bool, error) {
 func (m *MockToggleRepository) GetChildren(parentID string) ([]*entity.Toggle, error) {
 	var children []*entity.Toggle
 	for _, toggle := range m.Toggles {
+		if toggle.ParentID != nil && *toggle.ParentID == parentID && !toggle.DeletedAt.Valid {
+			children = append(children, toggle)
+		}
+	}
+	return children, nil
+}
+
+func (m *MockToggleRepository) MarkDeletionMeta(id string, deletedBy string) error {
+	toggle, exists := m.Toggles[id]
+	if !exists {
+		return errors.New("toggle not found")
+	}
+	toggle.DeletedBy = &deletedBy
+	toggle.ArchivedRoot = true
+	return nil
+}
+
+func (m *MockToggleRepository) GetByIDUnscoped(id string) (*entity.Toggle, error) {
+	toggle, exists := m.Toggles[id]
+	if !exists {
+		return nil, errors.New("toggle not found")
+	}
+	return toggle, nil
+}
+
+func (m *MockToggleRepository) GetChildrenUnscoped(parentID string) ([]*entity.Toggle, error) {
+	var children []*entity.Toggle
+	for _, toggle := range m.Toggles {
 		if toggle.ParentID != nil && *toggle.ParentID == parentID {
 			children = append(children, toggle)
 		}
 	}
 	return children, nil
+}
+
+func (m *MockToggleRepository) GetArchivedRootsByAppID(appID string) ([]*entity.ArchivedToggle, error) {
+	var results []*entity.ArchivedToggle
+	for _, toggle := range m.Toggles {
+		if toggle.AppID == appID && toggle.ArchivedRoot && toggle.DeletedAt.Valid {
+			name := ""
+			if toggle.DeletedBy != nil {
+				name = *toggle.DeletedBy
+			}
+			results = append(results, &entity.ArchivedToggle{
+				ID: toggle.ID, Path: toggle.Path, DeletedAt: toggle.DeletedAt.Time, DeletedByName: name,
+			})
+		}
+	}
+	return results, nil
+}
+
+func (m *MockToggleRepository) Restore(id string) error {
+	toggle, exists := m.Toggles[id]
+	if !exists {
+		return errors.New("toggle not found")
+	}
+	children, err := m.GetChildrenUnscoped(id)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := m.Restore(child.ID); err != nil {
+			return err
+		}
+	}
+	toggle.DeletedAt = gorm.DeletedAt{}
+	toggle.DeletedBy = nil
+	toggle.ArchivedRoot = false
+	return nil
 }
 
 // MockUserRepository represents a mock implementation of UserRepository

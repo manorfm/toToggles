@@ -3,6 +3,8 @@ package entity
 import (
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // Toggle representa um feature toggle com estrutura hierárquica
@@ -18,6 +20,16 @@ type Toggle struct {
 	ActivationRule    *ActivationRule `json:"activation_rule,omitempty" gorm:"embedded;embeddedPrefix:rule_"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
+
+	// Reversibilidade de exclusão (v2.6 §4.1): DeletedAt é o tipo que o GORM reconhece
+	// nativamente como soft-delete — toda query existente (GetByID/GetByPath/GetChildren/...)
+	// passa a ignorar linhas apagadas automaticamente, e Unscoped() as revela de volta pra
+	// restauração/listagem de arquivados. ArchivedRoot marca só o nó em que o usuário clicou
+	// "Delete" (não toda a subárvore que foi junto em cascata) — é o que a tela "Archived" lista,
+	// um item por operação de exclusão.
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+	DeletedBy    *string        `json:"deleted_by,omitempty" gorm:"type:varchar(26)"`
+	ArchivedRoot bool           `json:"-" gorm:"column:archived_root;not null;default:false"`
 
 	// Relacionamentos
 	Parent   *Toggle   `json:"parent,omitempty" gorm:"foreignKey:ParentID"`
@@ -80,6 +92,16 @@ func (t *Toggle) GetFullPath() string {
 		return t.Parent.GetFullPath() + "." + t.Value
 	}
 	return t.Value
+}
+
+// ArchivedToggle é a raiz de uma exclusão arquivada (v2.6 §4.1) — um item por operação de
+// exclusão, com o nome de quem apagou já resolvido (join com users), pra alimentar a modal
+// "Archived" sem o frontend precisar de uma segunda chamada.
+type ArchivedToggle struct {
+	ID            string    `json:"id"`
+	Path          string    `json:"path"`
+	DeletedAt     time.Time `json:"deleted_at"`
+	DeletedByName string    `json:"deleted_by_name"`
 }
 
 // ParseTogglePath converte uma string de caminho em partes

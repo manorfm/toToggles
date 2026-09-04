@@ -87,15 +87,20 @@ export function formatAuditWhen(isoDate: string, now: Date = new Date()): string
 // dangerouslySetInnerHTML. NÃO reproduzimos isso com dangerouslySetInnerHTML: entry.text pode
 // conter um valor definido pelo usuário (nome de time, path de toggle, nome de usuário...), e
 // injetar HTML bruto a partir disso seria XSS armazenado de verdade — qualquer um com acesso ao
-// team veria o JS executar. Em vez disso, o backend só emite o marcador literal `<b>...</b>`
-// (nunca outra tag), e este parser reconhece SÓ esse marcador e monta elementos React de verdade
-// — qualquer outro caractere (inclusive `<`/`>`/`&` vindos de um nome malicioso) vira texto puro,
-// nunca é interpretado como markup. Pior caso de abuso (um nome que contenha literalmente
-// "<b>...</b>") só deixa aquele trecho em negrito — cosmético, não uma vulnerabilidade.
+// team veria o JS executar. Em vez disso, o backend só emite os marcadores literais `<b>...</b>`
+// e `<i>...</i>` (nunca outra tag — o segundo cobre o sufixo confirmado "(no effect — X is off)"
+// de um enable sem efeito, v2.6 §3.3), e este parser reconhece SÓ esses dois marcadores e monta
+// elementos React de verdade — qualquer outro caractere (inclusive `<`/`>`/`&` vindos de um nome
+// malicioso) vira texto puro, nunca é interpretado como markup. Pior caso de abuso (um nome que
+// contenha literalmente "<b>...</b>"/"<i>...</i>") só deixa aquele trecho em negrito/itálico —
+// cosmético, não uma vulnerabilidade.
 export function renderAuditText(text: string): ReactNode[] {
-  const parts = text.split(/(<b>.*?<\/b>)/g);
+  const parts = text.split(/(<b>.*?<\/b>|<i>.*?<\/i>)/g);
   return parts.map((part, i) => {
-    const match = /^<b>(.*)<\/b>$/.exec(part);
-    return match ? <b key={i}>{match[1]}</b> : part;
+    const bold = /^<b>(.*)<\/b>$/.exec(part);
+    if (bold) return <b key={i}>{bold[1]}</b>;
+    const italic = /^<i>(.*)<\/i>$/.exec(part);
+    if (italic) return <i key={i}>{italic[1]}</i>;
+    return part;
   });
 }

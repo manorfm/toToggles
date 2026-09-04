@@ -162,7 +162,8 @@ Standard error body (most handlers; some legacy handlers use a simpler `{"error"
 ```
 
 Error codes: `T0001` validation, `T0002` not found, `T0003` already exists, `T0004` database error, `T0005`
-internal error, `T0006` invalid path, `T0007` invalid toggle, `T0008` toggle has children (delete refused).
+internal error, `T0006` invalid path, `T0007` invalid toggle. `T0008` (toggle has children, delete refused)
+was removed in v2.6 — deleting a toggle with children is no longer an error, see §7.
 
 ## Quick endpoint index
 
@@ -193,9 +194,11 @@ GET    /api/applications/:id/secret-keys          # admin/root only
 # Toggles (session required)
 POST   /api/applications/:id/toggles                       # approval-aware, min role admin
 GET    /api/applications/:id/toggles                       # ?hierarchy=true for tree view
+GET    /api/applications/:id/toggles/archived               # archive roots (deleted toggles), min role admin
 GET    /api/applications/:id/toggles/:toggleId
 PUT    /api/applications/:id/toggles/:toggleId              # approval-aware, min role admin
-DELETE /api/applications/:id/toggles/:toggleId              # approval-aware, min role admin
+DELETE /api/applications/:id/toggles/:toggleId              # approval-aware, min role admin — recursive, soft-delete
+POST   /api/applications/:id/toggles/:toggleId/restore       # undo a delete, min role admin, not approval-aware
 PUT    /api/applications/:id/toggle/:toggleId                # recursive enable/disable, approval-aware, min role admin
 
 # Secret keys management (session required)
@@ -785,17 +788,54 @@ cleared.
 
 Response: the updated `Toggle` entity.
 
+Unlike this endpoint's UI (`EditToggleDrawer`), the recursive one below leaves its own status
+switch enabled even when an ancestor is off — enabling a toggle here is allowed but has no
+practical effect until the blocking ancestor is also turned on. When that happens, the
+`toggle_enabled` audit event's text gets an extra suffix naming the specific blocking segment:
+`Enabled <b>{value}</b> <i>(no effect — {ancestor} is off)</i>` (v2.6 §3.3). The suffix only
+appears on this non-recursive endpoint — the recursive one below has no equivalent client-side
+path that could enable a toggle whose ancestor is off, so it never needs the check.
+
 ```http
 DELETE /api/applications/:id/toggles/:toggleId
 ```
 
-Approval-aware, minimum role `admin`. **A toggle with children cannot be deleted directly**: the call
-returns `400` with `{"code": "T0008", "message": "toggle has children and cannot be deleted directly"}`
-and nothing is removed — delete the descendants first (or delete the application to cascade the whole
-tree). When the toggle has no children, it is removed, and then the parent is checked recursively: if
-removing this toggle leaves its parent with no other children, the parent is deleted too (bubbling
-cleanup up the chain, silently stopping — not an error — at the first ancestor that still has another
-child), and so on, until a parent with remaining children or a root is reached.
+Approval-aware, minimum role `admin`. **Recursive and reversible (v2.6 §3.4/4.1)**: deletes the
+targeted toggle and its entire descendant subtree in one call — a node with children is no longer
+refused (the old `T0008`/"toggle has children" error code was removed). Deletion is a soft-delete
+(the rows stay in the database, just excluded from every normal read), and only the exact toggle
+the caller targeted is marked as the *archive root* (see `GET .../toggles/archived` below) — the
+cascaded descendants are hidden along with it but aren't separate archive entries. Ancestors are
+never touched: this endpoint does not bubble up to remove a parent left with no other children
+(that cleanup existed only because deletion used to be leaf-only; now that any node can be deleted
+directly, an emptied ancestor is just another node the caller can delete explicitly if they want).
+
+```http
+POST /api/applications/:id/toggles/:toggleId/restore
+```
+
+Minimum role `admin`, **not** approval-aware (undoing a decided, already-audited action isn't a
+new mutation to review). Restores a previously deleted toggle and its whole subtree. `404` if the
+toggle was never deleted or isn't the archive root of its deletion (a cascaded descendant has no
+independent restore point — restore the root instead). `409` (`T0003`, already-exists) if a live
+toggle now occupies the same path (or the path of any descendant in the archived subtree) —
+restore is refused rather than creating a path collision.
+
+```http
+GET /api/applications/:id/toggles/archived
+```
+
+Minimum role `admin`. Lists archive roots (one entry per delete operation, most recent first) for
+an application:
+
+```json
+{
+  "message": "archived toggles retrieved successfully",
+  "toggles": [
+    { "id": "01TGL...", "path": "payments.card", "deleted_at": "2026-09-03T12:00:00Z", "deleted_by_name": "alice" }
+  ]
+}
+```
 
 ```http
 PUT /api/applications/:id/toggle/:toggleId
@@ -1329,16 +1369,19 @@ carry no team at all and are therefore only ever visible to root.
 }
 ```
 
-`next_cursor` is `""` when there is no further page. `text` may embed the literal marker `<b>...</b>`
-around the key term of the sentence (e.g. `"Disabled <b>experiments</b> branch"`), matching the real
-prototype's own audit text (`app.jsx#logAudit`, `AUDIT_SEED`). `target` never does. **This is not raw
-HTML** — the client never renders `text` via `dangerouslySetInnerHTML` (the prototype does; this API
-deliberately doesn't behave like that). Since `text` can embed a user-controlled value (a toggle path, an
-application/team/user name), rendering it as real HTML would be a stored-XSS vector — instead, the
-client (`server/web/src/lib/auditEvents.tsx#renderAuditText`) recognizes only the exact `<b>...</b>`
-marker and builds a real React `<b>` element from it; every other character — including `<`, `>`, `&`
-from a malicious name — renders as inert plain text. Worst case a malicious value contains a literal
-`<b>...</b>` itself: that portion renders bold, which is cosmetic, not a vulnerability.
+`next_cursor` is `""` when there is no further page. `text` may embed the literal markers `<b>...</b>`
+around the key term of the sentence (e.g. `"Disabled <b>experiments</b> branch"`) and, only on
+`toggle_enabled` when the enable had no practical effect (v2.6 §3.3), `<i>...</i>` around a trailing
+`(no effect — {ancestor} is off)` note — both match the real prototype's own audit text (`app.jsx#logAudit`,
+`AUDIT_SEED`). `target` never does. **This is not raw HTML** — the client never renders `text` via
+`dangerouslySetInnerHTML` (the prototype does; this API deliberately doesn't behave like that). Since
+`text` can embed a user-controlled value (a toggle path, an application/team/user name), rendering it as
+real HTML would be a stored-XSS vector — instead, the client
+(`server/web/src/lib/auditEvents.tsx#renderAuditText`) recognizes only the exact `<b>...</b>` and
+`<i>...</i>` markers and builds real React `<b>`/`<i>` elements from them; every other character —
+including `<`, `>`, `&` from a malicious name — renders as inert plain text. Worst case a malicious
+value contains a literal `<b>...</b>`/`<i>...</i>` itself: that portion renders bold/italic, which is
+cosmetic, not a vulnerability.
 
 **Coverage — what actually writes an entry**: every *immediate* mutation (the approval workflow
 disabled, or that action type not configured to require it) writes an entry at the point of execution:

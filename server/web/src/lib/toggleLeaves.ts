@@ -78,6 +78,69 @@ export function countToggleTree(hierarchy: ToggleNode[]): { total: number; on: n
   return { total, on };
 }
 
+// Localiza um nó em qualquer profundidade da hierarquia, devolvendo-o junto do caminho
+// raiz→nó (segs inclui o próprio nó, ao contrário do findNode() do protótipo real, que devolve
+// só o caminho ATÉ o nó — aqui o caminho completo é o formato que countDescendants/
+// activeLeavesUnder abaixo precisam pra montar paths de folha).
+export function findToggleNode(hierarchy: ToggleNode[], id: string): { node: ToggleNode; segs: string[] } | null {
+  for (const node of hierarchy) {
+    if (node.id === id) return { node, segs: [node.value] };
+    const found = node.toggles ? findToggleNode(node.toggles, id) : null;
+    if (found) return { node: found.node, segs: [node.value, ...found.segs] };
+  }
+  return null;
+}
+
+// Port de countDescendants() (data.js, ver o aviso no topo deste arquivo) — conta todo nó
+// abaixo do dado, excluindo ele mesmo. Usado pelo ConfirmModal de exclusão de toggle (v2.6
+// §3.4) pra avisar quantos descendentes uma exclusão em cascata vai levar junto.
+export function countDescendants(node: ToggleNode): number {
+  let total = 0;
+  for (const child of node.toggles ?? []) {
+    total++;
+    total += countDescendants(child);
+  }
+  return total;
+}
+
+// Port de activeLeavesUnder() (data.js) — lista o path completo (pontilhado) de toda folha
+// efetivamente ativa sob o nó dado. Diferente do protótipo, que recebe um flag `ancestorsOn`
+// separado (sua árvore guarda só o bit PRÓPRIO de cada nó), aqui ToggleNode.enabled já vem
+// cascateado (own AND parent) do endpoint hierarchy — o estado "efetivamente ativo" de cada
+// folha já está embutido no próprio node.enabled, sem precisar recomputar o estado dos
+// ancestrais acima do nó.
+export function activeLeavesUnder(node: ToggleNode, segsToNode: string[]): string[] {
+  const out: string[] = [];
+
+  function walk(n: ToggleNode, segs: string[]) {
+    if (!n.toggles || n.toggles.length === 0) {
+      if (n.enabled) out.push(segs.join("."));
+    } else {
+      for (const child of n.toggles) walk(child, [...segs, child.value]);
+    }
+  }
+
+  walk(node, segsToNode);
+  return out;
+}
+
+// Port de ancestorsEnabledFor() (app.jsx) — mas sobre ToggleLeaf.enabledOwn (bit próprio,
+// não cascateado) em vez de reandar a árvore, já que essa é a única fonte com o bit próprio de
+// um ancestral arbitrário (ToggleNode.enabled do endpoint hierarchy já vem cascateado — ver o
+// header de flattenToLeaves acima). Usado por EditToggleDrawer (v2.6 §3.3) pro aviso "This has
+// no effect right now — {blockerSeg} above it is off". Só olha os segmentos ACIMA do nó (nunca
+// o próprio bit dele) — mesma semântica do protótipo, onde `enabled` (o switch ao vivo no
+// drawer) e `ancestorsOn` são checados separadamente (`ineffective = enabled && !ancestorsOn`).
+export function ancestorsEnabledFor(leaves: ToggleLeaf[], toggleId: string): { ok: boolean; blocker: string | null } {
+  for (const leaf of leaves) {
+    const idx = leaf.ids.indexOf(toggleId);
+    if (idx === -1) continue;
+    const blockerIdx = leaf.enabledOwn.slice(0, idx).findIndex((on) => !on);
+    return { ok: blockerIdx === -1, blocker: blockerIdx === -1 ? null : leaf.segs[blockerIdx] };
+  }
+  return { ok: true, blocker: null };
+}
+
 export function filterLeaves(leaves: ToggleLeaf[], search: string): ToggleLeaf[] {
   const q = search.trim().toLowerCase();
   if (!q) return leaves;

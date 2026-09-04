@@ -727,7 +727,7 @@ func TestToggleUseCase_DeleteToggleByID(t *testing.T) {
 			tt.setupMock(toggleMock, appMock)
 
 			useCase := NewToggleUseCase(toggleMock, appMock)
-			err := useCase.DeleteToggleByID(tt.toggleID, tt.appID)
+			err := useCase.DeleteToggleByID(tt.toggleID, tt.appID, "deleter-1")
 
 			if tt.expectedError != "" {
 				if err == nil {
@@ -751,12 +751,14 @@ func TestToggleUseCase_DeleteToggleByID(t *testing.T) {
 	}
 }
 
-func TestToggleUseCase_DeleteToggleByID_Recursion(t *testing.T) {
+// v2.6 §3.4/4.1: apagar um nó com filhos deixou de ser recusado — vira uma exclusão recursiva
+// (soft-delete) de toda a subárvore descendente, marcando só o nó clicado como ArchivedRoot.
+func TestToggleUseCase_DeleteToggleByID_RecursivelyDeletesWholeSubtree(t *testing.T) {
 	toggleMock := NewMockToggleRepository()
 	appMock := NewMockApplicationRepository()
 	appID := "app123"
 
-	// Monta hierarquia: root -> a -> b -> c
+	// root -> a -> b -> c
 	root := &entity.Toggle{ID: "root", AppID: appID, Value: "root"}
 	a := &entity.Toggle{ID: "a", AppID: appID, Value: "a", ParentID: &root.ID}
 	b := &entity.Toggle{ID: "b", AppID: appID, Value: "b", ParentID: &a.ID}
@@ -769,83 +771,62 @@ func TestToggleUseCase_DeleteToggleByID_Recursion(t *testing.T) {
 
 	useCase := NewToggleUseCase(toggleMock, appMock)
 
-	err := useCase.DeleteToggleByID("c", appID)
-	if err != nil {
+	if err := useCase.DeleteToggleByID("a", appID, "deleter-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Todos devem ser removidos
-	if len(toggleMock.Toggles) != 0 {
-		t.Errorf("expected all toggles to be deleted, got: %v", toggleMock.Toggles)
+
+	// a, b, c (a e toda a subárvore) somem das leituras normais...
+	if _, err := useCase.GetToggleByID("a", appID); err == nil {
+		t.Error("expected 'a' to be soft-deleted")
+	}
+	if _, err := useCase.GetToggleByID("b", appID); err == nil {
+		t.Error("expected 'b' to be soft-deleted (descendant)")
+	}
+	if _, err := useCase.GetToggleByID("c", appID); err == nil {
+		t.Error("expected 'c' to be soft-deleted (descendant)")
+	}
+	// ...mas continuam existindo fisicamente (soft-delete), com "a" marcado como a raiz.
+	archivedA, err := toggleMock.GetByIDUnscoped("a")
+	if err != nil {
+		t.Fatalf("expected 'a' to still exist unscoped: %v", err)
+	}
+	if !archivedA.ArchivedRoot {
+		t.Error("expected 'a' (the node the caller targeted) to be ArchivedRoot")
+	}
+	if archivedA.DeletedBy == nil || *archivedA.DeletedBy != "deleter-1" {
+		t.Errorf("expected DeletedBy 'deleter-1', got %v", archivedA.DeletedBy)
+	}
+	archivedB, err := toggleMock.GetByIDUnscoped("b")
+	if err != nil {
+		t.Fatalf("expected 'b' to still exist unscoped: %v", err)
+	}
+	if archivedB.ArchivedRoot {
+		t.Error("expected 'b' (cascaded descendant, not the target) to NOT be ArchivedRoot")
 	}
 }
 
-func TestToggleUseCase_DeleteToggleByID_StopsOnSibling(t *testing.T) {
+// Sem bubble-up: apagar um nó nunca sobe removendo ancestrais que ficaram sem filhos — esse
+// comportamento existia só porque a exclusão era restrita a folhas (não é mais o caso, ver acima).
+// root permanece intacto e visível mesmo perdendo seu único filho.
+func TestToggleUseCase_DeleteToggleByID_NeverTouchesAncestors(t *testing.T) {
 	toggleMock := NewMockToggleRepository()
 	appMock := NewMockApplicationRepository()
 	appID := "app123"
 
-	// root -> a -> b, a -> d
 	root := &entity.Toggle{ID: "root", AppID: appID, Value: "root"}
 	a := &entity.Toggle{ID: "a", AppID: appID, Value: "a", ParentID: &root.ID}
-	b := &entity.Toggle{ID: "b", AppID: appID, Value: "b", ParentID: &a.ID}
-	d := &entity.Toggle{ID: "d", AppID: appID, Value: "d", ParentID: &a.ID}
 
 	toggleMock.Toggles[root.ID] = root
 	toggleMock.Toggles[a.ID] = a
-	toggleMock.Toggles[b.ID] = b
-	toggleMock.Toggles[d.ID] = d
 
 	useCase := NewToggleUseCase(toggleMock, appMock)
 
-	err := useCase.DeleteToggleByID("b", appID)
-	if err != nil {
+	if err := useCase.DeleteToggleByID("a", appID, "deleter-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// d, a, root devem permanecer
-	if _, ok := toggleMock.Toggles["d"]; !ok {
-		t.Errorf("expected sibling d to remain")
-	}
-	if _, ok := toggleMock.Toggles["a"]; !ok {
-		t.Errorf("expected parent a to remain (has sibling)")
-	}
-	if _, ok := toggleMock.Toggles["root"]; !ok {
-		t.Errorf("expected root to remain")
-	}
-}
 
-func TestToggleUseCase_DeleteToggleByID_RefusesNodeWithChildren(t *testing.T) {
-	toggleMock := NewMockToggleRepository()
-	appMock := NewMockApplicationRepository()
-	appID := "app123"
-
-	// root -> a -> b
-	root := &entity.Toggle{ID: "root", AppID: appID, Value: "root"}
-	a := &entity.Toggle{ID: "a", AppID: appID, Value: "a", ParentID: &root.ID}
-	b := &entity.Toggle{ID: "b", AppID: appID, Value: "b", ParentID: &a.ID}
-
-	toggleMock.Toggles[root.ID] = root
-	toggleMock.Toggles[a.ID] = a
-	toggleMock.Toggles[b.ID] = b
-
-	useCase := NewToggleUseCase(toggleMock, appMock)
-
-	err := useCase.DeleteToggleByID("a", appID)
-	if err == nil {
-		t.Fatal("expected error deleting a node with children, got nil")
-	}
-	appErr, ok := err.(*entity.AppError)
-	if !ok {
-		t.Fatalf("expected AppError, got %T", err)
-	}
-	if appErr.Code != entity.ErrCodeHasChildren {
-		t.Errorf("expected code %s, got %s", entity.ErrCodeHasChildren, appErr.Code)
-	}
-	// Nada deve ter sido removido
-	if _, ok := toggleMock.Toggles["a"]; !ok {
-		t.Errorf("expected 'a' to remain")
-	}
-	if _, ok := toggleMock.Toggles["b"]; !ok {
-		t.Errorf("expected child 'b' to remain")
+	if _, err := useCase.GetToggleByID("root", appID); err != nil {
+		t.Errorf("expected root to remain untouched, got error: %v", err)
 	}
 }
 
@@ -1110,6 +1091,54 @@ func TestToggleUseCase_UpdateToggleWithRule_EdgeCases(t *testing.T) {
 		}
 		if updatedToggle.ActivationRule != nil {
 			t.Errorf("Expected ActivationRule to be nil")
+		}
+	})
+}
+
+// AncestorBlocker sustenta o sufixo "(no effect — X is off)" no evento de auditoria de
+// habilitar um toggle via drawer (v2.6 §3.3) — só olha o bit PRÓPRIO de cada ancestral (nunca o
+// do próprio nó), nomeando o mais próximo da raiz que estiver desligado.
+func TestToggleUseCase_AncestorBlocker(t *testing.T) {
+	appMock := NewMockApplicationRepository()
+	toggleMock := NewMockToggleRepository()
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	blockedRoot := &entity.Toggle{ID: "blocked-root", Value: "user", Path: "user", Enabled: false}
+	blockedMid := &entity.Toggle{ID: "blocked-mid", Value: "payments", Path: "user.payments", ParentID: &blockedRoot.ID, Enabled: true}
+	blockedLeaf := &entity.Toggle{ID: "blocked-leaf", Value: "card", Path: "user.payments.card", ParentID: &blockedMid.ID, Enabled: true}
+	okRoot := &entity.Toggle{ID: "ok-root", Value: "billing", Path: "billing", Enabled: true}
+	okMid := &entity.Toggle{ID: "ok-mid", Value: "invoices", Path: "billing.invoices", ParentID: &okRoot.ID, Enabled: true}
+	for _, tg := range []*entity.Toggle{blockedRoot, blockedMid, blockedLeaf, okRoot, okMid} {
+		toggleMock.Toggles[tg.ID] = tg
+	}
+
+	t.Run("names the topmost (closest to the root) disabled ancestor", func(t *testing.T) {
+		ok, blocker := useCase.AncestorBlocker(blockedLeaf)
+		if ok {
+			t.Error("expected ok=false, an ancestor is off")
+		}
+		if blocker != "user" {
+			t.Errorf("expected blocker %q, got %q", "user", blocker)
+		}
+	})
+
+	t.Run("is ok when every ancestor above it is on", func(t *testing.T) {
+		ok, blocker := useCase.AncestorBlocker(okMid)
+		if !ok {
+			t.Errorf("expected ok=true, got blocker %q", blocker)
+		}
+		if blocker != "" {
+			t.Errorf("expected empty blocker, got %q", blocker)
+		}
+	})
+
+	t.Run("is ok for a root-level toggle (no ancestors at all)", func(t *testing.T) {
+		ok, blocker := useCase.AncestorBlocker(okRoot)
+		if !ok {
+			t.Errorf("expected ok=true for a root-level toggle, got blocker %q", blocker)
+		}
+		if blocker != "" {
+			t.Errorf("expected empty blocker, got %q", blocker)
 		}
 	})
 }

@@ -136,6 +136,35 @@ func (uc *ToggleUseCase) isToggleEnabled(toggle *entity.Toggle) bool {
 	return true
 }
 
+// AncestorBlocker sustenta o aviso/sufixo de auditoria "(no effect — X is off)" quando um
+// toggle é ligado via drawer mesmo com um ancestral desligado (v2.6 §3.3, port de
+// ancestorsEnabledFor() do protótipo real — ver lib/toggleLeaves.ts#ancestorsEnabledFor no
+// frontend, equivalente client-side). Olha só o bit PRÓPRIO de cada ancestral (nunca o do
+// próprio toggle), nomeando o mais próximo da RAIZ que estiver desligado — não o mais próximo
+// do nó — mesma semântica confirmada no protótipo (`ancestorsEnabledFor`, que anda raiz→nó e
+// para no primeiro desligado).
+func (uc *ToggleUseCase) AncestorBlocker(toggle *entity.Toggle) (bool, string) {
+	var chain []*entity.Toggle
+	current := toggle
+	for current.ParentID != nil {
+		parent, err := uc.toggleRepo.GetByID(*current.ParentID)
+		if err != nil {
+			break
+		}
+		chain = append(chain, parent)
+		current = parent
+	}
+	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+		chain[i], chain[j] = chain[j], chain[i]
+	}
+	for _, ancestor := range chain {
+		if !ancestor.Enabled {
+			return false, ancestor.Value
+		}
+	}
+	return true, ""
+}
+
 // UpdateToggle atualiza um toggle
 func (uc *ToggleUseCase) UpdateToggle(path string, enabled bool, appID string) error {
 	if path == "" {
@@ -156,35 +185,6 @@ func (uc *ToggleUseCase) UpdateToggle(path string, enabled bool, appID string) e
 	err = uc.toggleRepo.Update(toggle)
 	if err != nil {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
-	}
-
-	return nil
-}
-
-// DeleteToggle remove um toggle e seus filhos
-func (uc *ToggleUseCase) DeleteToggle(path string, appID string) error {
-	if path == "" {
-		return entity.NewAppError(entity.ErrCodeValidation, "toggle path is required")
-	}
-
-	if appID == "" {
-		return entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
-	}
-
-	// Verifica se o toggle existe
-	exists, err := uc.toggleRepo.Exists(path, appID)
-	if err != nil {
-		return entity.NewAppError(entity.ErrCodeDatabase, "error checking toggle existence")
-	}
-
-	if !exists {
-		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
-	}
-
-	// Remove o toggle e seus filhos
-	err = uc.toggleRepo.DeleteByPath(path, appID)
-	if err != nil {
-		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
 	}
 
 	return nil
@@ -333,13 +333,18 @@ func (uc *ToggleUseCase) UpdateToggleByID(toggleID string, enabled bool, appID s
 	return nil
 }
 
-// DeleteToggleByID remove um toggle por ID e appID, subindo recursivamente se o pai ficar sem filhos
-func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
+// DeleteToggleByID remove um toggle por ID e appID — recursivo (v2.6 §3.4/4.1): o nó e toda a
+// subárvore descendente são soft-apagados numa vez, nunca mais recusado por ter filhos. Não sobe
+// removendo ancestrais que ficaram sem filhos (comportamento antigo, existia só porque a exclusão
+// era restrita a folhas — irrelevante agora que qualquer nó pode ser apagado diretamente; um
+// ramo vazio remanescente é só mais um nó que o usuário pode apagar explicitamente, como qualquer
+// outro). deletedBy fica gravado no nó raiz do arquivamento (não na subárvore inteira), pra
+// GetArchivedToggles saber quem apagou.
+func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string, deletedBy string) error {
 	if toggleID == "" || appID == "" {
 		return entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
 	}
 
-	// Busca o toggle pelo id e appId
 	toggle, err := uc.toggleRepo.GetByID(toggleID)
 	if err != nil {
 		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
@@ -348,53 +353,80 @@ func (uc *ToggleUseCase) DeleteToggleByID(toggleID string, appID string) error {
 		return entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
 	}
 
-	// Verifica se existe outro toggle com parent_id = id e appId = appId
-	children, err := uc.toggleRepo.GetChildren(toggleID)
-	if err != nil {
-		return entity.NewAppError(entity.ErrCodeDatabase, "error checking children")
+	if err := uc.toggleRepo.MarkDeletionMeta(toggleID, deletedBy); err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error marking toggle as deleted")
 	}
-	if len(children) > 0 {
-		return entity.NewAppError(entity.ErrCodeHasChildren, "toggle has children and cannot be deleted directly")
-	}
-
-	// Não tem filhos, pode remover
-	err = uc.toggleRepo.Delete(toggleID)
-	if err != nil {
+	if err := uc.toggleRepo.Delete(toggleID); err != nil {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
-	}
-
-	// Se tem parent, sobe removendo ancestrais que ficaram sem filhos (stop silencioso, não é erro)
-	if toggle.ParentID != nil {
-		return uc.cascadeDeleteEmptyParent(*toggle.ParentID)
 	}
 	return nil
 }
 
-// cascadeDeleteEmptyParent remove um ancestral se ele ficou sem filhos após a remoção de um
-// descendente, subindo recursivamente. Ao contrário de DeleteToggleByID, encontrar um ancestral
-// que ainda tem outros filhos não é um erro — é a condição normal de parada da subida.
-func (uc *ToggleUseCase) cascadeDeleteEmptyParent(toggleID string) error {
-	toggle, err := uc.toggleRepo.GetByID(toggleID)
-	if err != nil {
-		return entity.NewAppError(entity.ErrCodeNotFound, "toggle not found")
+// RestoreToggle traz de volta um toggle previamente apagado (e toda a sua subárvore) — só a raiz
+// de um arquivamento pode ser restaurada diretamente (ArchivedRoot=true); um nó que só foi junto
+// em cascata não tem seu próprio ponto de restauração isolado. Recusa restaurar se já existir um
+// toggle ATIVO no mesmo path (ou de qualquer nó da subárvore restaurada) — evitaria dois toggles
+// vivos com o mesmo path.
+func (uc *ToggleUseCase) RestoreToggle(toggleID string, appID string) error {
+	if toggleID == "" || appID == "" {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle ID and application ID are required")
 	}
 
-	children, err := uc.toggleRepo.GetChildren(toggleID)
+	toggle, err := uc.toggleRepo.GetByIDUnscoped(toggleID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeNotFound, "archived toggle not found")
+	}
+	if toggle.AppID != appID {
+		return entity.NewAppError(entity.ErrCodeValidation, "toggle does not belong to this application")
+	}
+	if !toggle.ArchivedRoot {
+		return entity.NewAppError(entity.ErrCodeValidation, "only the root of an archived deletion can be restored directly")
+	}
+
+	if err := uc.checkRestoreCollision(toggle); err != nil {
+		return err
+	}
+
+	if err := uc.toggleRepo.Restore(toggleID); err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error restoring toggle")
+	}
+	return nil
+}
+
+// checkRestoreCollision percorre a subárvore arquivada (via GetChildrenUnscoped) checando se
+// algum dos paths já foi reocupado por um toggle ativo criado depois da exclusão original.
+func (uc *ToggleUseCase) checkRestoreCollision(toggle *entity.Toggle) error {
+	exists, err := uc.toggleRepo.Exists(toggle.Path, toggle.AppID)
+	if err != nil {
+		return entity.NewAppError(entity.ErrCodeDatabase, "error checking path collision")
+	}
+	if exists {
+		return entity.NewAppError(entity.ErrCodeAlreadyExists, "a toggle already exists at path \""+toggle.Path+"\" — cannot restore")
+	}
+
+	children, err := uc.toggleRepo.GetChildrenUnscoped(toggle.ID)
 	if err != nil {
 		return entity.NewAppError(entity.ErrCodeDatabase, "error checking children")
 	}
-	if len(children) > 0 {
-		return nil
-	}
-
-	if err := uc.toggleRepo.Delete(toggleID); err != nil {
-		return entity.NewAppError(entity.ErrCodeDatabase, "error deleting toggle")
-	}
-
-	if toggle.ParentID != nil {
-		return uc.cascadeDeleteEmptyParent(*toggle.ParentID)
+	for _, child := range children {
+		if err := uc.checkRestoreCollision(child); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// GetArchivedToggles lista as raízes de arquivamento de uma aplicação — um item por operação de
+// exclusão, alimenta a modal "Archived" (v2.6 §4.1).
+func (uc *ToggleUseCase) GetArchivedToggles(appID string) ([]*entity.ArchivedToggle, error) {
+	if appID == "" {
+		return nil, entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
+	}
+	toggles, err := uc.toggleRepo.GetArchivedRootsByAppID(appID)
+	if err != nil {
+		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching archived toggles")
+	}
+	return toggles, nil
 }
 
 // UpdateToggleWithRule atualiza um toggle incluindo regras de ativação

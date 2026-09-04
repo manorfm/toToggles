@@ -74,12 +74,19 @@ func Init(router *gin.Engine) {
 			{
 				toggles.POST("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.CreateToggle)
 				toggles.GET("", handler.GetAllToggles) // Filtrado por permissão internamente
+				// Lista as raízes de arquivamento (toggles apagados) — v2.6 §4.1. Registrada antes
+				// de :toggleId por clareza, mas Gin (radix tree desde v1.7) já prioriza segmentos
+				// estáticos sobre parâmetros no mesmo nível, então não colide com GET .../toggles/:toggleId.
+				toggles.GET("/archived", handler.RequireAdmin(), handler.GetArchivedToggles)
 			}
 			toggleById := protected.Group("/applications/:id/toggles/:toggleId")
 			{
 				toggleById.GET("", handler.GetToggleStatus)
 				toggleById.PUT("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.UpdateToggle)
 				toggleById.DELETE("", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.DeleteToggle)
+				// Restaurar não passa pelo workflow de aprovação — é uma correção/desfazer de uma
+				// ação já decidida (e já auditada), não uma mutação de negócio nova a revisar.
+				toggleById.POST("/restore", handler.RequireAdmin(), handler.RestoreToggle)
 			}
 
 			// Rota para atualizar enabled recursivamente (apenas admin/root)

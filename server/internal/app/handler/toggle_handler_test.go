@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 )
@@ -422,7 +423,11 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 			expectedError:  "toggle does not belong to this application",
 		},
 		{
-			name:     "toggle has children",
+			// v2.6 §3.4/4.1: apagar um nó com filhos deixou de ser recusado — vira uma exclusão
+			// recursiva (soft-delete) de toda a subárvore, sem erro. Ver
+			// TestToggleHandler_DeleteToggle_RecursivelyDeletesChildren logo abaixo pra confirmar
+			// que o filho também some (a asserção genérica desta tabela só checa a resposta HTTP).
+			name:     "toggle with children is deleted recursively, not refused",
 			appID:    "app123",
 			toggleID: "toggle123",
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
@@ -441,8 +446,8 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 					ParentID: &parentID,
 				}
 			},
-			expectedStatus: http.StatusBadRequest,
-			expectedError:  "toggle has children and cannot be deleted directly",
+			expectedStatus: http.StatusOK,
+			expectedError:  "",
 		},
 	}
 
@@ -486,6 +491,128 @@ func TestToggleHandler_DeleteToggle(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Confirma que o DELETE HTTP realmente cascateia pro filho (soft-delete), não só que a resposta
+// HTTP foi 200 — e que o registro na raiz do arquivamento carrega quem apagou.
+func TestToggleHandler_DeleteToggle_RecursivelyDeletesChildrenAndRecordsDeleter(t *testing.T) {
+	router := setupTestRouter()
+	toggleMock := usecase.NewMockToggleRepository()
+	appMock := usecase.NewMockApplicationRepository()
+	parentID := "toggle123"
+	toggleMock.Toggles["toggle123"] = &entity.Toggle{ID: "toggle123", Path: "test.feature", AppID: "app123", Enabled: true}
+	toggleMock.Toggles["child456"] = &entity.Toggle{ID: "child456", Path: "test.feature.child", AppID: "app123", Enabled: true, ParentID: &parentID}
+
+	toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+	handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(appMock, toggleMock), newTestAuditUseCase())
+	router.Use(func(c *gin.Context) {
+		c.Set("user", &entity.User{ID: "deleter-1", Username: "deleter"})
+		c.Next()
+	})
+	router.DELETE("/applications/:id/toggles/:toggleId", handler.DeleteToggle)
+
+	req, _ := http.NewRequest("DELETE", "/applications/app123/toggles/toggle123", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if _, err := toggleMock.GetByID("child456"); err == nil {
+		t.Error("expected child to be soft-deleted along with its parent")
+	}
+	archivedRoot, err := toggleMock.GetByIDUnscoped("toggle123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if archivedRoot.DeletedBy == nil || *archivedRoot.DeletedBy != "deleter-1" {
+		t.Errorf("expected DeletedBy 'deleter-1', got %v", archivedRoot.DeletedBy)
+	}
+}
+
+func TestToggleHandler_RestoreToggle(t *testing.T) {
+	router := setupTestRouter()
+	toggleMock := usecase.NewMockToggleRepository()
+	appMock := usecase.NewMockApplicationRepository()
+	toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+	handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(appMock, toggleMock), newTestAuditUseCase())
+	router.DELETE("/applications/:id/toggles/:toggleId", handler.DeleteToggle)
+	router.POST("/applications/:id/toggles/:toggleId/restore", handler.RestoreToggle)
+
+	toggleMock.Toggles["toggle123"] = &entity.Toggle{ID: "toggle123", Path: "test.feature", AppID: "app123", Enabled: true}
+	delReq, _ := http.NewRequest("DELETE", "/applications/app123/toggles/toggle123", nil)
+	delW := httptest.NewRecorder()
+	router.ServeHTTP(delW, delReq)
+	if delW.Code != http.StatusOK {
+		t.Fatalf("setup: expected delete to succeed, got %d: %s", delW.Code, delW.Body.String())
+	}
+
+	req, _ := http.NewRequest("POST", "/applications/app123/toggles/toggle123/restore", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, err := toggleMock.GetByID("toggle123"); err != nil {
+		t.Errorf("expected toggle to be visible again after restore, got error: %v", err)
+	}
+}
+
+func TestToggleHandler_RestoreToggle_NotFound(t *testing.T) {
+	router := setupTestRouter()
+	toggleMock := usecase.NewMockToggleRepository()
+	appMock := usecase.NewMockApplicationRepository()
+	toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+	handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(appMock, toggleMock), newTestAuditUseCase())
+	router.POST("/applications/:id/toggles/:toggleId/restore", handler.RestoreToggle)
+
+	req, _ := http.NewRequest("POST", "/applications/app123/toggles/nonexistent/restore", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestToggleHandler_GetArchivedToggles(t *testing.T) {
+	router := setupTestRouter()
+	toggleMock := usecase.NewMockToggleRepository()
+	appMock := usecase.NewMockApplicationRepository()
+	toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+	handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(appMock, toggleMock), newTestAuditUseCase())
+	router.DELETE("/applications/:id/toggles/:toggleId", handler.DeleteToggle)
+	router.GET("/applications/:id/toggles/archived", handler.GetArchivedToggles)
+
+	toggleMock.Toggles["toggle123"] = &entity.Toggle{ID: "toggle123", Path: "test.feature", AppID: "app123", Enabled: true}
+	delReq, _ := http.NewRequest("DELETE", "/applications/app123/toggles/toggle123", nil)
+	delW := httptest.NewRecorder()
+	router.ServeHTTP(delW, delReq)
+	if delW.Code != http.StatusOK {
+		t.Fatalf("setup: expected delete to succeed, got %d: %s", delW.Code, delW.Body.String())
+	}
+
+	req, _ := http.NewRequest("GET", "/applications/app123/toggles/archived", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Toggles []struct {
+			ID   string `json:"id"`
+			Path string `json:"path"`
+		} `json:"toggles"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(response.Toggles) != 1 || response.Toggles[0].ID != "toggle123" {
+		t.Errorf("expected exactly the deleted toggle in the archived list, got %+v", response.Toggles)
 	}
 }
 

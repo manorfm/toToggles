@@ -43,11 +43,11 @@ func TestApplicationUseCase_DeleteApplication_CascadeDelete(t *testing.T) {
 			t.Error("Expected application to be deleted")
 		}
 		
-		// Check all toggles were deleted
-		if len(mockToggleRepo.Toggles) != 0 {
-			t.Errorf("Expected all toggles to be deleted, but %d toggles remain", len(mockToggleRepo.Toggles))
-		}
-		
+		// v2.6 §4.1: Delete virou soft-delete — a linha continua no mapa (DeletedAt setado), não
+		// some fisicamente, então checar o tamanho bruto do mapa não reflete mais "apagado". A
+		// checagem que importa é a de baixo: GetByAppID (que já ignora soft-deletados) não deve
+		// devolver nenhum desses toggles.
+
 		// Check no toggles remain associated with the app
 		togglesInApp, err := mockToggleRepo.GetByAppID(appID)
 		if err != nil {

@@ -11,6 +11,8 @@ interface EditToggleDrawerProps {
   applicationId: string;
   toggleId: string;
   childrenCount: number;
+  ancestorsOn: boolean;
+  blockerSeg: string | null;
   isRoot: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -21,7 +23,17 @@ type LoadState = { status: "loading" } | { status: "loaded"; toggle: ToggleDetai
 
 // Adaptado do EditDrawer real (decodificado do bundle — ver lib/activationRuleTypes.ts pro
 // porquê get_full_jsx("EditDrawer") sozinho não bastava aqui).
-export function EditToggleDrawer({ applicationId, toggleId, childrenCount, isRoot, onClose, onSaved, onPendingApproval }: EditToggleDrawerProps) {
+export function EditToggleDrawer({
+  applicationId,
+  toggleId,
+  childrenCount,
+  ancestorsOn,
+  blockerSeg,
+  isRoot,
+  onClose,
+  onSaved,
+  onPendingApproval,
+}: EditToggleDrawerProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [enabled, setEnabled] = useState(true);
   const [ruleOn, setRuleOn] = useState(false);
@@ -53,6 +65,7 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, isRoo
   }, [applicationId, toggleId]);
 
   const selectedRuleMeta = RULE_TYPES.find((r) => r.type === ruleType);
+  const ineffective = enabled && !ancestorsOn;
 
   async function save() {
     if (loadState.status !== "loaded") return;
@@ -127,6 +140,15 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, isRoo
                     <div className="td">When off, this toggle and everything beneath it goes inactive.</div>
                   </div>
                 </div>
+                {ineffective && (
+                  <div className="notice" style={{ marginTop: 10 }}>
+                    <Icon name="warn" size={16} />
+                    <span>
+                      This has <b>no effect right now</b> — <code className="mono">{blockerSeg}</code> above it is off. Turn that
+                      on too if you want this path to actually serve.
+                    </span>
+                  </div>
+                )}
                 {childrenCount > 0 && (
                   <div className="notice" style={{ marginTop: 10 }}>
                     <Icon name="warn" size={16} />

@@ -15,13 +15,22 @@ import { useAppUser } from "../hooks/useAppUser";
 import type { ApplicationDetailTab } from "../hooks/useAppUser";
 import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
-import { buildChildrenCountMap, countToggleTree, flattenToLeaves } from "../lib/toggleLeaves";
-import type { ToggleLeaf } from "../types/toggle";
+import {
+  activeLeavesUnder,
+  ancestorsEnabledFor,
+  buildChildrenCountMap,
+  countDescendants,
+  countToggleTree,
+  findToggleNode,
+  flattenToLeaves,
+} from "../lib/toggleLeaves";
+import type { ToggleLeaf, ToggleNode } from "../types/toggle";
 
 type LoadState =
   | {
       status: "loaded";
       applicationName: string;
+      hierarchy: ToggleNode[];
       leaves: ToggleLeaf[];
       childrenCountById: Map<string, number>;
       stats: { total: number; on: number };
@@ -57,8 +66,12 @@ export function ApplicationDetailScreen() {
   const [tab, setTab] = useState<ApplicationDetailTab>(initialSearchParams.get("tab") === "keys" ? "keys" : "toggles");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
-  const [configuring, setConfiguring] = useState<{ toggleId: string; childrenCount: number } | null>(null);
-  const [deletingToggle, setDeletingToggle] = useState<{ toggleId: string; path: string } | null>(null);
+  const [configuring, setConfiguring] = useState<
+    { toggleId: string; childrenCount: number; ancestorsOn: boolean; blockerSeg: string | null } | null
+  >(null);
+  const [deletingToggle, setDeletingToggle] = useState<
+    { toggleId: string; path: string; descCount: number; activeLeaves: string[] } | null
+  >(null);
   const [deletingApp, setDeletingApp] = useState(false);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -73,6 +86,7 @@ export function ApplicationDetailScreen() {
         setState({
           status: "loaded",
           applicationName: application.name,
+          hierarchy,
           leaves: flattenToLeaves(hierarchy, flat),
           childrenCountById: buildChildrenCountMap(hierarchy),
           stats: countToggleTree(hierarchy),
@@ -234,8 +248,24 @@ export function ApplicationDetailScreen() {
             setSearch={setSearch}
             canEdit={canEdit && !mutating}
             onToggle={handleToggle}
-            onEdit={(toggleId) => setConfiguring({ toggleId, childrenCount: state.childrenCountById.get(toggleId) ?? 0 })}
-            onDelete={(toggleId, path) => setDeletingToggle({ toggleId, path })}
+            onEdit={(toggleId) => {
+              const { ok, blocker } = ancestorsEnabledFor(state.leaves, toggleId);
+              setConfiguring({
+                toggleId,
+                childrenCount: state.childrenCountById.get(toggleId) ?? 0,
+                ancestorsOn: ok,
+                blockerSeg: blocker,
+              });
+            }}
+            onDelete={(toggleId, path) => {
+              const found = findToggleNode(state.hierarchy, toggleId);
+              setDeletingToggle({
+                toggleId,
+                path,
+                descCount: found ? countDescendants(found.node) : 0,
+                activeLeaves: found ? activeLeavesUnder(found.node, found.segs) : [],
+              });
+            }}
           />
         </div>
       )}
@@ -278,6 +308,8 @@ export function ApplicationDetailScreen() {
           applicationId={applicationId}
           toggleId={configuring.toggleId}
           childrenCount={configuring.childrenCount}
+          ancestorsOn={configuring.ancestorsOn}
+          blockerSeg={configuring.blockerSeg}
           isRoot={user.role === "root"}
           onClose={() => setConfiguring(null)}
           onSaved={() => {
@@ -295,11 +327,35 @@ export function ApplicationDetailScreen() {
       {deletingToggle && (
         <ConfirmModal
           title="Delete toggle"
-          sub={`This will permanently remove "${deletingToggle.path}".`}
+          sub="Removes this node and all its descendants"
           danger
-          confirmLabel="Delete"
+          confirmLabel="Delete toggle"
           onClose={() => !deleting && setDeletingToggle(null)}
           onConfirm={confirmDeleteToggle}
+          body={
+            <>
+              <div className="confirm-toggle-path">{deletingToggle.path}</div>
+              {deletingToggle.descCount > 0 && (
+                <div className="notice">
+                  <Icon name="warn" size={16} />
+                  <span>
+                    This toggle has <b>{deletingToggle.descCount}</b> descendant{deletingToggle.descCount > 1 ? "s" : ""} in total. All of
+                    them will be permanently deleted.
+                  </span>
+                </div>
+              )}
+              {deletingToggle.activeLeaves.length > 0 && (
+                <div className="confirm-info">
+                  Currently serving traffic on:
+                  {deletingToggle.activeLeaves.map((p) => (
+                    <code key={p} className="mono" style={{ display: "block", marginTop: 4 }}>
+                      {p}
+                    </code>
+                  ))}
+                </div>
+              )}
+            </>
+          }
         />
       )}
 

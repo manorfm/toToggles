@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildChildrenCountMap, countToggleTree, deriveCardState, filterLeaves, flattenToLeaves } from "./toggleLeaves";
+import {
+  activeLeavesUnder,
+  ancestorsEnabledFor,
+  buildChildrenCountMap,
+  countDescendants,
+  countToggleTree,
+  deriveCardState,
+  filterLeaves,
+  findToggleNode,
+  flattenToLeaves,
+} from "./toggleLeaves";
 import type { ToggleDetail, ToggleNode } from "../types/toggle";
 
 function detail(overrides: Partial<ToggleDetail> & { id: string }): ToggleDetail {
@@ -121,6 +131,119 @@ describe("countToggleTree", () => {
 
   it("returns zeros for an empty tree", () => {
     expect(countToggleTree([])).toEqual({ total: 0, on: 0 });
+  });
+});
+
+describe("findToggleNode", () => {
+  it("finds a node anywhere in the hierarchy, returning it with the root-to-node path", () => {
+    const result = findToggleNode(hierarchy, "payments");
+
+    expect(result?.node.id).toBe("payments");
+    expect(result?.segs).toEqual(["user", "payments"]);
+  });
+
+  it("returns null when the id doesn't exist", () => {
+    expect(findToggleNode(hierarchy, "nope")).toBeNull();
+  });
+});
+
+describe("countDescendants", () => {
+  // Port do countDescendants() real do protótipo (data.js) — conta todo nó ABAIXO do dado,
+  // excluindo ele mesmo. Usado no ConfirmModal de exclusão de toggle (v2.6 §3.4) pra avisar
+  // quantos descendentes serão levados junto por uma exclusão em cascata.
+  it("counts every descendant node, excluding the node itself", () => {
+    const payments = findToggleNode(hierarchy, "payments")!.node;
+
+    expect(countDescendants(payments)).toBe(2); // card, reader
+  });
+
+  it("counts recursively across multiple branches", () => {
+    const user = findToggleNode(hierarchy, "user")!.node;
+
+    expect(countDescendants(user)).toBe(4); // payments, card, reader, billing
+  });
+
+  it("is zero for a leaf node", () => {
+    const card = findToggleNode(hierarchy, "card")!.node;
+
+    expect(countDescendants(card)).toBe(0);
+  });
+});
+
+describe("activeLeavesUnder", () => {
+  // Port de activeLeavesUnder() real do protótipo — lista os paths completos (raiz→folha) de
+  // toda folha efetivamente ativa sob o nó dado. Diferente do protótipo (que recebe um flag
+  // ancestorsOn separado porque sua árvore guarda o bit próprio, não cascateado), aqui
+  // ToggleNode.enabled já vem cascateado (own AND parent) do endpoint hierarchy — então o
+  // estado "efetivamente ativo" de cada folha já está embutido no próprio node.enabled, sem
+  // precisar recomputar o estado dos ancestrais acima do nó.
+  it("lists the full dotted path of every active leaf under the node", () => {
+    const payments = findToggleNode(hierarchy, "payments")!;
+
+    expect(activeLeavesUnder(payments.node, payments.segs)).toEqual(["user.payments.card"]);
+  });
+
+  it("walks every branch, skipping leaves that are off", () => {
+    const user = findToggleNode(hierarchy, "user")!;
+
+    // reader (off) and billing (off) excluded; only card is on
+    expect(activeLeavesUnder(user.node, user.segs)).toEqual(["user.payments.card"]);
+  });
+
+  it("returns the node's own path when the node itself is a leaf and on", () => {
+    const card = findToggleNode(hierarchy, "card")!;
+
+    expect(activeLeavesUnder(card.node, card.segs)).toEqual(["user.payments.card"]);
+  });
+
+  it("returns an empty array when the node itself is a leaf and off", () => {
+    const billing = findToggleNode(hierarchy, "billing")!;
+
+    expect(activeLeavesUnder(billing.node, billing.segs)).toEqual([]);
+  });
+});
+
+describe("ancestorsEnabledFor", () => {
+  // Port de ancestorsEnabledFor() real do protótipo — mas operando sobre ToggleLeaf.enabledOwn
+  // (bit próprio, não cascateado) em vez de reandar a árvore, já que essa é a única fonte que
+  // tem o bit próprio de um ancestral arbitrário (ToggleNode.enabled vem cascateado do endpoint
+  // hierarchy — ver o header de flattenToLeaves acima). Usado por EditToggleDrawer (v2.6 §3.3)
+  // pro aviso "This has no effect right now — {blockerSeg} above it is off".
+  const blockedHierarchy: ToggleNode[] = [
+    {
+      id: "user",
+      value: "user",
+      enabled: true,
+      toggles: [{ id: "payments", value: "payments", enabled: false, toggles: [{ id: "card", value: "card", enabled: false }] }],
+    },
+  ];
+  const blockedFlat: ToggleDetail[] = [
+    detail({ id: "user", value: "user", enabled: true }),
+    detail({ id: "payments", value: "payments", enabled: false }),
+    detail({ id: "card", value: "card", enabled: true }), // card's own bit is on, but blocked by "payments" above it
+  ];
+  const blockedLeaves = flattenToLeaves(blockedHierarchy, blockedFlat);
+
+  it("names the specific ancestor segment that's off, ignoring the node's own bit", () => {
+    expect(ancestorsEnabledFor(blockedLeaves, "card")).toEqual({ ok: false, blocker: "payments" });
+  });
+
+  it("is ok for a node whose own ancestors are all on", () => {
+    expect(ancestorsEnabledFor(blockedLeaves, "payments")).toEqual({ ok: true, blocker: null });
+  });
+
+  it("is ok for a root-level node (no ancestors at all)", () => {
+    expect(ancestorsEnabledFor(blockedLeaves, "user")).toEqual({ ok: true, blocker: null });
+  });
+
+  it("is ok, by default, for an id that isn't present in any leaf", () => {
+    expect(ancestorsEnabledFor(blockedLeaves, "nope")).toEqual({ ok: true, blocker: null });
+  });
+
+  it("matches the normal (unblocked) fixture too", () => {
+    const leaves = flattenToLeaves(hierarchy, flat);
+
+    expect(ancestorsEnabledFor(leaves, "reader")).toEqual({ ok: true, blocker: null });
   });
 });
 

@@ -131,6 +131,14 @@ func DeleteToggle(c *gin.Context) {
 	toggleHandler.DeleteToggle(c)
 }
 
+func RestoreToggle(c *gin.Context) {
+	toggleHandler.RestoreToggle(c)
+}
+
+func GetArchivedToggles(c *gin.Context) {
+	toggleHandler.GetArchivedToggles(c)
+}
+
 func UpdateEnabled(c *gin.Context) {
 	toggleHandler.UpdateEnabled(c)
 }

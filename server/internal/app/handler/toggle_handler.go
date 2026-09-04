@@ -255,8 +255,17 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		}
 		// Confirmado no protótipo real (app.jsx#saveDrawer): `${enabled?"Enabled":"Disabled"}
 		// <b>${seg}</b>` — bolda só o ÚLTIMO segmento (Value), não o path inteiro; target é
-		// `{app.name} · {path completo}`.
-		h.auditUseCase.RecordForApplication(eventType, verb+" <b>"+updatedToggle.Value+"</b>", h.applicationName(appID)+" · "+updatedToggle.Path, appID, auditActor(c))
+		// `{app.name} · {path completo}`. O switch de Status do drawer (diferente do ToggleCard)
+		// não é desabilitado quando um ancestral está off — ligar aqui é permitido mas não tem
+		// efeito nenhum, então o texto ganha o sufixo confirmado " <i>(no effect — X is off)</i>"
+		// só quando isso de fato acontece (patch.enabled && !ancestorsOn no protótipo).
+		suffix := ""
+		if req.Enabled {
+			if ok, blocker := h.toggleUseCase.AncestorBlocker(updatedToggle); !ok {
+				suffix = " <i>(no effect — " + blocker + " is off)</i>"
+			}
+		}
+		h.auditUseCase.RecordForApplication(eventType, verb+" <b>"+updatedToggle.Value+"</b>"+suffix, h.applicationName(appID)+" · "+updatedToggle.Path, appID, auditActor(c))
 	}
 
 	c.JSON(http.StatusOK, updatedToggle)
@@ -286,16 +295,19 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 		lastSegment = toggle.Value
 	}
 
-	err := h.toggleUseCase.DeleteToggleByID(toggleID, appID)
+	actor := auditActor(c)
+	var deletedBy string
+	if actor != nil {
+		deletedBy = actor.ID
+	}
+
+	err := h.toggleUseCase.DeleteToggleByID(toggleID, appID, deletedBy)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
 		if ok {
 			status := http.StatusBadRequest
-			switch appErr.Code {
-			case entity.ErrCodeNotFound:
+			if appErr.Code == entity.ErrCodeNotFound {
 				status = http.StatusNotFound
-			case entity.ErrCodeHasChildren:
-				status = http.StatusBadRequest
 			}
 			c.JSON(status, appErr)
 			return
@@ -311,6 +323,79 @@ func (h *ToggleHandler) DeleteToggle(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "toggle deleted successfully",
 		"id":      toggleID,
+	})
+}
+
+// RestoreToggle traz de volta um toggle previamente apagado (e sua subárvore) — v2.6 §4.1.
+func (h *ToggleHandler) RestoreToggle(c *gin.Context) {
+	appID := c.Param("id")
+	toggleID := c.Param("toggleId")
+	if appID == "" || toggleID == "" {
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		if appID == "" {
+			appErr.AddDetail("appID", "Application ID is required")
+		}
+		if toggleID == "" {
+			appErr.AddDetail("toggleID", "Toggle ID is required")
+		}
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	if err := h.toggleUseCase.RestoreToggle(toggleID, appID); err != nil {
+		appErr, ok := err.(*entity.AppError)
+		if ok {
+			status := http.StatusBadRequest
+			switch appErr.Code {
+			case entity.ErrCodeNotFound:
+				status = http.StatusNotFound
+			case entity.ErrCodeAlreadyExists:
+				status = http.StatusConflict
+			}
+			c.JSON(status, appErr)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
+		return
+	}
+
+	restored, err := h.toggleUseCase.GetToggleByID(toggleID, appID)
+	var lastSegment string
+	if err == nil {
+		lastSegment = restored.Value
+	}
+	h.auditUseCase.RecordForApplication(entity.AuditEventToggleRestored, "Restored toggle <b>"+lastSegment+"</b>", h.applicationName(appID), appID, auditActor(c))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "toggle restored successfully",
+		"id":      toggleID,
+	})
+}
+
+// GetArchivedToggles lista as raízes de arquivamento (toggles apagados) de uma aplicação — v2.6 §4.1.
+func (h *ToggleHandler) GetArchivedToggles(c *gin.Context) {
+	appID := c.Param("id")
+	if appID == "" {
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("appID", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	archived, err := h.toggleUseCase.GetArchivedToggles(appID)
+	if err != nil {
+		appErr, ok := err.(*entity.AppError)
+		if ok {
+			c.JSON(http.StatusBadRequest, appErr)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "archived toggles retrieved successfully",
+		"toggles": archived,
 	})
 }
 

@@ -55,5 +55,7 @@ const (
 	ErrCodeInternal      = "T0005"
 	ErrCodeInvalidPath   = "T0006"
 	ErrCodeInvalidToggle = "T0007"
-	ErrCodeHasChildren   = "T0008"
+	// T0008 (ErrCodeHasChildren) foi removido em v2.6 §3.4/4.1: apagar um toggle com filhos
+	// deixou de ser recusado — vira uma exclusão recursiva (soft-delete de toda a subárvore,
+	// reversível). Código não reatribuído a outro significado.
 )

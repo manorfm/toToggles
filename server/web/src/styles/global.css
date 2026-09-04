@@ -1584,6 +1584,26 @@ input[type="checkbox"] {
   background: color-mix(in oklab, var(--danger) 12%, transparent);
   border-color: color-mix(in oklab, var(--danger) 26%, transparent);
 }
+.confirm-toggle-path {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  word-break: break-all;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.confirm-info {
+  font-size: 13.5px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+.confirm-info b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
 
 /* --- Campo com switch que expande/recolhe (UserModal: "Aprovador do time") — animação
    grid-template-rows 0fr→1fr, truque padrão pra animar altura sem conhecer o valor final em

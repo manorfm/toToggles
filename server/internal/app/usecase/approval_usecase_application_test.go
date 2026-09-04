@@ -70,11 +70,9 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 			t.Error("Expected application to be deleted through approval")
 		}
 		
-		// Check toggles were deleted (cascade)
-		if len(mockToggleRepo.Toggles) != 0 {
-			t.Errorf("Expected all toggles to be deleted in cascade, but %d remain", len(mockToggleRepo.Toggles))
-		}
-		
+		// v2.6 §4.1: Delete virou soft-delete — a linha continua no mapa (DeletedAt setado), a
+		// checagem que importa é a de baixo (GetByAppID já ignora soft-deletados).
+
 		// Verify toggles are no longer associated with the app
 		togglesInApp, err := mockToggleRepo.GetByAppID(appID)
 		if err != nil {

@@ -33,6 +33,9 @@ const (
 	AuditEventToggleEnabled  AuditEventType = "toggle_enabled"
 	AuditEventToggleDisabled AuditEventType = "toggle_disabled"
 	AuditEventToggleRuleSet  AuditEventType = "toggle_rule_set"
+	// AuditEventToggleRestored: v2.6 §4.1, sem equivalente na v1 do protótipo real — apagar um
+	// toggle virou reversível (soft-delete), então restaurar é uma ação de domínio própria.
+	AuditEventToggleRestored AuditEventType = "toggle_restored"
 
 	// Applications ficam na categoria "toggles" — mesma escolha do protótipo real (não têm
 	// categoria própria lá; uma aplicação é, na prática, a raiz de uma árvore de toggles).
@@ -77,7 +80,7 @@ const (
 func (t AuditEventType) EventCategory() AuditCategory {
 	switch t {
 	case AuditEventToggleCreated, AuditEventToggleDeleted, AuditEventToggleEnabled, AuditEventToggleDisabled,
-		AuditEventToggleRuleSet, AuditEventApplicationCreated, AuditEventApplicationUpdated, AuditEventApplicationDeleted:
+		AuditEventToggleRuleSet, AuditEventToggleRestored, AuditEventApplicationCreated, AuditEventApplicationUpdated, AuditEventApplicationDeleted:
 		return AuditCategoryToggles
 	case AuditEventKeyGenerated, AuditEventKeyRevoked:
 		return AuditCategoryKeys
