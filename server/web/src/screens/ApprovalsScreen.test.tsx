@@ -92,7 +92,11 @@ describe("ApprovalsScreen", () => {
   });
 
   it("fetches /approval/requests/approvable for non-root, and shows no status banner or Settings tab", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: [] }));
+    // mockImplementation (não mockResolvedValue): cada chamada precisa do seu próprio objeto
+    // Response — a tela dispara fetches concorrentes de verdade agora (requests + times/
+    // aprovador-status pro banner de §2.10), e um único Response compartilhado só permite
+    // .json() ser lido uma vez antes de rejeitar "body already used" nas demais.
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(200, { message: "ok", data: [] })));
     vi.stubGlobal("fetch", fetchMock);
 
     renderScreen(admin);
@@ -101,6 +105,74 @@ describe("ApprovalsScreen", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/approvable", expect.anything());
     expect(screen.queryByRole("button", { name: /configurar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^settings$/i })).not.toBeInTheDocument();
+  });
+
+  it("warns a non-approver that none of their teams have an approver at all", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/profile/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
+      if (path === "/api/approval/my-approver-teams") return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+      if (path === "/api/approval/teams-without-approver")
+        return Promise.resolve(jsonResponse(200, { message: "ok", data: [{ id: "t1", name: "Payments Squad" }] }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderScreen(admin);
+
+    expect(await screen.findByText(/not an approver on any of your teams/i)).toBeInTheDocument();
+    expect(screen.getByText(/none of them have one/i)).toBeInTheDocument();
+  });
+
+  it("gives the milder message when some other team does have an approver", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/profile/teams")
+        return Promise.resolve(
+          jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }, { id: "t2", name: "Growth" }] })
+        );
+      if (path === "/api/approval/my-approver-teams") return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+      // t2 has SOME approver (just not this user) — only t1 is in the without-approver list.
+      if (path === "/api/approval/teams-without-approver")
+        return Promise.resolve(jsonResponse(200, { message: "ok", data: [{ id: "t1", name: "Payments Squad" }] }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderScreen(admin);
+
+    expect(await screen.findByText(/not an approver on any of your teams/i)).toBeInTheDocument();
+    expect(screen.getByText(/an approver on your team will review it/i)).toBeInTheDocument();
+    expect(screen.queryByText(/none of them have one/i)).not.toBeInTheDocument();
+  });
+
+  it("shows no banner at all once the user is confirmed an approver on some team", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/profile/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] }));
+      if (path === "/api/approval/my-approver-teams") return Promise.resolve(jsonResponse(200, { message: "ok", data: ["t1"] }));
+      if (path === "/api/approval/teams-without-approver") return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderScreen(admin);
+    await screen.findByText(/tudo limpo/i);
+
+    expect(screen.queryByText(/not an approver on any of your teams/i)).not.toBeInTheDocument();
+  });
+
+  it("never shows the banner for root", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/approval/my-approver-teams" || path === "/api/approval/teams-without-approver" || path === "/api/profile/teams") {
+        throw new Error("root must never fetch approver-status data — the banner is non-root only");
+      }
+      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderScreen(root);
+
+    await screen.findByText(/tudo limpo/i);
+    expect(screen.queryByText(/not an approver on any of your teams/i)).not.toBeInTheDocument();
   });
 
   it("shows a root-only status banner reflecting the approval system state", async () => {

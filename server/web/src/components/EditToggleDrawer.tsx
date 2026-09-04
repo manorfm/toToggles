@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { ApprovalInterceptModal } from "./ApprovalInterceptModal";
 import { Icon } from "./Icon";
 import { ApiError } from "../api/client";
 import { getToggle, updateToggleRule } from "../api/toggles";
+import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { RULE_TYPES, deriveInitialRuleState } from "../lib/activationRuleTypes";
 import type { ActivationRuleType, ToggleDetail } from "../types/toggle";
 
@@ -9,6 +11,7 @@ interface EditToggleDrawerProps {
   applicationId: string;
   toggleId: string;
   childrenCount: number;
+  isRoot: boolean;
   onClose: () => void;
   onSaved: () => void;
   onPendingApproval: (actionType: string) => void;
@@ -18,7 +21,7 @@ type LoadState = { status: "loading" } | { status: "loaded"; toggle: ToggleDetai
 
 // Adaptado do EditDrawer real (decodificado do bundle — ver lib/activationRuleTypes.ts pro
 // porquê get_full_jsx("EditDrawer") sozinho não bastava aqui).
-export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClose, onSaved, onPendingApproval }: EditToggleDrawerProps) {
+export function EditToggleDrawer({ applicationId, toggleId, childrenCount, isRoot, onClose, onSaved, onPendingApproval }: EditToggleDrawerProps) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [enabled, setEnabled] = useState(true);
   const [ruleOn, setRuleOn] = useState(false);
@@ -26,6 +29,7 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
   const [ruleValue, setRuleValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(isRoot);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,30 +55,39 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
   const selectedRuleMeta = RULE_TYPES.find((r) => r.type === ruleType);
 
   async function save() {
+    if (loadState.status !== "loaded") return;
     if (ruleOn && (!ruleType || !ruleValue.trim())) {
       setError(`${selectedRuleMeta?.name ?? "Rule"} value is required.`);
       return;
     }
 
-    setSubmitting(true);
-    setError(null);
-    try {
-      const result = await updateToggleRule(applicationId, toggleId, {
-        enabled,
-        hasActivationRule: ruleOn,
-        activationRule: ruleOn && ruleType ? { type: ruleType, value: ruleValue.trim() } : undefined,
-      });
-      if (result.kind === "pending_approval") {
-        onPendingApproval(result.actionType);
-      } else {
-        onSaved();
+    // Mesma inferência do servidor (middleware/approval.go#getActionType): o endpoint plural
+    // vira toggle_rule quando has_activation_rule vai true no corpo, senão toggle_update.
+    const actionType = ruleOn ? "toggle_rule" : "toggle_update";
+    const actionDesc = ruleOn ? "Change activation rule" : `${enabled ? "Enable" : "Disable"} toggle`;
+    const togglePath = loadState.toggle.path;
+
+    await guard(actionType, { actionDesc, path: togglePath }, async () => {
+      setSubmitting(true);
+      setError(null);
+      try {
+        const result = await updateToggleRule(applicationId, toggleId, {
+          enabled,
+          hasActivationRule: ruleOn,
+          activationRule: ruleOn && ruleType ? { type: ruleType, value: ruleValue.trim() } : undefined,
+        });
+        if (result.kind === "pending_approval") {
+          onPendingApproval(result.actionType);
+        } else {
+          onSaved();
+        }
+        onClose();
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Não foi possível salvar as alterações.");
+      } finally {
+        setSubmitting(false);
       }
-      onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Não foi possível salvar as alterações.");
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (
@@ -195,6 +208,17 @@ export function EditToggleDrawer({ applicationId, toggleId, childrenCount, onClo
           </button>
         </div>
       </div>
+
+      {intercept && (
+        <ApprovalInterceptModal
+          actionDesc={intercept.actionDesc}
+          path={intercept.path}
+          team={intercept.team}
+          busy={interceptBusy}
+          onCancel={cancelIntercept}
+          onConfirm={confirmIntercept}
+        />
+      )}
     </>
   );
 }

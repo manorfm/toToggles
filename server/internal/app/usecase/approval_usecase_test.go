@@ -193,6 +193,55 @@ func TestApprovalUseCase_WithdrawRequest(t *testing.T) {
 	})
 }
 
+func TestApprovalUseCase_GetTeamsWithoutApprover(t *testing.T) {
+	t.Run("returns only the caller's own teams that have zero approvers", func(t *testing.T) {
+		uc, _, teams, teamApprovers, _ := newApprovalUseCaseForAccessTests()
+		teams.Teams["team-a"] = &entity.Team{ID: "team-a", Name: "Payments"}
+		teams.Teams["team-b"] = &entity.Team{ID: "team-b", Name: "Growth"}
+		teams.TeamsByUser["user-1"] = []string{"team-a", "team-b"}
+		// team-a has an approver, team-b doesn't.
+		teamApprovers.Approvers["team-a"] = map[string]bool{"admin-1": true}
+		teamApprovers.Approvers["team-b"] = map[string]bool{"member-1": false}
+
+		result, err := uc.GetTeamsWithoutApprover(context.Background(), "user-1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 1 || result[0].ID != "team-b" {
+			t.Fatalf("expected only team-b, got %+v", result)
+		}
+	})
+
+	t.Run("a team with no recorded members at all counts as having no approver", func(t *testing.T) {
+		uc, _, teams, _, _ := newApprovalUseCaseForAccessTests()
+		teams.Teams["team-c"] = &entity.Team{ID: "team-c", Name: "Platform"}
+		teams.TeamsByUser["user-2"] = []string{"team-c"}
+
+		result, err := uc.GetTeamsWithoutApprover(context.Background(), "user-2")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 1 || result[0].ID != "team-c" {
+			t.Fatalf("expected team-c, got %+v", result)
+		}
+	})
+
+	t.Run("returns an empty list when every team already has an approver", func(t *testing.T) {
+		uc, _, teams, teamApprovers, _ := newApprovalUseCaseForAccessTests()
+		teams.Teams["team-a"] = &entity.Team{ID: "team-a", Name: "Payments"}
+		teams.TeamsByUser["user-1"] = []string{"team-a"}
+		teamApprovers.Approvers["team-a"] = map[string]bool{"admin-1": true}
+
+		result, err := uc.GetTeamsWithoutApprover(context.Background(), "user-1")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(result) != 0 {
+			t.Fatalf("expected no teams, got %+v", result)
+		}
+	})
+}
+
 func TestApprovalUseCase_ExecuteApprovedAction(t *testing.T) {
 	approvedRequest := func(id, teamID, requestedBy string) *entity.ApprovalRequest {
 		req := pendingRequest(id, teamID, requestedBy)

@@ -5,7 +5,9 @@ import {
   listAllApprovals,
   listApprovableApprovals,
   listMyApprovals,
+  listMyApproverTeams,
   listPendingApprovals,
+  listTeamsWithoutApprover,
   rejectApproval,
   withdrawApproval,
 } from "./approvals";
@@ -185,5 +187,50 @@ describe("withdrawApproval", () => {
     await withdrawApproval("1");
 
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/1/withdraw", expect.objectContaining({ method: "POST" }));
+  });
+});
+
+describe("listMyApproverTeams", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /approval/my-approver-teams and unwraps data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: ["t1", "t3"] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listMyApproverTeams();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/my-approver-teams", expect.anything());
+    expect(result).toEqual(["t1", "t3"]);
+  });
+
+  it("returns an empty array when 'data' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" })));
+
+    await expect(listMyApproverTeams()).resolves.toEqual([]);
+  });
+});
+
+describe("listTeamsWithoutApprover", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /approval/teams-without-approver and unwraps data", async () => {
+    const team = { id: "t2", name: "Growth", description: "", created_at: "", updated_at: "" };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: [team] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listTeamsWithoutApprover();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/teams-without-approver", expect.anything());
+    expect(result).toEqual([team]);
+  });
+
+  it("returns an empty array when 'data' is omitted", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok" })));
+
+    await expect(listTeamsWithoutApprover()).resolves.toEqual([]);
   });
 });

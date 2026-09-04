@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { createToggle, ensureSwitchOn, goToApprovalSettings } from "../helpers";
+import { confirmApprovalIntercept, createToggle, ensureSwitchOn, goToApprovalSettings } from "../helpers";
 
 // Todos os outros specs de aprovação usam ROOT como aprovador — root sempre ignora o workflow
 // (bypass), então nunca exercitou de verdade CanBeApprovedBy (autoaprovação proibida, e só
@@ -18,7 +18,7 @@ test("a designated team approver (not root) can see and approve someone else's r
   // Cria o aprovador direto por API — role admin (só admin/root podem ser aprovadores,
   // docs/rest-flow.md §9.3) no mesmo time da aplicação, já com is_approver: true.
   const createApproverRes = await rootContext.request.post("/api/users", {
-    data: { username: "e2e-approver", role: "admin", team_id: fixtures.teamId, is_approver: true },
+    data: { name: "E2E Approver", username: "e2e-approver", role: "admin", team_id: fixtures.teamId, is_approver: true },
   });
   expect(createApproverRes.ok()).toBeTruthy();
   const approverGeneratedPassword: string = (await createApproverRes.json()).password;
@@ -42,6 +42,7 @@ test("a designated team approver (not root) can see and approve someone else's r
   const adminPage = await adminContext.newPage();
   await adminPage.goto(`/applications/${fixtures.appId}`);
   await adminPage.getByRole("switch", { name: "e2e.nonrootapprove.target" }).click();
+  await confirmApprovalIntercept(adminPage);
   await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
   // O aprovador (não-root) vê a aba "Approvable" (não "Pending", esse rótulo é só pra root) e
@@ -51,7 +52,7 @@ test("a designated team approver (not root) can see and approve someone else's r
   await approverPage.getByRole("button", { name: "Approvable" }).click();
   const pendingRow = approverPage.locator(".appr-row", { hasText: "e2e.nonrootapprove.target" });
   await expect(pendingRow).toContainText("Disable toggle");
-  await pendingRow.getByRole("button", { name: "Approve" }).click();
+  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   await adminPage.reload();

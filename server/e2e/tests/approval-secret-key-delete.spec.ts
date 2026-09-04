@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { ensureSwitchOn } from "../helpers";
+import { confirmApprovalIntercept, ensureSwitchOn } from "../helpers";
 
 // Mesma jornada de approval-toggle-enable.spec.ts, mas pra secret_key_delete — o tipo que expôs
 // o bug real em SecretKeySection (api/secretKeys.ts não tratava 202/approval_required antes
-// desta mudança). Sem esta correção, o clique em "Delete" abaixo quebraria a tela em vez de
+// desta mudança). Sem esta correção, o clique em "Revoke" abaixo quebraria a tela em vez de
 // mostrar o aviso de pendência.
 test("secret_key_delete is intercepted, shown to the approver, and applied after approval", async ({ browser }) => {
   const fixtures = readFixtures();
@@ -26,16 +26,19 @@ test("secret_key_delete is intercepted, shown to the approver, and applied after
   const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
   const adminPage = await adminContext.newPage();
 
-  // Escopado a #service-key-section: ToggleCard também tem um botão "Delete" (ícone de
-  // lixeira da folha), ambíguo se buscado na página inteira.
-  await adminPage.goto(`/applications/${fixtures.appId}`);
-  const secretKeySection = adminPage.locator("#service-key-section");
-  const deleteKeyButton = secretKeySection.getByRole("button", { name: "Delete", exact: true });
-  await expect(deleteKeyButton).toBeVisible();
-  await deleteKeyButton.click();
+  // Sem #service-key-section (não existe mais — era um id de âncora de scroll de uma fase
+  // anterior à reescrita em abas de verdade; ver server/CLAUDE.md "Detalhe de aplicação"). A
+  // aba "Toggles" fica com hidden={true} enquanto "Service key" está ativa, então o botão
+  // "Delete" de um ToggleCard (fora da árvore de acessibilidade nesse estado) nunca colide com
+  // "Revoke" aqui — não precisa de escopo extra.
+  await adminPage.goto(`/applications/${fixtures.appId}?tab=keys`);
+  const revokeKeyButton = adminPage.getByRole("button", { name: "Revoke", exact: true });
+  await expect(revokeKeyButton).toBeVisible();
+  await revokeKeyButton.click();
+  await confirmApprovalIntercept(adminPage);
 
   await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
-  await expect(deleteKeyButton).toBeVisible(); // não removeu de verdade
+  await expect(revokeKeyButton).toBeVisible(); // não removeu de verdade
 
   // Root vê e aprova.
   await rootPage.goto("/approvals");
@@ -43,12 +46,13 @@ test("secret_key_delete is intercepted, shown to the approver, and applied after
 
   const pendingRow = rootPage.locator(".appr-row", { hasText: "Delete secret key" });
   await expect(pendingRow).toBeVisible();
-  await pendingRow.getByRole("button", { name: "Approve" }).click();
+  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
   await expect(pendingRow).toHaveCount(0);
 
-  // Admin recarrega e vê a chave realmente apagada (volta ao empty state).
+  // Admin recarrega e vê a chave realmente apagada (volta ao empty state — "No service key",
+  // confirmado em SecretKeySection.tsx, nunca teve texto em português aqui).
   await adminPage.reload();
-  await expect(adminPage.getByText(/nenhuma chave/i)).toBeVisible();
+  await expect(adminPage.getByText("No service key")).toBeVisible();
 
   await rootContext.close();
   await adminContext.close();

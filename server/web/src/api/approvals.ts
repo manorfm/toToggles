@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type { ApprovalRequest } from "../types/approval";
+import type { Team } from "../types/team";
 
 // GET /approval/requests — qualquer status (pending/approved/rejected/expired),
 // acessível pra qualquer role autenticada (sem RequireRoot/RequireAdmin no servidor).
@@ -58,4 +59,19 @@ export async function rejectApproval(id: string, reason?: string): Promise<void>
 // aba "Mine".
 export async function withdrawApproval(id: string): Promise<void> {
   await apiFetch<{ message: string }>(`/approval/requests/${id}/withdraw`, { method: "POST" });
+}
+
+// GET /approval/my-approver-teams — ids dos times onde o usuário atual é aprovador.
+export async function listMyApproverTeams(): Promise<string[]> {
+  const body = await apiFetch<{ message: string; data?: string[] }>("/approval/my-approver-teams");
+  return body.data ?? [];
+}
+
+// GET /approval/teams-without-approver — não-root-gated (diferente de GET
+// /teams/:id/approvers, que é RequireRoot()): só os PRÓPRIOS times do chamador que não têm
+// nenhum aprovador designado, nunca o roster completo. Alimenta o aviso "You are not an
+// approver on any of your teams..." da tela de Approvals.
+export async function listTeamsWithoutApprover(): Promise<Team[]> {
+  const body = await apiFetch<{ message: string; data?: Team[] }>("/approval/teams-without-approver");
+  return body.data ?? [];
 }

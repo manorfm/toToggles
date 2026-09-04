@@ -545,6 +545,38 @@ func (uc *ApprovalUseCase) GetUserApproverTeams(ctx context.Context, userID stri
 	return uc.teamApproverRepo.GetUserTeamsAsApprover(ctx, userID)
 }
 
+// GetTeamsWithoutApprover lista, dentre os PRÓPRIOS times do usuário, quais não têm nenhum
+// aprovador designado — alimenta o aviso "You are not an approver on any of your teams..." da
+// tela de Approvals (v2.6 §2.10). Escopado ao chamador por design: `GET /teams/:id/approvers`
+// (que devolveria o roster completo) é RequireRoot() no grupo `/teams` inteiro — não dava pra
+// reusar sem afrouxar essa autorização pra qualquer membro de time. Aqui só o boolean "tem
+// aprovador ou não" escapa, nunca o roster (quem são os membros/aprovadores).
+func (uc *ApprovalUseCase) GetTeamsWithoutApprover(ctx context.Context, userID string) ([]*entity.Team, error) {
+	teams, err := uc.teamRepo.GetTeamsByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var withoutApprover []*entity.Team
+	for _, team := range teams {
+		approvers, err := uc.teamApproverRepo.GetTeamApprovers(ctx, team.ID)
+		if err != nil {
+			return nil, err
+		}
+		hasApprover := false
+		for _, a := range approvers {
+			if a.IsApprover {
+				hasApprover = true
+				break
+			}
+		}
+		if !hasApprover {
+			withoutApprover = append(withoutApprover, team)
+		}
+	}
+	return withoutApprover, nil
+}
+
 // ============================
 // Utilidades
 // ============================

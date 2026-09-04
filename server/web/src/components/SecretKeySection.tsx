@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { deleteSecretKey, generateSecretKey, listSecretKeys } from "../api/secretKeys";
 import { ApiError } from "../api/client";
+import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
+import { ApprovalInterceptModal } from "./ApprovalInterceptModal";
 import { GeneratedKeyModal } from "./GeneratedKeyModal";
 import { Icon } from "./Icon";
 import { useToast } from "./ToastProvider";
@@ -8,7 +10,11 @@ import type { SecretKey } from "../types/secretKey";
 
 interface SecretKeySectionProps {
   applicationId: string;
+  // Nome só pra exibição no intercept de aprovação ("Target"), não usado em nenhuma chamada de
+  // API (a seção sempre opera pelo applicationId).
+  applicationName?: string;
   canManage: boolean;
+  isRoot: boolean;
   // A sidebar mostra um indicador (".key-active-dot") no item "Service key" quando a aplicação
   // aberta tem uma chave ativa — só esta seção sabe isso (dono único do fetch), então avisa o
   // pai em vez de duplicar a chamada a GET /secret-keys.
@@ -22,7 +28,7 @@ type State = { status: "loading" } | { status: "loaded"; key: SecretKey | null }
 
 // Uma aplicação tem no máximo uma secret key ativa por vez — "gerar" no servidor é
 // sempre "regerar" (apaga as anteriores primeiro), então só mostramos a mais recente.
-export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange, onPendingApproval }: SecretKeySectionProps) {
+export function SecretKeySection({ applicationId, applicationName, canManage, isRoot, onKeyPresenceChange, onPendingApproval }: SecretKeySectionProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   // A chave revelada veio de uma solicitação sob aprovação (generate-secret 202 com plain_key) —
@@ -30,6 +36,7 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
   const [revealedKeyPending, setRevealedKeyPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(isRoot);
 
   const load = useCallback(() => {
     listSecretKeys(applicationId)
@@ -47,45 +54,49 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
   }, [load]);
 
   async function handleGenerate() {
-    setBusy(true);
-    try {
-      const result = await generateSecretKey(applicationId);
-      if (result.kind === "pending_approval") {
-        onPendingApproval?.(result.actionType);
-        // A chave já existe (inativa) e result.plainKey é a única chance de vê-la — mesmo assim,
-        // avisa que a ação está pendente (onPendingApproval acima) e NÃO recarrega a lista (a
-        // chave pendente não aparece em GET .../secret-keys até ser aprovada).
-        if (result.plainKey) {
-          setRevealedKeyPending(true);
-          setRevealedKey(result.plainKey);
+    await guard("secret_key_create", { actionDesc: "Generate secret key", path: applicationName }, async () => {
+      setBusy(true);
+      try {
+        const result = await generateSecretKey(applicationId);
+        if (result.kind === "pending_approval") {
+          onPendingApproval?.(result.actionType);
+          // A chave já existe (inativa) e result.plainKey é a única chance de vê-la — mesmo assim,
+          // avisa que a ação está pendente (onPendingApproval acima) e NÃO recarrega a lista (a
+          // chave pendente não aparece em GET .../secret-keys até ser aprovada).
+          if (result.plainKey) {
+            setRevealedKeyPending(true);
+            setRevealedKey(result.plainKey);
+          }
+          return;
         }
-        return;
+        setRevealedKeyPending(false);
+        setRevealedKey(result.plainKey);
+        load();
+      } catch (err) {
+        setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível gerar a chave." });
+      } finally {
+        setBusy(false);
       }
-      setRevealedKeyPending(false);
-      setRevealedKey(result.plainKey);
-      load();
-    } catch (err) {
-      setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível gerar a chave." });
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function handleDelete(id: string) {
-    setBusy(true);
-    try {
-      const result = await deleteSecretKey(id);
-      if (result.kind === "pending_approval") {
-        onPendingApproval?.(result.actionType);
-        return;
+    await guard("secret_key_delete", { actionDesc: "Delete secret key", path: applicationName }, async () => {
+      setBusy(true);
+      try {
+        const result = await deleteSecretKey(id);
+        if (result.kind === "pending_approval") {
+          onPendingApproval?.(result.actionType);
+          return;
+        }
+        load();
+        toast("Service key revoked");
+      } catch (err) {
+        setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível remover a chave." });
+      } finally {
+        setBusy(false);
       }
-      load();
-      toast("Service key revoked");
-    } catch (err) {
-      setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível remover a chave." });
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   const hasKey = state.status === "loaded" && !!state.key;
@@ -172,6 +183,17 @@ export function SecretKeySection({ applicationId, canManage, onKeyPresenceChange
           plainKey={revealedKey}
           pendingApproval={revealedKeyPending}
           onClose={() => setRevealedKey(null)}
+        />
+      )}
+
+      {intercept && (
+        <ApprovalInterceptModal
+          actionDesc={intercept.actionDesc}
+          path={intercept.path}
+          team={intercept.team}
+          busy={interceptBusy}
+          onCancel={cancelIntercept}
+          onConfirm={confirmIntercept}
         />
       )}
     </div>

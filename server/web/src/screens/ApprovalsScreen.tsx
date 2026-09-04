@@ -10,10 +10,13 @@ import {
   executeApproval,
   listApprovableApprovals,
   listMyApprovals,
+  listMyApproverTeams,
   listPendingApprovals,
+  listTeamsWithoutApprover,
   withdrawApproval,
 } from "../api/approvals";
 import { getApprovalSettings, updateApprovalSettings } from "../api/approvalSettings";
+import { listMyTeams } from "../api/teams";
 import { useAppUser } from "../hooks/useAppUser";
 import type { ApprovalRequest } from "../types/approval";
 import type { ApprovalActionKey, ApprovalSettings } from "../types/approvalSettings";
@@ -53,6 +56,36 @@ export function ApprovalsScreen() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [expirationDays, setExpirationDays] = useState("");
   const [savingExpiration, setSavingExpiration] = useState(false);
+
+  // Confirmado no app.jsx real (v2.6 §2.10): banner "You are not an approver on any of your
+  // teams..." — só pra não-root, e com uma segunda linha condicional dependendo se NENHUM dos
+  // times do usuário tem aprovador (noApproverOnMyTeams) ou se algum tem, só não é o usuário
+  // atual. isApprover deriva de GET /approval/my-approver-teams (não-vazio); noApproverOnMyTeams
+  // cruza GET /profile/teams (todos os times do usuário) com GET
+  // /approval/teams-without-approver (subconjunto sem nenhum aprovador) — quando os dois batem
+  // em tamanho, TODOS os times do usuário estão sem aprovador.
+  const [isApprover, setIsApprover] = useState(true); // default otimista: some enquanto carrega
+  const [noApproverOnMyTeams, setNoApproverOnMyTeams] = useState(false);
+
+  useEffect(() => {
+    if (isRoot) return;
+    let cancelled = false;
+    Promise.all([listMyTeams(), listMyApproverTeams(), listTeamsWithoutApprover()])
+      .then(([myTeams, myApproverTeamIds, teamsWithoutApprover]) => {
+        if (cancelled) return;
+        setIsApprover(myApproverTeamIds.length > 0);
+        const withoutApproverIds = new Set(teamsWithoutApprover.map((t) => t.id));
+        setNoApproverOnMyTeams(myTeams.length > 0 && myTeams.every((t) => withoutApproverIds.has(t.id)));
+      })
+      .catch(() => {
+        // Puramente informativo (o banner é um aviso, não um limite de segurança) — falha
+        // silenciosa aqui só significa que o banner não aparece, nunca que uma ação seja
+        // liberada/bloqueada indevidamente.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isRoot]);
 
   const loadRequests = useCallback(() => {
     const fetcher = tab === "mine" ? listMyApprovals : isRoot ? listPendingApprovals : listApprovableApprovals;
@@ -244,6 +277,18 @@ export function ApprovalsScreen() {
           </button>
         )}
       </div>
+
+      {!isRoot && tab === "pending" && !isApprover && (
+        <div className="notice" style={{ marginBottom: 18 }}>
+          <Icon name="warn" size={16} />
+          <span>
+            You are not an approver on any of your teams.{" "}
+            {noApproverOnMyTeams
+              ? "None of them have one — only root can review requests until an approver is assigned."
+              : "An approver on your team will review it."}
+          </span>
+        </div>
+      )}
 
       {tab === "settings" ? (
         <>

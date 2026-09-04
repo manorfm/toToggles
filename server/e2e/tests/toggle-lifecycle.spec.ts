@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { createToggle, ensureSwitchOff, ensureSwitchOn, goToApprovalSettings, modalButton } from "../helpers";
+import { confirmApprovalIntercept, createToggle, ensureSwitchOff, ensureSwitchOn, goToApprovalSettings, modalButton } from "../helpers";
 
 // Cada teste cria seu PRÓPRIO toggle (via API, como root) em vez de reusar a fixture
 // compartilhada — vários specs neste suite mexem/apagam toggles no mesmo servidor/banco
@@ -42,6 +42,7 @@ test.describe("toggle lifecycle — create", () => {
     await adminPage.getByRole("button", { name: "New toggle" }).click();
     await adminPage.locator("#toggle-path").fill("e2e.created.approved");
     await adminPage.getByRole("button", { name: "Create", exact: true }).click();
+    await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
     await expect(adminPage.getByRole("switch", { name: "e2e.created.approved" })).toHaveCount(0);
@@ -50,7 +51,7 @@ test.describe("toggle lifecycle — create", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Create toggle" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Approve" }).click();
+    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -96,6 +97,7 @@ test.describe("toggle lifecycle — disable (recursive)", () => {
     await adminPage.goto(`/applications/${fixtures.appId}`);
     const sw = adminPage.getByRole("switch", { name: "e2e.disable.approved" });
     await sw.click();
+    await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
     await expect(sw).toHaveAttribute("aria-checked", "true"); // não aplicou
@@ -104,7 +106,7 @@ test.describe("toggle lifecycle — disable (recursive)", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.disable.approved" });
     await expect(pendingRow).toContainText("Disable toggle");
-    await pendingRow.getByRole("button", { name: "Approve" }).click();
+    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -159,6 +161,7 @@ test.describe("toggle lifecycle — configure activation rule", () => {
     await adminPage.getByText("Percentage", { exact: true }).click();
     await adminPage.locator("#rule-value").fill("25");
     await adminPage.getByRole("button", { name: "Save changes" }).click();
+    await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
@@ -166,7 +169,7 @@ test.describe("toggle lifecycle — configure activation rule", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.rule.approved" });
     await expect(pendingRow).toContainText("Change activation rule");
-    await pendingRow.getByRole("button", { name: "Approve" }).click();
+    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -214,6 +217,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await adminPage.getByRole("switch", { name: "e2e.delete.approved" }).waitFor();
     await adminPage.locator(".tg-card", { hasText: "e2e.delete.approved" }).getByRole("button", { name: "Delete", exact: true }).click();
     await modalButton(adminPage, "Delete", { dialogTitle: "Delete toggle" }).click();
+    await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
     await expect(adminPage.getByRole("switch", { name: "e2e.delete.approved" })).toBeVisible(); // ainda não apagou
@@ -222,7 +226,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.delete.approved" });
     await expect(pendingRow).toContainText("Delete toggle");
-    await pendingRow.getByRole("button", { name: "Approve" }).click();
+    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();

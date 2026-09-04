@@ -175,6 +175,7 @@ func Init(router *gin.Engine) {
 
 				// Aprovadores
 				approval.GET("/my-approver-teams", handler.GetMyApproverTeams)
+				approval.GET("/teams-without-approver", handler.GetTeamsWithoutApprover)
 			}
 
 			// Audit trail — qualquer usuário autenticado, sem RequireRoot/RequireAdmin: a

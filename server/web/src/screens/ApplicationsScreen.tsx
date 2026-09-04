@@ -3,10 +3,12 @@ import { deleteApplication, listApplications } from "../api/applications";
 import { ApiError } from "../api/client";
 import { AppCard } from "../components/AppCard";
 import { AppModal } from "../components/AppModal";
+import { ApprovalInterceptModal } from "../components/ApprovalInterceptModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { Icon } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
+import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { creationOrderIndex } from "../lib/applicationAccent";
 import type { Application } from "../types/application";
 
@@ -29,6 +31,9 @@ export function ApplicationsScreen() {
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
+  const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(
+    user.role === "root"
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -53,25 +58,27 @@ export function ApplicationsScreen() {
 
   async function confirmDelete() {
     if (!deleting) return;
-    setDeletingBusy(true);
-    try {
-      const result = await deleteApplication(deleting.id);
-      if (result.kind === "pending_approval") {
-        setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
-        toast("Action submitted for approval");
-      } else {
-        setPendingNotice(null);
-        setState((prev) =>
-          prev.status === "loaded" ? { status: "loaded", applications: prev.applications.filter((a) => a.id !== deleting.id) } : prev
-        );
-        toast("Application deleted");
+    await guard("application_delete", { actionDesc: "Delete application", path: deleting.name }, async () => {
+      setDeletingBusy(true);
+      try {
+        const result = await deleteApplication(deleting.id);
+        if (result.kind === "pending_approval") {
+          setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
+          toast("Action submitted for approval");
+        } else {
+          setPendingNotice(null);
+          setState((prev) =>
+            prev.status === "loaded" ? { status: "loaded", applications: prev.applications.filter((a) => a.id !== deleting.id) } : prev
+          );
+          toast("Application deleted");
+        }
+        setDeleting(null);
+      } catch (err) {
+        setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar a aplicação.");
+      } finally {
+        setDeletingBusy(false);
       }
-      setDeleting(null);
-    } catch (err) {
-      setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar a aplicação.");
-    } finally {
-      setDeletingBusy(false);
-    }
+    });
   }
 
   return (
@@ -183,6 +190,17 @@ export function ApplicationsScreen() {
           confirmLabel="Delete"
           onClose={() => !deletingBusy && setDeleting(null)}
           onConfirm={confirmDelete}
+        />
+      )}
+
+      {intercept && (
+        <ApprovalInterceptModal
+          actionDesc={intercept.actionDesc}
+          path={intercept.path}
+          team={intercept.team}
+          busy={interceptBusy}
+          onCancel={cancelIntercept}
+          onConfirm={confirmIntercept}
         />
       )}
     </div>

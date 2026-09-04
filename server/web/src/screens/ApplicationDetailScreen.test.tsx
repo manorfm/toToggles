@@ -301,6 +301,83 @@ describe("ApplicationDetailScreen", () => {
     expect(deleted).toBe(true);
   });
 
+  it("shows the approval intercept before flipping a toggle, for a non-root admin, then applies it on confirm", async () => {
+    let flipped = false;
+    const admin: AuthenticatedUser = { id: "2", username: "alice", role: "admin", must_change_password: false };
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/applications/app1") {
+        return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      if (path === "/api/approval/required?action_type=toggle_disable") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      if (init?.method === "PUT") {
+        flipped = true;
+        return Promise.resolve(jsonResponse(200, { id: "1", enabled: false }));
+      }
+      if (path.includes("hierarchy=true")) {
+        return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [{ id: "1", value: "user", enabled: !flipped }] }));
+      }
+      if (path === "/api/applications/app1/toggles") {
+        return Promise.resolve(jsonResponse(200, [detail({ id: "1", value: "user", enabled: !flipped })]));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen(admin);
+    await screen.findByText("user", { selector: ".root-chip" });
+
+    await user.click(screen.getByRole("switch"));
+
+    expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
+    expect(screen.getByText("user", { selector: ".aic-val" })).toBeInTheDocument();
+    expect(flipped).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /send for approval/i }));
+
+    await vi.waitFor(() => expect(flipped).toBe(true));
+  });
+
+  it("shows the approval intercept before deleting a leaf toggle, for a non-root admin", async () => {
+    const admin: AuthenticatedUser = { id: "2", username: "alice", role: "admin", must_change_password: false };
+    let deleted = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/applications/app1") {
+        return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      if (path === "/api/approval/required?action_type=toggle_delete") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      if (path === "/api/applications/app1/toggles/3" && init?.method === "DELETE") {
+        deleted = true;
+        return Promise.resolve(jsonResponse(200, { message: "toggle deleted successfully" }));
+      }
+      if (path.includes("hierarchy=true")) {
+        return Promise.resolve(
+          jsonResponse(200, { application: "app1", toggles: deleted ? [] : [{ id: "3", value: "billing", enabled: true }] })
+        );
+      }
+      if (path === "/api/applications/app1/toggles") {
+        return Promise.resolve(jsonResponse(200, deleted ? [] : [detail({ id: "3", value: "billing", enabled: true })]));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen(admin);
+    await screen.findByText("billing", { selector: ".root-chip" });
+
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+    await screen.findByText(/delete toggle/i);
+    await user.click(screen.getAllByRole("button", { name: /^delete$/i })[1]);
+
+    expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
+    expect(deleted).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /send for approval/i }));
+
+    await vi.waitFor(() => expect(deleted).toBe(true));
+  });
+
   it("does not show 'Delete application' for a non-root admin", async () => {
     vi.stubGlobal("fetch", fetchMockFor([]));
 

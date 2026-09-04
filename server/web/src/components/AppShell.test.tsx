@@ -260,6 +260,24 @@ describe("AppShell", () => {
     expect(screen.queryByRole("link", { name: /teams/i })).not.toBeInTheDocument();
   });
 
+  // Confirmado no app.jsx real (v2.6 §2.7): `showApprovalsNav || !isRootUser` — mesmo um
+  // usuário `user` comum (nunca aprovador) precisa ver o item, pra acompanhar a aba "Mine" das
+  // próprias sugestões/solicitações. Diferente de "Teams & people"/"Usuários" acima, que são
+  // mesmo root/admin-only porque a API por trás é RequireRoot()/RequireAdmin().
+  it("shows 'Approvals' even for a plain 'user' role, who is never an approver", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { success: true, user: { id: "3", username: "bob", role: "user", must_change_password: false } })
+      )
+    );
+
+    renderShell();
+
+    expect(await screen.findByText("Applications content")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /approvals/i })).toBeInTheDocument();
+  });
+
   it("shows a pending-approvals count badge next to 'Approvals' for root", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
       if (path === "/api/approval/requests/pending") {

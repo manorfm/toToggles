@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { ensureSwitchOn } from "../helpers";
+import { confirmApprovalIntercept, ensureSwitchOn } from "../helpers";
 
 // A jornada completa: alguém (admin) tenta ligar um toggle, a ação exige aprovação, o
 // aprovador (root) vê e aprova, e o efeito realmente aparece depois — navegando de verdade,
@@ -32,6 +32,7 @@ test("toggle_enable is intercepted, shown to the approver, and applied after app
   const toggleSwitch = adminPage.getByRole("switch", { name: fixtures.togglePath });
   await expect(toggleSwitch).toHaveAttribute("aria-checked", "false"); // desligado por global-setup
   await toggleSwitch.click();
+  await confirmApprovalIntercept(adminPage);
 
   await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
   await expect(toggleSwitch).toHaveAttribute("aria-checked", "false"); // não aplicou de verdade
@@ -42,7 +43,7 @@ test("toggle_enable is intercepted, shown to the approver, and applied after app
 
   const pendingRow = rootPage.locator(".appr-row", { hasText: fixtures.togglePath });
   await expect(pendingRow).toContainText("Enable toggle");
-  await pendingRow.getByRole("button", { name: "Approve" }).click();
+  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   // 4. Admin recarrega (sem invalidação de estado entre telas, confirmado — precisa de

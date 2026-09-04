@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
 import { createApplication, updateApplication } from "../api/applications";
 import { listTeamOptions, type TeamOption } from "../api/teams";
+import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import type { Application, ApplicationDetail } from "../types/application";
+import { ApprovalInterceptModal } from "./ApprovalInterceptModal";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 
@@ -37,6 +39,7 @@ export function AppModal({ isRoot, initial, onClose, onCreated, onUpdated, onPen
   const [teamId, setTeamId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(isRoot);
 
   useEffect(() => {
     if (editing) return; // time não é escolhido ao editar — ver nota acima
@@ -70,113 +73,130 @@ export function AppModal({ isRoot, initial, onClose, onCreated, onUpdated, onPen
       return;
     }
 
-    setSubmitting(true);
-    setError(null);
-    try {
-      if (editing) {
-        const result = await updateApplication(initial.id, { name: trimmedName });
-        if (result.kind === "pending_approval") {
-          onPendingApproval(result.actionType);
+    // application_create cobre tanto criação quanto edição — não existe action_type próprio
+    // pra update (docs/rest-flow.md §9.1, PUT /applications/:id reusa o mesmo tipo).
+    await guard("application_create", { actionDesc: editing ? "Update application" : "Create application", path: trimmedName }, async () => {
+      setSubmitting(true);
+      setError(null);
+      try {
+        if (editing) {
+          const result = await updateApplication(initial.id, { name: trimmedName });
+          if (result.kind === "pending_approval") {
+            onPendingApproval(result.actionType);
+          } else {
+            onUpdated(result.application);
+          }
         } else {
-          onUpdated(result.application);
+          const result = await createApplication({ name: trimmedName, teamId });
+          if (result.kind === "pending_approval") {
+            onPendingApproval(result.actionType);
+          } else {
+            onCreated(result.application);
+          }
         }
-      } else {
-        const result = await createApplication({ name: trimmedName, teamId });
-        if (result.kind === "pending_approval") {
-          onPendingApproval(result.actionType);
-        } else {
-          onCreated(result.application);
-        }
+        onClose();
+      } catch (err) {
+        setError(
+          err instanceof ApiError ? err.message : `Não foi possível ${editing ? "atualizar" : "criar"} a aplicação. Tente novamente.`
+        );
+      } finally {
+        setSubmitting(false);
       }
-      onClose();
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : `Não foi possível ${editing ? "atualizar" : "criar"} a aplicação. Tente novamente.`
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (
-    <Modal
-      icon="apps"
-      title={editing ? "Edit application" : "New application"}
-      sub={editing ? "Update application details" : "Applications own a hierarchy of toggles"}
-      onClose={onClose}
-      closeable={!submitting}
-      footer={
-        <>
-          {editing && onDeleteRequest && (
-            <button
-              className="btn btn-danger"
-              style={{ marginRight: "auto" }}
-              disabled={submitting}
-              onClick={() => onDeleteRequest(initial.id, initial.name)}
-            >
-              <Icon name="trash" size={14} /> Delete
+    <>
+      <Modal
+        icon="apps"
+        title={editing ? "Edit application" : "New application"}
+        sub={editing ? "Update application details" : "Applications own a hierarchy of toggles"}
+        onClose={onClose}
+        closeable={!submitting}
+        footer={
+          <>
+            {editing && onDeleteRequest && (
+              <button
+                className="btn btn-danger"
+                style={{ marginRight: "auto" }}
+                disabled={submitting}
+                onClick={() => onDeleteRequest(initial.id, initial.name)}
+              >
+                <Icon name="trash" size={14} /> Delete
+              </button>
+            )}
+            <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
+              Cancel
             </button>
-          )}
-          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={submit} disabled={submitting || noTeamsAvailable}>
-            <Icon name="check" size={16} /> {submitting ? "Salvando…" : editing ? "Save changes" : "Create application"}
-          </button>
-        </>
-      }
-    >
-      <div className="field">
-        <label className="field-label" htmlFor="application-name">
-          Application name
-        </label>
-        <input
-          className="input"
-          id="application-name"
-          placeholder="e.g. Billing Service"
-          autoFocus
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-        />
-      </div>
-
-      {!editing && (
+            <button className="btn btn-primary" onClick={submit} disabled={submitting || noTeamsAvailable}>
+              <Icon name="check" size={16} /> {submitting ? "Salvando…" : editing ? "Save changes" : "Create application"}
+            </button>
+          </>
+        }
+      >
         <div className="field">
-          <label className="field-label" htmlFor="application-team">
-            Team
+          <label className="field-label" htmlFor="application-name">
+            Application name
           </label>
-          <select
-            className="select"
-            id="application-team"
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
-            disabled={teamOptionsState.status !== "loaded" || noTeamsAvailable}
-          >
-            {teamOptions.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <div className="field-hint">
-            {noTeamsAvailable
-              ? isRoot
-                ? "Nenhum time cadastrado ainda — crie um time primeiro."
-                : "Você precisa estar em um time para criar uma aplicação."
-              : "Only members of this team can manage the application."}
-          </div>
+          <input
+            className="input"
+            id="application-name"
+            placeholder="e.g. Billing Service"
+            autoFocus
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
         </div>
-      )}
 
-      {error && (
-        <div className="field-hint danger">
-          {error}
-        </div>
+        {!editing && (
+          <div className="field">
+            <label className="field-label" htmlFor="application-team">
+              Team
+            </label>
+            <select
+              className="select"
+              id="application-team"
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              disabled={teamOptionsState.status !== "loaded" || noTeamsAvailable}
+            >
+              {teamOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <div className="field-hint">
+              {noTeamsAvailable
+                ? isRoot
+                  ? "Nenhum time cadastrado ainda — crie um time primeiro."
+                  : "Você precisa estar em um time para criar uma aplicação."
+                : "Only members of this team can manage the application."}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="field-hint danger">
+            {error}
+          </div>
+        )}
+      </Modal>
+
+      {intercept && (
+        <ApprovalInterceptModal
+          actionDesc={intercept.actionDesc}
+          path={intercept.path}
+          team={intercept.team}
+          busy={interceptBusy}
+          onCancel={cancelIntercept}
+          onConfirm={confirmIntercept}
+        />
       )}
-    </Modal>
+    </>
   );
 }

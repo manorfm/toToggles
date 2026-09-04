@@ -99,7 +99,7 @@ export default async function globalSetup(): Promise<void> {
     if (!disableRes.ok()) throw new Error(`initial toggle disable failed: ${disableRes.status()} ${await disableRes.text()}`);
 
     const userRes = await ctx.post("/api/users", {
-      data: { username: ADMIN_USERNAME, role: "admin", team_id: teamId, is_approver: false },
+      data: { name: "E2E Admin", username: ADMIN_USERNAME, role: "admin", team_id: teamId, is_approver: false },
     });
     if (!userRes.ok()) throw new Error(`create admin user failed: ${userRes.status()} ${await userRes.text()}`);
     const adminGeneratedPassword: string = (await userRes.json()).password;

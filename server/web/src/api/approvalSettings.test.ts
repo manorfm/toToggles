@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getApprovalSettings, updateApprovalSettings } from "./approvalSettings";
+import { checkApprovalRequired, getApprovalSettings, updateApprovalSettings } from "./approvalSettings";
 import type { ApprovalConfig } from "../types/approvalSettings";
 
 function jsonResponse(status: number, body: unknown) {
@@ -91,5 +91,35 @@ describe("updateApprovalSettings", () => {
       "/api/approval/settings",
       expect.objectContaining({ body: JSON.stringify({ default_expiration_days: 14 }) })
     );
+  });
+});
+
+// GET /approval/required — não-root-gated (diferente de GET /approval/settings), único
+// jeito de qualquer role checar se UMA ação específica exige aprovação antes de tentá-la.
+// Usado pelo intercept pré-envio (hooks/useApprovalIntercept.ts).
+describe("checkApprovalRequired", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /approval/required?action_type=X and unwraps data.required", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, { message: "approval requirement checked", data: { action_type: "toggle_delete", required: true } })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkApprovalRequired("toggle_delete");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/required?action_type=toggle_delete", expect.anything());
+    expect(result).toBe(true);
+  });
+
+  it("returns false when the action isn't required", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(200, { message: "approval requirement checked", data: { action_type: "toggle_create", required: false } }))
+    );
+
+    await expect(checkApprovalRequired("toggle_create")).resolves.toBe(false);
   });
 });

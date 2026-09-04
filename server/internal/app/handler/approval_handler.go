@@ -477,6 +477,29 @@ func (h *ApprovalHandler) GetMyApproverTeams(ctx *gin.Context) {
 	})
 }
 
+// GetTeamsWithoutApprover lista os PRÓPRIOS times do caller que não têm nenhum aprovador
+// designado — alimenta o aviso "no approver" na tela de Approvals. Qualquer usuário autenticado
+// (não RequireRoot) já que é escopado ao próprio chamador, mesmo padrão de GET
+// /approval/my-approver-teams.
+func (h *ApprovalHandler) GetTeamsWithoutApprover(ctx *gin.Context) {
+	userID := getUserIDFromSession(ctx)
+	if userID == "" {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
+	teams, err := h.approvalUseCase.GetTeamsWithoutApprover(ctx.Request.Context(), userID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "teams without an approver retrieved successfully",
+		"data":    teams,
+	})
+}
+
 // ============================
 // Estatísticas
 // ============================

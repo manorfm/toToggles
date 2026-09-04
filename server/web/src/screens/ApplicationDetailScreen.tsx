@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { deleteApplication, getApplication } from "../api/applications";
 import { deleteToggle, getToggleHierarchy, getTogglesFlat, setToggleEnabled } from "../api/toggles";
 import { ApiError } from "../api/client";
+import { ApprovalInterceptModal } from "../components/ApprovalInterceptModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { CreateToggleModal } from "../components/CreateToggleModal";
 import { EditToggleDrawer } from "../components/EditToggleDrawer";
@@ -12,6 +13,7 @@ import { TogglePaths } from "../components/TogglePaths";
 import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
 import type { ApplicationDetailTab } from "../hooks/useAppUser";
+import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
 import { buildChildrenCountMap, countToggleTree, flattenToLeaves } from "../lib/toggleLeaves";
 import type { ToggleLeaf } from "../types/toggle";
@@ -61,6 +63,9 @@ export function ApplicationDetailScreen() {
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(
+    user.role === "root"
+  );
 
   const load = useCallback(() => {
     Promise.all([getApplication(applicationId), getToggleHierarchy(applicationId), getTogglesFlat(applicationId)])
@@ -101,42 +106,47 @@ export function ApplicationDetailScreen() {
 
   async function confirmDeleteToggle() {
     if (!deletingToggle) return;
-    setDeleting(true);
-    try {
-      const result = await deleteToggle(applicationId, deletingToggle.toggleId);
-      if (result.kind === "pending_approval") {
-        setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar o toggle.");
-        toast("Action submitted for approval");
-      } else {
-        setPendingNotice(null);
-        load();
-        toast("Toggle deleted");
+    await guard("toggle_delete", { actionDesc: "Delete toggle", path: deletingToggle.path }, async () => {
+      setDeleting(true);
+      try {
+        const result = await deleteToggle(applicationId, deletingToggle.toggleId);
+        if (result.kind === "pending_approval") {
+          setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar o toggle.");
+          toast("Action submitted for approval");
+        } else {
+          setPendingNotice(null);
+          load();
+          toast("Toggle deleted");
+        }
+        setDeletingToggle(null);
+      } catch (err) {
+        setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar o toggle.");
+      } finally {
+        setDeleting(false);
       }
-      setDeletingToggle(null);
-    } catch (err) {
-      setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar o toggle.");
-    } finally {
-      setDeleting(false);
-    }
+    });
   }
 
   async function confirmDeleteApplication() {
-    setDeleting(true);
-    try {
-      const result = await deleteApplication(applicationId);
-      if (result.kind === "pending_approval") {
-        setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
-        toast("Action submitted for approval");
-        setDeletingApp(false);
-      } else {
-        toast("Application deleted");
-        navigate("/");
+    const appName = state.status === "loaded" ? state.applicationName : undefined;
+    await guard("application_delete", { actionDesc: "Delete application", path: appName }, async () => {
+      setDeleting(true);
+      try {
+        const result = await deleteApplication(applicationId);
+        if (result.kind === "pending_approval") {
+          setPendingNotice("Solicitação enviada — aguardando aprovação antes de apagar a aplicação.");
+          toast("Action submitted for approval");
+          setDeletingApp(false);
+        } else {
+          toast("Application deleted");
+          navigate("/");
+        }
+      } catch (err) {
+        setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar a aplicação.");
+      } finally {
+        setDeleting(false);
       }
-    } catch (err) {
-      setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível apagar a aplicação.");
-    } finally {
-      setDeleting(false);
-    }
+    });
   }
 
   async function handleToggle(leafId: string) {
@@ -144,22 +154,26 @@ export function ApplicationDetailScreen() {
     const leaf = state.leaves.find((l) => l.leafId === leafId);
     if (!leaf) return;
     const nextEnabled = !leaf.enabledOwn[leaf.enabledOwn.length - 1];
+    const actionType = nextEnabled ? "toggle_enable" : "toggle_disable";
+    const actionDesc = nextEnabled ? "Enable toggle" : "Disable toggle";
 
-    setMutating(true);
-    try {
-      const result = await setToggleEnabled(applicationId, leafId, nextEnabled);
-      if (result.kind === "pending_approval") {
-        setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
-        toast("Action submitted for approval");
-      } else {
-        setPendingNotice(null);
-        load();
+    await guard(actionType, { actionDesc, path: leaf.segs.join(".") }, async () => {
+      setMutating(true);
+      try {
+        const result = await setToggleEnabled(applicationId, leafId, nextEnabled);
+        if (result.kind === "pending_approval") {
+          setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
+          toast("Action submitted for approval");
+        } else {
+          setPendingNotice(null);
+          load();
+        }
+      } catch (err) {
+        setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível atualizar o toggle.");
+      } finally {
+        setMutating(false);
       }
-    } catch (err) {
-      setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível atualizar o toggle.");
-    } finally {
-      setMutating(false);
-    }
+    });
   }
 
   return (
@@ -230,7 +244,9 @@ export function ApplicationDetailScreen() {
         <div hidden={tab !== "keys"}>
           <SecretKeySection
             applicationId={applicationId}
+            applicationName={state.applicationName}
             canManage={canEdit}
+            isRoot={user.role === "root"}
             onKeyPresenceChange={setHasSecretKey}
             onPendingApproval={() => {
               setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança na chave.");
@@ -243,6 +259,7 @@ export function ApplicationDetailScreen() {
       {creating && (
         <CreateToggleModal
           applicationId={applicationId}
+          isRoot={user.role === "root"}
           onClose={() => setCreating(false)}
           onCreated={(result) => {
             setPendingNotice(null);
@@ -261,6 +278,7 @@ export function ApplicationDetailScreen() {
           applicationId={applicationId}
           toggleId={configuring.toggleId}
           childrenCount={configuring.childrenCount}
+          isRoot={user.role === "root"}
           onClose={() => setConfiguring(null)}
           onSaved={() => {
             setPendingNotice(null);
@@ -293,6 +311,17 @@ export function ApplicationDetailScreen() {
           confirmLabel="Delete"
           onClose={() => !deleting && setDeletingApp(false)}
           onConfirm={confirmDeleteApplication}
+        />
+      )}
+
+      {intercept && (
+        <ApprovalInterceptModal
+          actionDesc={intercept.actionDesc}
+          path={intercept.path}
+          team={intercept.team}
+          busy={interceptBusy}
+          onCancel={cancelIntercept}
+          onConfirm={confirmIntercept}
         />
       )}
     </div>

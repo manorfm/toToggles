@@ -80,6 +80,85 @@ describe("AppModal — create mode", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("shows the approval intercept before creating, for a non-root caller, when the action requires approval", async () => {
+    let created = false;
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [] }));
+      if (path === "/api/profile/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
+      if (path === "/api/approval/required?action_type=application_create") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      if (path === "/api/applications") {
+        created = true;
+        return Promise.resolve(jsonResponse(201, { id: "9", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onCreated = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AppModal isRoot={false} onClose={vi.fn()} onCreated={onCreated} onUpdated={vi.fn()} onPendingApproval={vi.fn()} />);
+
+    await screen.findByRole("option", { name: "Payments Squad" });
+    await user.type(screen.getByLabelText(/application name/i), "Checkout Web");
+    await user.click(screen.getByRole("button", { name: /create application/i }));
+
+    expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
+    expect(screen.getByText("Checkout Web", { selector: ".aic-val" })).toBeInTheDocument();
+    expect(created).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /send for approval/i }));
+
+    await vi.waitFor(() => expect(created).toBe(true));
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "9" })));
+  });
+
+  it("cancelling the intercept keeps the form open with the typed name intact", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/profile/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
+      if (path === "/api/approval/required?action_type=application_create") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AppModal isRoot={false} onClose={onClose} onCreated={vi.fn()} onUpdated={vi.fn()} onPendingApproval={vi.fn()} />);
+
+    await screen.findByRole("option", { name: "Payments Squad" });
+    await user.type(screen.getByLabelText(/application name/i), "Checkout Web");
+    await user.click(screen.getByRole("button", { name: /create application/i }));
+    await screen.findByText(/approval required/i);
+
+    // Duas modais empilhadas (AppModal + o intercept) — o botão "Cancel" do intercept é o
+    // último no DOM, já que ele é renderizado depois do AppModal.
+    const cancelButtons = screen.getAllByRole("button", { name: /^cancel$/i });
+    await user.click(cancelButtons[cancelButtons.length - 1]);
+
+    expect(screen.queryByText(/approval required/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/application name/i)).toHaveValue("Checkout Web");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("root never sees the intercept, even when the action would require approval for others", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/teams") return Promise.resolve(jsonResponse(200, { success: true, teams: [{ id: "1", name: "Payments Squad" }] }));
+      if (path === "/api/approval/required") throw new Error("root must never call the approval-required check");
+      return Promise.resolve(jsonResponse(201, { id: "9", name: "Checkout Web", created_at: "", updated_at: "" }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onCreated = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AppModal isRoot onClose={vi.fn()} onCreated={onCreated} onUpdated={vi.fn()} onPendingApproval={vi.fn()} />);
+
+    await screen.findByRole("option", { name: "Payments Squad" });
+    await user.type(screen.getByLabelText(/application name/i), "Checkout Web");
+    await user.click(screen.getByRole("button", { name: /create application/i }));
+
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalled());
+    expect(screen.queryByText(/approval required/i)).not.toBeInTheDocument();
+  });
+
   it("does not show a team field's counterpart delete button (create mode has nothing to delete)", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [] })));
 

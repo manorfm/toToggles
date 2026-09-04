@@ -23,6 +23,7 @@ test("root creates a team, creates a user, and manages team membership/approver 
   // não o recém-criado).
   await rootPage.goto("/users");
   await rootPage.getByRole("button", { name: "Criar usuário" }).click();
+  await rootPage.locator("#new-user-name").fill("E2E Teams User");
   await rootPage.locator("#new-user-username").fill("e2e-teams-user");
   await rootPage.locator("#new-user-team").selectOption({ label: "E2E Team" });
   await rootPage.locator("#new-user-role").selectOption("admin");

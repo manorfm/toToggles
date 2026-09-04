@@ -372,6 +372,10 @@ func WithdrawRequest(c *gin.Context) {
 	approvalHandler.WithdrawRequest(c)
 }
 
+func GetTeamsWithoutApprover(c *gin.Context) {
+	approvalHandler.GetTeamsWithoutApprover(c)
+}
+
 // Auditoria
 func GetAuditLog(c *gin.Context) {
 	auditHandler.GetAuditLog(c)

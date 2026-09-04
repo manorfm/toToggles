@@ -44,6 +44,17 @@ export function modalButton(page: Page, name: string, options?: { dialogTitle?: 
   return scope.getByRole("button", { name, exact: true });
 }
 
+// v2.6: toda ação approval-aware agora mostra um intercept ("Approval required" — Action/
+// Target/Expires: 7 days) ANTES de submeter, em vez de só reagir ao 202 depois (ver
+// hooks/useApprovalIntercept.ts). Confirma que o intercept apareceu e clica "Send for approval",
+// que dispara a chamada de verdade — o passo que todo spec desta suíte que dispara uma ação
+// approval-aware pela UI (não direto por API) precisa entre o clique original e o "aguardando
+// aprovação" que só aparece depois da resposta 202.
+export async function confirmApprovalIntercept(page: Page): Promise<void> {
+  await page.getByText("Approval required").waitFor();
+  await page.getByRole("button", { name: "Send for approval" }).click();
+}
+
 export interface StandaloneServer {
   baseURL: string;
   dbDir: string;
@@ -102,7 +113,7 @@ export async function createAndLoginUser(
   opts: { username: string; teamId: string; role?: "admin" | "user"; isApprover?: boolean }
 ): Promise<BrowserContext> {
   const createRes = await rootRequest.post("/api/users", {
-    data: { username: opts.username, role: opts.role ?? "admin", team_id: opts.teamId, is_approver: opts.isApprover ?? false },
+    data: { name: opts.username, username: opts.username, role: opts.role ?? "admin", team_id: opts.teamId, is_approver: opts.isApprover ?? false },
   });
   if (!createRes.ok()) throw new Error(`create user "${opts.username}" failed: ${createRes.status()} ${await createRes.text()}`);
   const generatedPassword: string = (await createRes.json()).password;

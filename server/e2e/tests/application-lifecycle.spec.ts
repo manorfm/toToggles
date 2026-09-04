@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { ensureSwitchOff, ensureSwitchOn, goToApprovalSettings, modalButton } from "../helpers";
+import { confirmApprovalIntercept, ensureSwitchOff, ensureSwitchOn, goToApprovalSettings, modalButton } from "../helpers";
 
 test.describe("application lifecycle — create", () => {
   test("without approval: applies immediately", async ({ browser }) => {
@@ -35,6 +35,7 @@ test.describe("application lifecycle — create", () => {
     await adminPage.getByRole("button", { name: "New application" }).click();
     await adminPage.locator("#application-name").fill("E2E Created App Approved");
     await adminPage.getByRole("button", { name: "Create application" }).click();
+    await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
     await expect(adminPage.locator(".card.click", { hasText: "E2E Created App Approved" })).toHaveCount(0);
@@ -43,7 +44,7 @@ test.describe("application lifecycle — create", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Create application" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Approve" }).click();
+    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -103,6 +104,7 @@ test.describe("application lifecycle — edit name", () => {
       .click();
     await adminPage.locator("#application-name").fill("E2E Edit Target Approved Renamed");
     await adminPage.getByRole("button", { name: "Save changes" }).click();
+    await confirmApprovalIntercept(adminPage);
 
     await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
@@ -113,7 +115,7 @@ test.describe("application lifecycle — edit name", () => {
     // application" mesmo sendo uma edição.
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Create application" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Approve" }).click();
+    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();

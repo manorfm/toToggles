@@ -18,7 +18,7 @@ describe("SecretKeySection", () => {
   it("shows the illustrated empty state and a Generate CTA when there is no key yet (canManage)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
 
-    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage />, { wrapper: ToastProvider });
 
     expect(await screen.findByText("No service key")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate service key/i })).toBeInTheDocument();
@@ -27,7 +27,7 @@ describe("SecretKeySection", () => {
   it("hides management actions when canManage is false", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
 
-    render(<SecretKeySection applicationId="app1" canManage={false} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage={false} />, { wrapper: ToastProvider });
 
     await screen.findByText("No service key");
     expect(screen.queryByRole("button", { name: /generate service key/i })).not.toBeInTheDocument();
@@ -36,7 +36,7 @@ describe("SecretKeySection", () => {
   it("shows the existing key's created date and Rotate/Revoke actions", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [EXISTING_KEY] })));
 
-    const { container } = render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
+    const { container } = render(<SecretKeySection applicationId="app1" isRoot canManage />, { wrapper: ToastProvider });
 
     // "Service key" aparece 2x de propósito (título da seção + nome estático da chave,
     // confirmado no protótipo real — get_screen_full("KeysView")) — checa o `.ks-name`
@@ -52,7 +52,7 @@ describe("SecretKeySection", () => {
   it("hides the 'lost the key' card and rotate/revoke actions when canManage is false", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [EXISTING_KEY] })));
 
-    render(<SecretKeySection applicationId="app1" canManage={false} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage={false} />, { wrapper: ToastProvider });
 
     await screen.findAllByText("Service key");
     expect(screen.queryByRole("button", { name: /rotate key/i })).not.toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage />, { wrapper: ToastProvider });
     await screen.findByText("No service key");
 
     await user.click(screen.getByRole("button", { name: /generate service key/i }));
@@ -99,7 +99,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage />, { wrapper: ToastProvider });
     await screen.findAllByText("Service key");
 
     await user.click(screen.getByRole("button", { name: /revoke/i }));
@@ -111,7 +111,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [EXISTING_KEY] })));
     const onKeyPresenceChange = vi.fn();
 
-    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
     await screen.findAllByText("Service key");
 
     expect(onKeyPresenceChange).toHaveBeenCalledWith(true);
@@ -121,7 +121,7 @@ describe("SecretKeySection", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, secret_keys: [] })));
     const onKeyPresenceChange = vi.fn();
 
-    render(<SecretKeySection applicationId="app1" canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage onKeyPresenceChange={onKeyPresenceChange} />, { wrapper: ToastProvider });
     await screen.findByText("No service key");
 
     expect(onKeyPresenceChange).toHaveBeenCalledWith(false);
@@ -140,7 +140,7 @@ describe("SecretKeySection", () => {
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
     await screen.findByText("No service key");
 
     await user.click(screen.getByRole("button", { name: /generate service key/i }));
@@ -161,7 +161,7 @@ describe("SecretKeySection", () => {
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
     await screen.findByText("No service key");
 
     await user.click(screen.getByRole("button", { name: /generate service key/i }));
@@ -181,12 +181,66 @@ describe("SecretKeySection", () => {
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
 
-    render(<SecretKeySection applicationId="app1" canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
+    render(<SecretKeySection applicationId="app1" isRoot canManage onPendingApproval={onPendingApproval} />, { wrapper: ToastProvider });
     await screen.findAllByText("Service key");
 
     await user.click(screen.getByRole("button", { name: /revoke/i }));
 
     expect(onPendingApproval).toHaveBeenCalledWith("secret_key_delete");
     expect(screen.getAllByText("Service key").length).toBeGreaterThan(0);
+  });
+
+  it("shows the approval intercept before generating, for a non-root caller, naming the application as the target", async () => {
+    let generated = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/approval/required?action_type=secret_key_create") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      if (init?.method === "POST") {
+        generated = true;
+        return Promise.resolve(jsonResponse(200, { success: true, secret_key: EXISTING_KEY, plain_key: "sk_abc123" }));
+      }
+      return Promise.resolve(jsonResponse(200, { success: true, secret_keys: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<SecretKeySection applicationId="app1" applicationName="Checkout Web" isRoot={false} canManage />, { wrapper: ToastProvider });
+    await screen.findByText("No service key");
+
+    await user.click(screen.getByRole("button", { name: /generate service key/i }));
+
+    expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
+    expect(screen.getByText("Checkout Web", { selector: ".aic-val" })).toBeInTheDocument();
+    expect(generated).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /send for approval/i }));
+
+    await vi.waitFor(() => expect(generated).toBe(true));
+    expect(await screen.findByText("sk_abc123")).toBeInTheDocument();
+  });
+
+  it("shows the approval intercept before revoking, for a non-root caller", async () => {
+    let deleted = false;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/approval/required?action_type=secret_key_delete") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      if (init?.method === "DELETE") {
+        deleted = true;
+        return Promise.resolve(jsonResponse(200, { success: true, message: "ok" }));
+      }
+      return Promise.resolve(jsonResponse(200, { success: true, secret_keys: deleted ? [] : [EXISTING_KEY] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<SecretKeySection applicationId="app1" isRoot={false} canManage />, { wrapper: ToastProvider });
+    await screen.findAllByText("Service key");
+
+    await user.click(screen.getByRole("button", { name: /revoke/i }));
+
+    expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
+    expect(deleted).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /send for approval/i }));
+
+    await vi.waitFor(() => expect(deleted).toBe(true));
   });
 });

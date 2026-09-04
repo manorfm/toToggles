@@ -247,6 +247,7 @@ POST /api/approval/requests/:id/approve
 POST /api/approval/requests/:id/reject
 POST /api/approval/requests/:id/execute
 POST /api/approval/requests/:id/withdraw        # requester only, pending only
+GET  /api/approval/teams-without-approver       # caller's own teams that have zero approvers
 GET  /api/approval/teams/:id/requests
 GET  /api/approval/stats
 GET  /api/approval/teams/:id/stats
@@ -1248,6 +1249,23 @@ GET /api/approval/my-approver-teams
   "data": ["01TEAM000000000000000001", "01TEAM000000000000000003"]
 }
 ```
+
+```http
+GET /api/approval/teams-without-approver
+```
+
+```json
+{
+  "message": "teams without an approver retrieved successfully",
+  "data": [{ "id": "01TEAM000000000000000002", "name": "Growth", "...": "..." }]
+}
+```
+
+Any authenticated role (not `RequireRoot()` — deliberately different from `GET /teams/:id/approvers`, which
+sits under the root-only `/teams` group and would leak the full member/approver roster). Scoped to the
+caller's own teams only, and only reveals the yes/no "does this team have any approver" fact per team, never
+who the members or approvers are — backs the "You are not an approver on any of your teams..." banner on the
+Approvals screen (v2.6 §2.10).
 
 ### 9.4 Statistics & maintenance
 

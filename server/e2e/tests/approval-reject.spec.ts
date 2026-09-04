@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_STATE, readFixtures, ROOT_STATE } from "../fixtures";
-import { createToggle, ensureSwitchOn, goToApprovalSettings } from "../helpers";
+import { confirmApprovalIntercept, createToggle, ensureSwitchOn, goToApprovalSettings } from "../helpers";
 
 test("root rejects a pending request: nothing is applied, admin sees it as Rejected", async ({ browser }) => {
   const fixtures = readFixtures();
@@ -16,13 +16,14 @@ test("root rejects a pending request: nothing is applied, admin sees it as Rejec
   await adminPage.goto(`/applications/${fixtures.appId}`);
   const sw = adminPage.getByRole("switch", { name: "e2e.reject.target" });
   await sw.click(); // desabilitar (nasce enabled) — fica pendente
+  await confirmApprovalIntercept(adminPage);
   await expect(adminPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Pending" }).click();
   const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.reject.target" });
   await expect(pendingRow).toContainText("Disable toggle");
-  await pendingRow.getByRole("button", { name: "Reject" }).click();
+  await pendingRow.getByRole("button", { name: "Rejeitar" }).click();
 
   await rootPage.locator("#reject-reason").fill("Ainda em uso pelo app mobile.");
   await rootPage.getByRole("button", { name: "Confirmar rejeição" }).click();
@@ -32,11 +33,11 @@ test("root rejects a pending request: nothing is applied, admin sees it as Rejec
   await adminPage.reload();
   await expect(sw).toHaveAttribute("aria-checked", "true");
 
-  // Admin vê a própria solicitação como "Rejected" na aba "Mine".
+  // Admin vê a própria solicitação como "Rejeitado" (StatusChip é PT-BR) na aba "Mine".
   await adminPage.goto("/approvals");
   await adminPage.getByRole("button", { name: "Mine" }).click();
   const mineRow = adminPage.locator(".appr-row", { hasText: "e2e.reject.target" });
-  await expect(mineRow).toContainText("Rejected");
+  await expect(mineRow).toContainText("Rejeitado");
 
   await rootContext.close();
   await adminContext.close();

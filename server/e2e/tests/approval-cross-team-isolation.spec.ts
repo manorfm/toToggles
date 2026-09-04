@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ROOT_STATE } from "../fixtures";
-import { createAndLoginUser, createToggle, ensureSwitchOn, goToApprovalSettings } from "../helpers";
+import { confirmApprovalIntercept, createAndLoginUser, createToggle, ensureSwitchOn, goToApprovalSettings } from "../helpers";
 
 // Proves the team-scoped authorization fix end to end: two independent teams, one admin per
 // team (neither an approver), each with their own pending approval request. Every other approval
@@ -48,17 +48,24 @@ test("a team's approval requests are invisible and unreachable to another team's
   const adminAPage = await adminAContext.newPage();
   await adminAPage.goto(`/applications/${appAId}`);
   await adminAPage.getByRole("switch", { name: toggleAPath }).click();
+  await confirmApprovalIntercept(adminAPage);
   await expect(adminAPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
   const adminBPage = await adminBContext.newPage();
   await adminBPage.goto(`/applications/${appBId}`);
   await adminBPage.getByRole("switch", { name: toggleBPath }).click();
+  await confirmApprovalIntercept(adminBPage);
   await expect(adminBPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
-  // History (GET /api/approval/requests) must show admin A only their own team's request.
+  // History (GET /api/audit — the real audit trail, not GET /api/approval/requests: History was
+  // rebuilt onto a genuine audit log in a prior session, see server/CLAUDE.md's "History"
+  // section) must show admin A only their own team's request. domain/policy.AuditAccess enforces
+  // the same team-membership scoping as the approval workflow itself. Two entries legitimately
+  // mention the toggle path (the toggle's own creation + the "Requested: Disable toggle" entry
+  // from the pending approval above) — .first() is enough to prove team A's own event is there.
   await adminAPage.goto("/history");
-  await expect(adminAPage.locator(".appr-row", { hasText: toggleAPath })).toBeVisible();
-  await expect(adminAPage.locator(".appr-row", { hasText: toggleBPath })).toHaveCount(0);
+  await expect(adminAPage.locator(".audit-item", { hasText: toggleAPath }).first()).toBeVisible();
+  await expect(adminAPage.locator(".audit-item", { hasText: toggleBPath })).toHaveCount(0);
 
   // Find team B's pending request id as root — admin A has no way to see it through the UI/API,
   // but the point of this test is authorization, not obscurity: even knowing the id, admin A

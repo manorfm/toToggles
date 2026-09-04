@@ -135,6 +135,7 @@ func setupApprovalAccessFixture(t *testing.T) *approvalAccessFixture {
 	router.POST("/approval/requests/:id/reject", RejectRequest)
 	router.POST("/approval/requests/:id/execute", ExecuteApprovedAction)
 	router.POST("/approval/requests/:id/withdraw", WithdrawRequest)
+	router.GET("/approval/teams-without-approver", GetTeamsWithoutApprover)
 
 	return &approvalAccessFixture{
 		router: router, db: db,
@@ -361,6 +362,44 @@ func TestApprovalAccess_Withdraw_OnlyTheRequesterCan(t *testing.T) {
 		w := f.do(http.MethodPost, "/approval/requests/"+f.reqTeamA+"/withdraw")
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestApprovalAccess_TeamsWithoutApprover_ScopedToCaller(t *testing.T) {
+	t.Run("a member of the team that has no approver sees it listed", func(t *testing.T) {
+		f := setupApprovalAccessFixture(t)
+		f.as(f.memberB) // team B has no approver in the fixture
+		w := f.do(http.MethodGet, "/approval/teams-without-approver")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data []entity.Team `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if len(resp.Data) != 1 || resp.Data[0].ID != f.teamBID {
+			t.Errorf("expected team B, got %+v", resp.Data)
+		}
+	})
+
+	t.Run("a member of the team that DOES have an approver sees an empty list", func(t *testing.T) {
+		f := setupApprovalAccessFixture(t)
+		f.as(f.memberA) // team A has approverA in the fixture
+		w := f.do(http.MethodGet, "/approval/teams-without-approver")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data []entity.Team `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if len(resp.Data) != 0 {
+			t.Errorf("expected no teams, got %+v", resp.Data)
 		}
 	})
 }
