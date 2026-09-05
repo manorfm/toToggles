@@ -201,6 +201,7 @@ PUT    /api/applications/:id/toggles/:toggleId              # approval-aware, mi
 DELETE /api/applications/:id/toggles/:toggleId              # approval-aware, min role admin — recursive, soft-delete
 POST   /api/applications/:id/toggles/:toggleId/restore       # undo a delete, min role admin, not approval-aware
 PUT    /api/applications/:id/toggle/:toggleId                # recursive enable/disable, approval-aware, min role admin
+PUT    /api/applications/:id/toggles/bulk                    # multi-select, own bit only (not recursive), approval-aware, min role admin
 
 # Secret keys management (session required)
 DELETE /api/secret-keys/:id                       # approval-aware, min role admin
@@ -873,6 +874,30 @@ Recursively sets `enabled` on the target toggle **and every descendant**, in a s
 to disable/enable an entire subtree at once (e.g. kill-switching `user.payments.*`). Response is the refreshed
 target `Toggle`.
 
+```http
+PUT /api/applications/:id/toggles/bulk
+```
+
+v2.6 §6.5 — multi-select in the toggle grid. Approval-aware, minimum role `admin`.
+
+```json
+{ "toggle_ids": ["01TGL...", "01TGL..."], "enabled": true }
+```
+
+Flips the **own** bit of every listed toggle in one call — never recursive (a listed toggle's own children,
+if any, are untouched; compare with the singular endpoint above). Every ID must belong to `:id`'s application
+or the whole call fails with no partial effect claimed (there's no transaction, so a failure partway through
+does **not** roll back toggles already flipped before it — same consistency level as the rest of this API).
+Reuses the `toggle_enable`/`toggle_disable` approval action types (same approval-config switch as the singular
+recursive endpoint above) rather than introducing a third — `getActionType` distinguishes this route by its
+literal `/bulk` suffix before falling through to the generic per-toggle case. A pending request created here
+has no single `toggle_id` (the targets live in `action_data.toggle_ids` instead) and a description like
+`"Enable 3 toggles"`.
+
+```json
+{ "message": "toggles updated successfully", "toggle_ids": ["01TGL...", "01TGL..."], "enabled": true }
+```
+
 ## 8. Public API (Secret Keys)
 
 Secret keys let a service fetch an application's toggles without a user session — meant for SDK/client
@@ -1103,7 +1128,10 @@ Root only. All fields optional — partial patch (only supplied keys are applied
 
 All ten action types are now intercepted end-to-end by the middleware. `toggle_enable`/
 `toggle_disable` are distinguished from a plain `toggle_update` by the `enabled` value sent to the
-recursive endpoint (`PUT /api/applications/:id/toggle/:toggleId`); `toggle_rule` is distinguished
+recursive endpoint (`PUT /api/applications/:id/toggle/:toggleId`) — the same two action types also
+cover the bulk endpoint (`PUT /api/applications/:id/toggles/bulk`, §7); a pending request from
+either route is told apart at execution time by whether it carries a single `toggle_id` (recursive)
+or none (bulk, targets live in `action_data.toggle_ids`). `toggle_rule` is distinguished
 from `toggle_update` on the non-recursive endpoint (`PUT /api/applications/:id/toggles/:toggleId`)
 by the presence of `has_activation_rule: true` or a non-null `activation_rule` in the request body
 — a request that only flips `enabled` on that endpoint, without touching the rule, still counts as

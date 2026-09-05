@@ -77,6 +77,7 @@ function fetchMockFor(hierarchy: ToggleNode[] | undefined) {
 describe("ApplicationDetailScreen", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it("shows the application name and one card per leaf toggle", async () => {
@@ -168,6 +169,59 @@ describe("ApplicationDetailScreen", () => {
     await user.click(await screen.findByRole("button", { name: /undo/i }));
 
     await vi.waitFor(() => expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true"));
+  });
+
+  // v2.6 §6.5: seleção múltipla no grid — entra no modo de seleção, marca duas folhas, confirma
+  // "Enable selected" e espera a chamada de bulk com os dois IDs.
+  it("bulk-enables the selected toggles via the Select mode bulk bar", async () => {
+    let bulkBody: unknown = null;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/applications/app1") {
+        return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      if (path === "/api/applications/app1/toggles/bulk" && init?.method === "PUT") {
+        bulkBody = JSON.parse(init.body as string);
+        return Promise.resolve(jsonResponse(200, { message: "toggles updated successfully", toggle_ids: bulkBody, enabled: true }));
+      }
+      if (path.includes("hierarchy=true")) {
+        return Promise.resolve(
+          jsonResponse(200, { application: "app1", toggles: [{ id: "1", value: "user", enabled: false }, { id: "2", value: "billing", enabled: false }] })
+        );
+      }
+      if (path === "/api/applications/app1/toggles") {
+        return Promise.resolve(
+          jsonResponse(200, [detail({ id: "1", value: "user", enabled: false }), detail({ id: "2", value: "billing", enabled: false })])
+        );
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("user", { selector: ".root-chip" });
+
+    await user.click(screen.getByRole("button", { name: /^select$/i }));
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+    await user.click(screen.getByRole("button", { name: /enable selected/i }));
+
+    await vi.waitFor(() => expect(bulkBody).toEqual({ toggle_ids: ["1", "2"], enabled: true }));
+  });
+
+  // v2.6 §6.4: favoritar um toggle persiste em localStorage e reflete no botão imediatamente.
+  it("favorites a toggle, persisting the key to localStorage", async () => {
+    vi.stubGlobal("fetch", fetchMockFor([{ id: "1", value: "user", enabled: true }]));
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("user", { selector: ".root-chip" });
+
+    await user.click(screen.getByRole("button", { name: /^favorite$/i }));
+
+    expect(screen.getByRole("button", { name: /^unfavorite$/i })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem("totoggle_v2_favs") ?? "[]")).toContain("tg:app1:user");
   });
 
   it("creates a toggle via the modal and shows it in the grid", async () => {

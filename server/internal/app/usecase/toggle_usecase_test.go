@@ -367,6 +367,56 @@ func TestToggleUseCase_UpdateToggleByID(t *testing.T) {
 	}
 }
 
+// v2.6 §6.5: seleção múltipla → uma chamada só, flipando o bit PRÓPRIO de cada folha (nunca
+// recursivo — diferente de UpdateEnabledRecursively/PUT .../toggle/:id, que também desce pra
+// descendentes). Reusa UpdateToggleByID pra cada ID em vez de duplicar a mesma validação
+// (appID/existência) — UpdateToggleByID não tinha nenhum chamador real antes desta fase.
+func TestToggleUseCase_BulkUpdateEnabled(t *testing.T) {
+	appID := "app123"
+
+	t.Run("flips only the own bit of every listed toggle, not its descendants", func(t *testing.T) {
+		toggleMock := NewMockToggleRepository()
+		appMock := NewMockApplicationRepository()
+		appMock.Applications[appID] = &entity.Application{ID: appID, Name: "Test App"}
+		toggleMock.Toggles["leaf1"] = &entity.Toggle{ID: "leaf1", AppID: appID, Path: "a.leaf1", Enabled: false}
+		toggleMock.Toggles["leaf2"] = &entity.Toggle{ID: "leaf2", AppID: appID, Path: "b.leaf2", Enabled: false}
+		toggleMock.Toggles["untouched"] = &entity.Toggle{ID: "untouched", AppID: appID, Path: "c.untouched", Enabled: false}
+		useCase := NewToggleUseCase(toggleMock, appMock)
+
+		if err := useCase.BulkUpdateEnabled([]string{"leaf1", "leaf2"}, true, appID); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !toggleMock.Toggles["leaf1"].Enabled || !toggleMock.Toggles["leaf2"].Enabled {
+			t.Error("expected both listed toggles to be enabled")
+		}
+		if toggleMock.Toggles["untouched"].Enabled {
+			t.Error("expected a toggle not in the list to be untouched")
+		}
+	})
+
+	t.Run("returns a validation error for an empty list", func(t *testing.T) {
+		useCase := NewToggleUseCase(NewMockToggleRepository(), NewMockApplicationRepository())
+
+		if err := useCase.BulkUpdateEnabled(nil, true, appID); err == nil {
+			t.Error("expected an error for an empty toggle_ids list")
+		}
+	})
+
+	t.Run("errors when a listed toggle belongs to a different application", func(t *testing.T) {
+		toggleMock := NewMockToggleRepository()
+		appMock := NewMockApplicationRepository()
+		appMock.Applications[appID] = &entity.Application{ID: appID, Name: "Test App"}
+		toggleMock.Toggles["mine"] = &entity.Toggle{ID: "mine", AppID: appID, Path: "a.mine", Enabled: false}
+		toggleMock.Toggles["other-apps"] = &entity.Toggle{ID: "other-apps", AppID: "another-app", Path: "x.y", Enabled: false}
+		useCase := NewToggleUseCase(toggleMock, appMock)
+
+		if err := useCase.BulkUpdateEnabled([]string{"mine", "other-apps"}, true, appID); err == nil {
+			t.Error("expected an error when a toggle belongs to a different application")
+		}
+	})
+}
+
 func TestToggleUseCase_GetToggleHierarchy(t *testing.T) {
 	tests := []struct {
 		name          string

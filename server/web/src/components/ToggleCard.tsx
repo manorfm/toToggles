@@ -10,21 +10,66 @@ interface ToggleCardProps {
   onToggle: (leafId: string) => void;
   onEdit: (id: string) => void;
   onDelete: (leafId: string, path: string) => void;
+  // v2.6 §6.4 — existe pra QUALQUER role (confirmado no protótipo real: fica fora do branch
+  // canEdit/!canEdit), diferente de Configure/Delete/o switch de verdade. Opcional: só aparece
+  // quando o chamador (TogglePaths) de fato passa um handler — permite telas/testes que não
+  // usam favoritos continuarem sem esse botão.
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  // v2.6 §6.5 — modo de seleção múltipla: quando ligado (e canEdit), o checkbox substitui o
+  // StatusRing (nunca convivem).
+  selectMode?: boolean;
+  selected?: boolean;
+  onSelectToggle?: (leafId: string) => void;
+  // v2.6 §6.6 — "Suggest a change" só existe pra quem NÃO pode editar (role user); opcional pelo
+  // mesmo motivo do favorito acima.
+  onSuggest?: (leaf: ToggleLeaf) => void;
 }
 
 // Um card por FOLHA (não por nó) — reconstruído de get_component_spec("ToggleCard"). Cada
 // segmento do caminho é seu próprio link clicável (abre EditToggleDrawer pro id daquele nó, seja
 // ancestral ou a própria folha); só a folha ganha os botões de Configure/Delete no rodapé, porque
 // só ela pode ser apagada sem quebrar a árvore.
-export function ToggleCard({ leaf, canEdit, onToggle, onEdit, onDelete }: ToggleCardProps) {
+export function ToggleCard({
+  leaf,
+  canEdit,
+  onToggle,
+  onEdit,
+  onDelete,
+  isFavorite,
+  onToggleFavorite,
+  selectMode,
+  selected,
+  onSelectToggle,
+  onSuggest,
+}: ToggleCardProps) {
   const { status, leafOn, ancestorsOn, hasRule, footText, cut } = deriveCardState(leaf);
   const footColor = status === "green" ? "var(--accent)" : status === "red" ? "var(--danger)" : "var(--warn)";
 
   return (
-    <div className={"tg-card" + (status !== "green" ? " dead" : "")}>
+    <div className={"tg-card" + (status !== "green" ? " dead" : "") + (selected ? " sel" : "")}>
       <div className="tg-card-top">
-        <StatusRing status={status} size={20} />
+        {selectMode && canEdit ? (
+          <input
+            type="checkbox"
+            className="tg-check"
+            checked={!!selected}
+            onChange={() => onSelectToggle?.(leaf.leafId)}
+          />
+        ) : (
+          <StatusRing status={status} size={20} />
+        )}
         <span className="root-chip">{leaf.root}</span>
+        {onToggleFavorite && (
+          <button
+            className="icon-btn"
+            title={isFavorite ? "Unfavorite" : "Favorite"}
+            aria-label={isFavorite ? "Unfavorite" : "Favorite"}
+            onClick={onToggleFavorite}
+          >
+            <Icon name="star" size={13} fill={isFavorite} style={isFavorite ? { color: "var(--warn)" } : undefined} />
+          </button>
+        )}
         <span className="sp" />
         {canEdit ? (
           <button
@@ -37,14 +82,21 @@ export function ToggleCard({ leaf, canEdit, onToggle, onEdit, onDelete }: Toggle
             onClick={() => ancestorsOn && onToggle(leaf.leafId)}
           />
         ) : (
-          <button
-            role="switch"
-            aria-checked={leafOn}
-            aria-label={leaf.segs.join(".")}
-            className={"switch" + (leafOn ? " on" : "") + " dis"}
-            disabled
-            title="Somente leitura"
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              role="switch"
+              aria-checked={leafOn}
+              aria-label={leaf.segs.join(".")}
+              className={"switch" + (leafOn ? " on" : "") + " dis"}
+              disabled
+              title="Somente leitura"
+            />
+            {onSuggest && (
+              <button className="icon-btn" title="Suggest a change" aria-label="Suggest a change" onClick={() => onSuggest(leaf)}>
+                <Icon name="rocket" size={14} />
+              </button>
+            )}
+          </div>
         )}
       </div>
 

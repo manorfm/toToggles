@@ -143,6 +143,10 @@ func UpdateEnabled(c *gin.Context) {
 	toggleHandler.UpdateEnabled(c)
 }
 
+func BulkUpdateEnabled(c *gin.Context) {
+	toggleHandler.BulkUpdateEnabled(c)
+}
+
 // Funções de autenticação
 func Login(c *gin.Context) {
 	authHandler.Login(c)

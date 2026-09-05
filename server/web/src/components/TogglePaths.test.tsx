@@ -65,4 +65,97 @@ describe("TogglePaths", () => {
     expect(screen.getByText("No paths match your filter")).toBeInTheDocument();
     expect(screen.getByText("Try a different segment.")).toBeInTheDocument();
   });
+
+  // v2.6 §6.5 — seleção múltipla: "Select" chip só aparece quando canEdit E onBulkToggle são
+  // dados (um role user, ou uma tela que não passa a prop, nunca vê o modo de seleção).
+  describe("bulk select (v2.6 §6.5)", () => {
+    it("does not show the Select chip when onBulkToggle isn't provided", () => {
+      renderPaths();
+
+      expect(screen.queryByRole("button", { name: /^select$/i })).not.toBeInTheDocument();
+    });
+
+    it("does not show the Select chip when canEdit is false, even with onBulkToggle provided", () => {
+      renderPaths({ canEdit: false, onBulkToggle: vi.fn() });
+
+      expect(screen.queryByRole("button", { name: /^select$/i })).not.toBeInTheDocument();
+    });
+
+    it("enters select mode, shows checkboxes, and the bulk bar appears only once something is checked", async () => {
+      const user = userEvent.setup();
+      renderPaths({ onBulkToggle: vi.fn() });
+
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+
+      expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+      expect(screen.queryByText(/selected/i)).not.toBeInTheDocument();
+
+      await user.click(screen.getAllByRole("checkbox")[0]);
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+    });
+
+    it("calls onBulkToggle with the selected leaf IDs and true/false for Enable/Disable selected, then exits select mode", async () => {
+      const onBulkToggle = vi.fn();
+      const user = userEvent.setup();
+      renderPaths({ onBulkToggle });
+
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      await user.click(screen.getAllByRole("checkbox")[0]);
+      await user.click(screen.getAllByRole("checkbox")[1]);
+      await user.click(screen.getByRole("button", { name: /enable selected/i }));
+
+      expect(onBulkToggle).toHaveBeenCalledWith(["card", "billing"], true);
+      // Saiu do modo de seleção — o chip volta a dizer "Select", sem checkboxes.
+      expect(screen.getByRole("button", { name: /^select$/i })).toBeInTheDocument();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    });
+
+    it("calls onBulkToggle with false for Disable selected", async () => {
+      const onBulkToggle = vi.fn();
+      const user = userEvent.setup();
+      renderPaths({ onBulkToggle });
+
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      await user.click(screen.getAllByRole("checkbox")[0]);
+      await user.click(screen.getByRole("button", { name: /disable selected/i }));
+
+      expect(onBulkToggle).toHaveBeenCalledWith(["card"], false);
+    });
+
+    it("Cancel selection exits select mode without calling onBulkToggle", async () => {
+      const onBulkToggle = vi.fn();
+      const user = userEvent.setup();
+      renderPaths({ onBulkToggle });
+
+      await user.click(screen.getByRole("button", { name: /^select$/i }));
+      await user.click(screen.getAllByRole("checkbox")[0]);
+      await user.click(screen.getByRole("button", { name: /cancel selection/i }));
+
+      expect(onBulkToggle).not.toHaveBeenCalled();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    });
+  });
+
+  it("passes isFavorite/onToggleFavorite through to each card, scoped per leaf", async () => {
+    const onToggleFavorite = vi.fn();
+    const user = userEvent.setup();
+    renderPaths({ isFavorite: (leaf) => leaf.leafId === "card", onToggleFavorite });
+
+    const favoriteButtons = screen.getAllByRole("button", { name: /favorite/i });
+    expect(favoriteButtons).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: /^unfavorite$/i }));
+    expect(onToggleFavorite).toHaveBeenCalledWith(tree[0]);
+  });
+
+  it("passes onSuggest through to each card when canEdit is false", async () => {
+    const onSuggest = vi.fn();
+    const user = userEvent.setup();
+    renderPaths({ canEdit: false, onSuggest });
+
+    const suggestButtons = screen.getAllByRole("button", { name: /suggest a change/i });
+    await user.click(suggestButtons[0]);
+
+    expect(onSuggest).toHaveBeenCalledWith(tree[0]);
+  });
 });

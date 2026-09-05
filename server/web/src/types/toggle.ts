@@ -92,3 +92,8 @@ export interface ArchivedToggle {
 // POST .../toggles/:toggleId/restore — não é approval-aware (desfazer uma ação já decidida e
 // auditada não é uma mutação nova a revisar, ver docs/rest-flow.md §7).
 export type RestoreToggleResult = { kind: "restored" };
+
+// PUT .../toggles/bulk (v2.6 §6.5) — approval-aware, reusa toggle_enable/toggle_disable.
+export type BulkUpdateEnabledResult =
+  | { kind: "updated" }
+  | { kind: "pending_approval"; actionType: string };

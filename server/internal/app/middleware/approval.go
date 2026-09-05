@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -153,6 +154,18 @@ func getActionType(c *gin.Context) entity.ApprovalActionType {
 		return entity.ApprovalActionToggleCreate
 	case method == "DELETE" && strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionToggleDelete
+	case method == "PUT" && strings.HasSuffix(path, "/toggles/bulk"):
+		// Seleção múltipla (v2.6 §6.5) — checado ANTES do case genérico de "/toggles" plural
+		// abaixo (que casaria primeiro e classificaria errado como toggle_update, já que este
+		// path também contém "/toggles"). Reusa toggle_enable/toggle_disable, mesma chave de
+		// aprovação do enable/disable recursivo — confirmado no protótipo real
+		// (bulkToggle's pendingAction reusa o actionKey "toggle.enable").
+		if body := peekJSONBody(c); body != nil {
+			if enabled, ok := body["enabled"].(bool); ok && enabled {
+				return entity.ApprovalActionToggleEnable
+			}
+		}
+		return entity.ApprovalActionToggleDisable
 	case method == "PUT" && strings.Contains(path, "/toggles"):
 		// Endpoint plural (não-recursivo): se a requisição está ligando/alterando a regra de
 		// ativação, é toggle_rule; senão é um toggle_update comum (só enabled do próprio nó).
@@ -290,7 +303,10 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 
 	case entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable, entity.ApprovalActionToggleRule:
 		// Mesma extração de toggle_update: mesmas rotas (plural para rule, singular para enable/disable),
-		// mesmo formato de corpo.
+		// mesmo formato de corpo. Seleção múltipla (v2.6 §6.5, PUT .../toggles/bulk) reusa os
+		// mesmos dois action types de enable/disable mas não tem :toggleId nenhum na URL — só o
+		// corpo (toggle_ids) identifica os alvos, então toggleID fica nil de propósito aqui (o
+		// pedido de aprovação fica escopado só pela aplicação, não por um toggle específico).
 		appID := c.Param("id")
 		tgID := c.Param("toggleId")
 		if appID != "" {
@@ -305,11 +321,21 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 			actionData = updateData
 		}
 
+		isBulk := strings.HasSuffix(c.Request.URL.Path, "/toggles/bulk")
+
 		switch actionType {
 		case entity.ApprovalActionToggleEnable:
-			description = "Enable toggle"
+			if isBulk {
+				description = "Enable " + bulkToggleCount(updateData) + " toggles"
+			} else {
+				description = "Enable toggle"
+			}
 		case entity.ApprovalActionToggleDisable:
-			description = "Disable toggle"
+			if isBulk {
+				description = "Disable " + bulkToggleCount(updateData) + " toggles"
+			} else {
+				description = "Disable toggle"
+			}
 		default:
 			description = "Configure activation rule"
 		}
@@ -360,6 +386,16 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 	)
 
 	return request, err
+}
+
+// bulkToggleCount lê o tamanho de "toggle_ids" de um corpo já deserializado — usado só pra montar
+// a descrição legível de um pedido de aprovação de seleção múltipla ("Enable N toggles").
+func bulkToggleCount(body map[string]interface{}) string {
+	ids, ok := body["toggle_ids"].([]interface{})
+	if !ok {
+		return "0"
+	}
+	return strconv.Itoa(len(ids))
 }
 
 // determineTeamID determina qual team ID usar para a solicitação de aprovação

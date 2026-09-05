@@ -81,6 +81,9 @@ func Init(router *gin.Engine) {
 				// de :toggleId por clareza, mas Gin (radix tree desde v1.7) já prioriza segmentos
 				// estáticos sobre parâmetros no mesmo nível, então não colide com GET .../toggles/:toggleId.
 				toggles.GET("/archived", handler.RequireAdmin(), handler.GetArchivedToggles)
+				// Seleção múltipla (v2.6 §6.5) — liga/desliga o bit próprio de várias folhas numa
+				// chamada só, nunca recursivo. Estático, então não colide com PUT .../toggles/:toggleId.
+				toggles.PUT("/bulk", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.BulkUpdateEnabled)
 			}
 			toggleById := protected.Group("/applications/:id/toggles/:toggleId")
 			{

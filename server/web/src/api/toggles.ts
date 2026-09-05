@@ -1,6 +1,7 @@
 import { apiFetch } from "./client";
 import type {
   ArchivedToggle,
+  BulkUpdateEnabledResult,
   CreateToggleResult,
   DeleteToggleResult,
   RestoreToggleResult,
@@ -107,6 +108,24 @@ export async function restoreToggle(applicationId: string, toggleId: string): Pr
     method: "POST",
   });
   return { kind: "restored" };
+}
+
+// PUT .../toggles/bulk (v2.6 §6.5) — liga/desliga o bit PRÓPRIO de várias folhas de uma vez,
+// nunca recursivo. Reusa toggle_enable/toggle_disable como action type (mesma chave de
+// configuração de aprovação do enable/disable recursivo).
+export async function bulkUpdateEnabled(
+  applicationId: string,
+  toggleIds: string[],
+  enabled: boolean
+): Promise<BulkUpdateEnabledResult> {
+  const body = await apiFetch<{ message: string } | ApprovalRequiredBody>(`/applications/${applicationId}/toggles/bulk`, {
+    method: "PUT",
+    body: JSON.stringify({ toggle_ids: toggleIds, enabled }),
+  });
+  if ("approval_required" in body) {
+    return { kind: "pending_approval", actionType: body.action_type };
+  }
+  return { kind: "updated" };
 }
 
 interface ArchivedToggleBody {

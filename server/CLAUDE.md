@@ -1128,6 +1128,66 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       `LoginScreen.tsx` (`.auth-links`/`.link-btn` extraídos do CSS cru do protótipo — não
       existiam ainda, essa era a primeira tela a precisar deles).
     - **§5.2/§5.3/§5.4 — sem mudança**, decisão/confirmação registradas acima.
+  - **v2.6 §6 (Daily friction reducers) — Phase 4, começada numa fase seguinte.** Fonte real
+    confirmada num arquivo só do bundle decodificado (`paths.jsx`, o mesmo de `TogglePaths`/
+    `ToggleCard`/`StatusRing`) que expôs de uma vez a JSX de bulk-select (§6.5), favoritos (§6.4)
+    E suggest-change (§6.6) juntos — os três tocam o mesmo componente, então foram implementados
+    na mesma passada em vez de três reescritas separadas de `ToggleCard.tsx`.
+    - **§6.5 — seleção múltipla.** Backend: novo `PUT /api/applications/:id/toggles/bulk`
+      (`{toggle_ids, enabled}`) — liga/desliga o bit PRÓPRIO de cada ID da lista, nunca recursivo
+      (diferente do singular `PUT .../toggle/:id`). `ToggleUseCase.BulkUpdateEnabled` reaproveita
+      `UpdateToggleByID` num loop em vez de duplicar a validação de existência/appID —
+      `UpdateToggleByID` **não tinha nenhum chamador real** antes desta fase (achado com
+      `grep`, mesma classe de achado do `CountDescendants` morto da fase anterior), então isso
+      resolveu um código morto pré-existente ao mesmo tempo que implementava a feature nova, em
+      vez de duplicar lógica similar do zero. Approval-aware: reusa os action types
+      `toggle_enable`/`toggle_disable` (mesma chave de aprovação do enable/disable recursivo —
+      confirmado no protótipo real: `bulkToggle`'s pendingAction reusa o actionKey
+      `"toggle.enable"`) em vez de criar um terceiro tipo — `middleware/approval.go#getActionType`
+      distingue pelo path terminar em `/bulk`, checado ANTES do case genérico de `/toggles` (que
+      classificaria errado como `toggle_update`, já que esse path também contém `/toggles`).
+      `ExecuteApprovedAction` também precisou aprender a diferença: como bulk reusa os MESMOS dois
+      action types do enable/disable recursivo singular, o dispatch agora checa
+      `request.ToggleID == nil` (só bulk deixa isso nil de propósito — o singular sempre tem um
+      toggle_id) pra escolher entre `executeToggleUpdateAction` (singular) e o novo
+      `executeBulkToggleAction`. Texto de auditoria confirmado no protótipo real
+      (`executePendingAction`, case `"bulkToggle"`): `` `${Enabled|Disabled} <b>${N}</b> toggles
+      in bulk` `` (+ `" (after approval)"` na execução via aprovação), target = só o nome da
+      aplicação. **Frontend**: `ToggleCard`/`TogglePaths` ganharam `selectMode`/`selected`/
+      `onSelectToggle` (checkbox `.tg-check` substitui o `StatusRing` só nesse modo) + o chip
+      "Select"/"Cancel selection" e a `.bulk-bar` ("N selected" + "Disable selected"/"Enable
+      selected"), todas as classes CSS extraídas do CSS cru do protótipo (não existiam ainda).
+      `ApplicationDetailScreen`'s `handleBulkToggle` segue o mesmo padrão `guard()` de
+      `handleToggle`, com o toast de sucesso confirmado (`` `${N} toggles ${enabled ? "enabled" :
+      "disabled"}` ``, sem Undo — o protótipo real não oferece undo pra bulk, só pra enable/
+      disable/delete individuais).
+    - **§6.4 — favoritos.** Puramente client-side, `localStorage` only, sem endpoint de backend
+      nenhum (confirmado no protótipo real: chave `"totoggle_v2_favs"`,
+      `"app:{id}"`/`"tg:{appId}:{path}"` como as duas formas de chave — `lib/favorites.ts` porta
+      isso 1:1). `hooks/useFavorites.ts` usa `useSyncExternalStore` com uma store módulo-level
+      compartilhada entre TODAS as instâncias do hook — necessário porque favoritar um toggle
+      (`ToggleCard`) e uma futura lista de favoritos na sidebar são componentes MONTADOS AO MESMO
+      TEMPO; sem estado compartilhado, favoritar num lugar só refletiria no outro depois de um
+      reload. **Achado de ambiente rodando a suíte pela primeira vez com Node 25**: o
+      `localStorage` global experimental do próprio Node (22+, ligado por padrão sem
+      `--localstorage-file` configurado) sombreia o `Storage` de verdade que o jsdom provê em
+      `window` nos testes — `localStorage.clear()`/`.getItem()`/etc. quebravam silenciosamente
+      (viravam chamadas num objeto sem esses métodos). Corrigido em duas frentes: `package.json`
+      (`"test": "NODE_OPTIONS=--no-experimental-webstorage vitest run"`, a correção real) e uso de
+      `window.localStorage` explícito no código de produção (`lib/favorites.ts`) como documentação
+      de intenção, não como fix por si só. O botão de favoritar em `ToggleCard` existe pra
+      QUALQUER role (confirmado no protótipo: fica fora do branch `canEdit`/`!canEdit`) —
+      diferente de Configure/Delete/o switch de verdade, que continuam exclusivos de quem pode
+      editar. **Ainda pendente desta fatia**: a estrela em `AppCard` e a seção "Favorited" na
+      sidebar (`AppShell`) — só o lado de toggles (`ToggleCard`) foi fechado nesta passada.
+    - **§6.6 — "Suggest a change" (rocket icon)**: `ToggleCard`/`TogglePaths` já ganharam o prop
+      `onSuggest` (botão foguete ao lado do switch somente-leitura, só quando `!canEdit`) nesta
+      mesma passada, já que estava no mesmo arquivo/JSX confirmado dos dois itens acima — mas o
+      endpoint novo (`POST .../toggles/:toggleId/suggest`, restrito a role `user`, sempre cria uma
+      aprovação pendente independente do `required_actions` global) e o `SuggestChangeModal` que
+      de fato chamam esse prop ainda não foram construídos. `onSuggest` fica sem consumidor em
+      `ApplicationDetailScreen` até essa fatia ser fechada.
+    - **§6.1/§6.2 (command palette) e §6.7-6.9 (onboarding wizard)**: ainda não iniciados.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

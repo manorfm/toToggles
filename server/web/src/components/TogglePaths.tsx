@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { filterLeaves } from "../lib/toggleLeaves";
 import type { ToggleLeaf } from "../types/toggle";
 import { Icon } from "./Icon";
@@ -11,12 +12,45 @@ interface TogglePathsProps {
   onToggle: (leafId: string) => void;
   onEdit: (id: string) => void;
   onDelete: (leafId: string, path: string) => void;
+  // v2.6 §6.5 — seleção múltipla: opcional, o chip "Select" só aparece (e canEdit precisa ser
+  // true) quando o chamador de fato liga o recurso.
+  onBulkToggle?: (leafIds: string[], enabled: boolean) => void;
+  // v2.6 §6.4/§6.6 — repassados pra cada ToggleCard, escopados por leaf.
+  isFavorite?: (leaf: ToggleLeaf) => boolean;
+  onToggleFavorite?: (leaf: ToggleLeaf) => void;
+  onSuggest?: (leaf: ToggleLeaf) => void;
 }
 
-// Toolbar (busca + legenda) + grade de cards — reconstruído de get_component_spec("TogglePaths").
-// Substituiu o ToggleTree (lista indentada por nó), design nunca confirmado pelo protótipo.
-export function TogglePaths({ tree, search, setSearch, canEdit, onToggle, onEdit, onDelete }: TogglePathsProps) {
+// Toolbar (busca + legenda + seleção múltipla) + grade de cards — reconstruído de
+// get_component_spec("TogglePaths") e do JSX real decodificado (paths.jsx, ver server/CLAUDE.md).
+export function TogglePaths({
+  tree,
+  search,
+  setSearch,
+  canEdit,
+  onToggle,
+  onEdit,
+  onDelete,
+  onBulkToggle,
+  isFavorite,
+  onToggleFavorite,
+  onSuggest,
+}: TogglePathsProps) {
   const filtered = filterLeaves(tree, search);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+  function exitSelect() {
+    setSelectMode(false);
+    setSelected([]);
+  }
+  function bulk(enabled: boolean) {
+    onBulkToggle?.(selected, enabled);
+    exitSelect();
+  }
 
   return (
     <div>
@@ -36,7 +70,29 @@ export function TogglePaths({ tree, search, setSearch, canEdit, onToggle, onEdit
             <i className="lg-dot" style={{ background: "var(--danger)" }} /> off
           </span>
         </div>
+        {canEdit && onBulkToggle && (
+          <button
+            className={"chip" + (selectMode ? " on" : "")}
+            onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
+            style={{ marginLeft: 12 }}
+          >
+            {selectMode ? "Cancel selection" : "Select"}
+          </button>
+        )}
       </div>
+
+      {selectMode && selected.length > 0 && (
+        <div className="bulk-bar">
+          <span>{selected.length} selected</span>
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-soft btn-sm" onClick={() => bulk(false)}>
+            Disable selected
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => bulk(true)}>
+            Enable selected
+          </button>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="empty">
@@ -47,7 +103,20 @@ export function TogglePaths({ tree, search, setSearch, canEdit, onToggle, onEdit
       ) : (
         <div className="tg-grid">
           {filtered.map((leaf) => (
-            <ToggleCard key={leaf.leafId} leaf={leaf} onEdit={onEdit} onToggle={onToggle} onDelete={onDelete} canEdit={canEdit} />
+            <ToggleCard
+              key={leaf.leafId}
+              leaf={leaf}
+              onEdit={onEdit}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              canEdit={canEdit}
+              onSuggest={onSuggest}
+              isFavorite={isFavorite?.(leaf)}
+              onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(leaf) : undefined}
+              selectMode={selectMode}
+              selected={selected.includes(leaf.leafId)}
+              onSelectToggle={toggleSelect}
+            />
           ))}
         </div>
       )}

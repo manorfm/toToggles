@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -511,4 +512,66 @@ func (h *ToggleHandler) UpdateEnabled(c *gin.Context) {
 	h.auditUseCase.RecordForApplication(eventType, verb+" <b>"+updatedToggle.Value+"</b>", h.applicationName(appID)+" · "+updatedToggle.Path, appID, auditActor(c))
 
 	c.JSON(http.StatusOK, updatedToggle)
+}
+
+// BulkUpdateEnabledRequest representa o request do endpoint de seleção múltipla (v2.6 §6.5)
+type BulkUpdateEnabledRequest struct {
+	ToggleIDs []string `json:"toggle_ids" binding:"required"`
+	Enabled   bool     `json:"enabled"`
+}
+
+// BulkUpdateEnabled liga/desliga o bit PRÓPRIO de várias folhas de uma vez, numa única chamada
+// (v2.6 §6.5 — seleção múltipla no grid de toggles) — NUNCA recursivo, diferente do endpoint
+// singular acima. Approval-aware: reusa os action types toggle_enable/toggle_disable (mesma
+// chave de configuração de aprovação que o enable/disable recursivo — confirmado no protótipo
+// real, `bulkToggle`'s pendingAction reusa o mesmo actionKey "toggle.enable"), distinguido do
+// caso singular em middleware/approval.go pelo path terminar em "/bulk" em vez de ter um
+// :toggleId.
+func (h *ToggleHandler) BulkUpdateEnabled(c *gin.Context) {
+	appID := c.Param("id")
+	if appID == "" {
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("appID", "Application ID is required")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	var req BulkUpdateEnabledRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		appErr := entity.NewAppError(entity.ErrCodeValidation, "validation failed")
+		appErr.AddDetail("request", "Invalid request body")
+		c.JSON(http.StatusBadRequest, appErr)
+		return
+	}
+
+	if err := h.toggleUseCase.BulkUpdateEnabled(req.ToggleIDs, req.Enabled, appID); err != nil {
+		appErr, ok := err.(*entity.AppError)
+		if ok {
+			status := http.StatusBadRequest
+			if appErr.Code == entity.ErrCodeNotFound {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, appErr)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "internal server error"))
+		return
+	}
+
+	eventType := entity.AuditEventToggleDisabled
+	verb := "Disabled"
+	if req.Enabled {
+		eventType = entity.AuditEventToggleEnabled
+		verb = "Enabled"
+	}
+	// Confirmado no protótipo real (app.jsx#handleBulkToggle): `${enabled?"Enabled":"Disabled"}
+	// <b>${N}</b> toggles in bulk`, target = nome da aplicação (nunca path — são vários).
+	text := verb + " <b>" + strconv.Itoa(len(req.ToggleIDs)) + "</b> toggles in bulk"
+	h.auditUseCase.RecordForApplication(eventType, text, h.applicationName(appID), appID, auditActor(c))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "toggles updated successfully",
+		"toggle_ids": req.ToggleIDs,
+		"enabled":    req.Enabled,
+	})
 }

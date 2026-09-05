@@ -86,6 +86,7 @@ func setupApprovalWorkflowTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, *enti
 	router.POST("/applications/:id/generate-secret", RequireApprovalAware(entity.UserRoleAdmin), GenerateSecretKey)
 	router.DELETE("/secret-keys/:id", RequireApprovalAware(entity.UserRoleAdmin), DeleteSecretKey)
 	router.PUT("/applications/:id/toggle/:toggleId", RequireApprovalAware(entity.UserRoleAdmin), UpdateEnabled)
+	router.PUT("/applications/:id/toggles/bulk", RequireApprovalAware(entity.UserRoleAdmin), BulkUpdateEnabled)
 	router.PUT("/applications/:id/toggles/:toggleId", RequireApprovalAware(entity.UserRoleAdmin), UpdateToggle)
 	router.PUT("/applications/:id", RequireApprovalAware(entity.UserRoleAdmin), UpdateApplication)
 	router.POST("/applications", RequireApprovalAware(entity.UserRoleAdmin), CreateApplication)
@@ -267,6 +268,63 @@ func TestApprovalWorkflow_ToggleEnable_ApprovedAndExecuted_AppliesChange(t *test
 	}
 	if !applied.Enabled {
 		t.Errorf("expected toggle to be enabled after approve+execute, still disabled")
+	}
+}
+
+// v2.6 §6.5: seleção múltipla reusa os mesmos action types toggle_enable/toggle_disable do
+// enable/disable recursivo singular (teste acima), mas via PUT .../toggles/bulk — sem
+// :toggleId nenhum, só toggle_ids no corpo (ver middleware/approval.go, que deixa toggleID nil
+// de propósito nesse caso pra ExecuteApprovedAction saber que é bulk).
+func TestApprovalWorkflow_ToggleBulk_ApprovedAndExecuted_AppliesToEveryListedToggle(t *testing.T) {
+	router, db, _ := setupApprovalWorkflowTestRouter(t)
+	root := enableApproval(t, db, entity.ApprovalConfig{ToggleEnable: true})
+
+	leaf1 := &entity.Toggle{ID: "leaf-1", AppID: "app-1", Value: "leaf1", Path: "a.leaf1", Enabled: true}
+	leaf2 := &entity.Toggle{ID: "leaf-2", AppID: "app-1", Value: "leaf2", Path: "b.leaf2", Enabled: true}
+	for _, tg := range []*entity.Toggle{leaf1, leaf2} {
+		if err := db.Create(tg).Error; err != nil {
+			t.Fatalf("failed to create toggle %s: %v", tg.ID, err)
+		}
+		if err := db.Model(&entity.Toggle{}).Where("id = ?", tg.ID).Update("enabled", false).Error; err != nil {
+			t.Fatalf("failed to force initial enabled=false for %s: %v", tg.ID, err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/bulk", strings.NewReader(`{"toggle_ids":["leaf-1","leaf-2"],"enabled":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pending entity.ApprovalRequest
+	if err := db.Where("action_type = ?", entity.ApprovalActionToggleEnable).First(&pending).Error; err != nil {
+		t.Fatalf("expected a pending toggle_enable request, got: %v", err)
+	}
+	if pending.ToggleID != nil {
+		t.Errorf("expected a bulk request to have no single toggle_id, got %v", *pending.ToggleID)
+	}
+	if pending.Description != "Enable 2 toggles" {
+		t.Errorf("expected description %q, got %q", "Enable 2 toggles", pending.Description)
+	}
+
+	ctx := context.Background()
+	if err := globalApprovalUseCase.ApproveRequest(ctx, pending.ID, root); err != nil {
+		t.Fatalf("failed to approve request: %v", err)
+	}
+	if err := globalApprovalUseCase.ExecuteApprovedAction(ctx, pending.ID, root); err != nil {
+		t.Fatalf("failed to execute approved action: %v", err)
+	}
+
+	for _, id := range []string{"leaf-1", "leaf-2"} {
+		var applied entity.Toggle
+		if err := db.First(&applied, "id = ?", id).Error; err != nil {
+			t.Fatalf("toggle %s disappeared: %v", id, err)
+		}
+		if !applied.Enabled {
+			t.Errorf("expected toggle %s to be enabled after approve+execute, still disabled", id)
+		}
 	}
 }
 

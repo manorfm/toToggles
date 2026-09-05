@@ -28,7 +28,8 @@ export type IconName =
   | "map"
   | "rocket"
   | "menu"
-  | "refresh";
+  | "refresh"
+  | "star";
 
 interface IconProps {
   name: IconName;
@@ -223,6 +224,9 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
     </>
   ),
+  // v2.6 §6.4 (favoritos) — confirmado no icons.jsx real, mesmo bundle já usado pro resto deste
+  // arquivo.
+  star: <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />,
 };
 
 export function Icon({ name, size = 16, strokeWidth = 2, fill = false, className, style }: IconProps) {

@@ -713,6 +713,74 @@ func TestToggleHandler_UpdateEnabled(t *testing.T) {
 	}
 }
 
+// v2.6 §6.5: seleção múltipla — liga/desliga o bit próprio de várias folhas numa chamada só,
+// nunca recursivo (diferente de UpdateEnabled, testado acima).
+func TestToggleHandler_BulkUpdateEnabled(t *testing.T) {
+	t.Run("flips only the own bit of every listed toggle", func(t *testing.T) {
+		router := setupTestRouter()
+		toggleMock := usecase.NewMockToggleRepository()
+		appMock := usecase.NewMockApplicationRepository()
+		appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+		toggleMock.Toggles["leaf1"] = &entity.Toggle{ID: "leaf1", AppID: "app123", Path: "a.leaf1", Enabled: false}
+		toggleMock.Toggles["leaf2"] = &entity.Toggle{ID: "leaf2", AppID: "app123", Path: "b.leaf2", Enabled: false}
+		toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+		handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(appMock, toggleMock), newTestAuditUseCase())
+		router.PUT("/applications/:id/toggles/bulk", handler.BulkUpdateEnabled)
+
+		body, _ := json.Marshal(map[string]interface{}{"toggle_ids": []string{"leaf1", "leaf2"}, "enabled": true})
+		req, _ := http.NewRequest("PUT", "/applications/app123/toggles/bulk", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !toggleMock.Toggles["leaf1"].Enabled || !toggleMock.Toggles["leaf2"].Enabled {
+			t.Error("expected both listed toggles to be enabled")
+		}
+	})
+
+	t.Run("400 when appID is missing", func(t *testing.T) {
+		router := setupTestRouter()
+		toggleUseCase := usecase.NewToggleUseCase(usecase.NewMockToggleRepository(), usecase.NewMockApplicationRepository())
+		handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(usecase.NewMockApplicationRepository(), usecase.NewMockToggleRepository()), newTestAuditUseCase())
+		router.PUT("/toggles/bulk", handler.BulkUpdateEnabled)
+
+		body, _ := json.Marshal(map[string]interface{}{"toggle_ids": []string{"x"}, "enabled": true})
+		req, _ := http.NewRequest("PUT", "/toggles/bulk", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("400 when a listed toggle belongs to a different application", func(t *testing.T) {
+		router := setupTestRouter()
+		toggleMock := usecase.NewMockToggleRepository()
+		appMock := usecase.NewMockApplicationRepository()
+		appMock.Applications["app123"] = &entity.Application{ID: "app123", Name: "Test App"}
+		toggleMock.Toggles["mine"] = &entity.Toggle{ID: "mine", AppID: "app123", Path: "a.mine", Enabled: false}
+		toggleMock.Toggles["other"] = &entity.Toggle{ID: "other", AppID: "another-app", Path: "x.y", Enabled: false}
+		toggleUseCase := usecase.NewToggleUseCase(toggleMock, appMock)
+		handler := NewToggleHandler(toggleUseCase, usecase.NewApplicationUseCase(appMock, toggleMock), newTestAuditUseCase())
+		router.PUT("/applications/:id/toggles/bulk", handler.BulkUpdateEnabled)
+
+		body, _ := json.Marshal(map[string]interface{}{"toggle_ids": []string{"mine", "other"}, "enabled": true})
+		req, _ := http.NewRequest("PUT", "/applications/app123/toggles/bulk", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
 func TestToggleHandler_GetToggleStatus_Validation(t *testing.T) {
 	tests := []struct {
 		name           string

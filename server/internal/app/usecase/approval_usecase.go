@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -668,10 +669,15 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionToggleDelete:
 		execErr = uc.executeToggleDeleteAction(ctx, request, caller.ID)
-	case entity.ApprovalActionToggleEnable:
-		execErr = uc.executeToggleUpdateAction(ctx, request)
-	case entity.ApprovalActionToggleDisable:
-		execErr = uc.executeToggleUpdateAction(ctx, request)
+	case entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable:
+		// Seleção múltipla (v2.6 §6.5) reusa estes dois action types mas nunca tem um ToggleID
+		// único (o corpo carrega toggle_ids em vez disso) — ver middleware/approval.go, que
+		// deixa toggleID nil de propósito nesse caso.
+		if request.ToggleID == nil {
+			execErr = uc.executeBulkToggleAction(ctx, request)
+		} else {
+			execErr = uc.executeToggleUpdateAction(ctx, request)
+		}
 	case entity.ApprovalActionToggleRule:
 		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionApplicationCreate:
@@ -754,11 +760,28 @@ func (uc *ApprovalUseCase) resolveApprovalExecutionAudit(request *entity.Approva
 	case entity.ApprovalActionToggleDelete:
 		return entity.AuditEventToggleDeleted, "Deleted toggle <b>" + togglePath + "</b>" + suffix, appName
 
-	case entity.ApprovalActionToggleEnable:
-		return entity.AuditEventToggleEnabled, "Enabled <b>" + togglePath + "</b>" + suffix, appName
-
-	case entity.ApprovalActionToggleDisable:
-		return entity.AuditEventToggleDisabled, "Disabled <b>" + togglePath + "</b>" + suffix, appName
+	case entity.ApprovalActionToggleEnable, entity.ApprovalActionToggleDisable:
+		enabled := request.ActionType == entity.ApprovalActionToggleEnable
+		if request.ToggleID == nil {
+			// Seleção múltipla (v2.6 §6.5) — confirmado no protótipo real
+			// (app.jsx#executePendingAction, case "bulkToggle"): `${enabled?"Enabled":"Disabled"}
+			// <b>${N}</b> toggles in bulk`, target = nome da aplicação (nunca um path — são vários).
+			var data struct {
+				ToggleIDs []string `json:"toggle_ids"`
+			}
+			_ = request.GetActionDataAs(&data)
+			verb, eventType := "Disabled", entity.AuditEventToggleDisabled
+			if enabled {
+				verb, eventType = "Enabled", entity.AuditEventToggleEnabled
+			}
+			text := verb + " <b>" + strconv.Itoa(len(data.ToggleIDs)) + "</b> toggles in bulk" + suffix
+			return eventType, text, appName
+		}
+		verb, eventType := "Disabled", entity.AuditEventToggleDisabled
+		if enabled {
+			verb, eventType = "Enabled", entity.AuditEventToggleEnabled
+		}
+		return eventType, verb + " <b>" + togglePath + "</b>" + suffix, appName
 
 	case entity.ApprovalActionToggleUpdate:
 		// Endpoint plural sem regra (só `enabled` no corpo) — mesma heurística de
@@ -886,6 +909,28 @@ func (uc *ApprovalUseCase) executeToggleUpdateAction(ctx context.Context, reques
 		return fmt.Errorf("failed to update toggle: %w", err)
 	}
 
+	return nil
+}
+
+// executeBulkToggleAction executa uma seleção múltipla aprovada (v2.6 §6.5) — o par
+// toggle_enable/toggle_disable também cobre o enable/disable recursivo singular
+// (executeToggleUpdateAction); este caminho só roda quando request.ToggleID é nil, o sinal de
+// que o pedido original era um PUT .../toggles/bulk (ver middleware/approval.go).
+func (uc *ApprovalUseCase) executeBulkToggleAction(ctx context.Context, request *entity.ApprovalRequest) error {
+	var actionData struct {
+		ToggleIDs []string `json:"toggle_ids"`
+		Enabled   bool     `json:"enabled"`
+	}
+	if err := request.GetActionDataAs(&actionData); err != nil {
+		return fmt.Errorf("failed to deserialize action data: %w", err)
+	}
+	if request.ApplicationID == nil {
+		return errors.New("application ID is required for bulk toggle update")
+	}
+
+	if err := uc.toggleUseCase.BulkUpdateEnabled(actionData.ToggleIDs, actionData.Enabled, *request.ApplicationID); err != nil {
+		return fmt.Errorf("failed to bulk update toggles: %w", err)
+	}
 	return nil
 }
 

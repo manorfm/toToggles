@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  bulkUpdateEnabled,
   createToggle,
   deleteToggle,
   getArchivedToggles,
@@ -178,6 +179,39 @@ describe("restoreToggle", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/applications/app1/toggles/tgl1/restore", expect.objectContaining({ method: "POST" }));
     expect(result).toEqual({ kind: "restored" });
+  });
+});
+
+describe("bulkUpdateEnabled", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("PUTs the bulk endpoint with toggle_ids and enabled", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, { message: "toggles updated successfully", toggle_ids: ["a", "b"], enabled: true })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await bulkUpdateEnabled("app1", ["a", "b"], true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/applications/app1/toggles/bulk",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ toggle_ids: ["a", "b"], enabled: true }) })
+    );
+    expect(result).toEqual({ kind: "updated" });
+  });
+
+  it("returns pending_approval on 202", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "toggle_enable" }))
+    );
+
+    await expect(bulkUpdateEnabled("app1", ["a"], true)).resolves.toEqual({
+      kind: "pending_approval",
+      actionType: "toggle_enable",
+    });
   });
 });
 

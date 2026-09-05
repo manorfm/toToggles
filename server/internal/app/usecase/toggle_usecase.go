@@ -333,6 +333,25 @@ func (uc *ToggleUseCase) UpdateToggleByID(toggleID string, enabled bool, appID s
 	return nil
 }
 
+// BulkUpdateEnabled liga/desliga o bit PRÓPRIO de várias folhas de uma vez (v2.6 §6.5, seleção
+// múltipla no grid de toggles) — NUNCA recursivo, diferente de UpdateEnabledRecursively (PUT
+// .../toggle/:id, singular): cada ID da lista é tratado como um UpdateToggleByID independente
+// (reaproveitado em vez de duplicar a mesma validação de existência/appID), sem tocar em
+// descendente nenhum. Sem transação (mesmo nível de consistência do resto deste usecase — ver
+// DeleteToggleByID/cascata) — a primeira falha interrompe o loop, mas não desfaz toggles já
+// atualizados antes dela.
+func (uc *ToggleUseCase) BulkUpdateEnabled(toggleIDs []string, enabled bool, appID string) error {
+	if len(toggleIDs) == 0 {
+		return entity.NewAppError(entity.ErrCodeValidation, "at least one toggle ID is required")
+	}
+	for _, id := range toggleIDs {
+		if err := uc.UpdateToggleByID(id, enabled, appID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DeleteToggleByID remove um toggle por ID e appID — recursivo (v2.6 §3.4/4.1): o nó e toda a
 // subárvore descendente são soft-apagados numa vez, nunca mais recusado por ter filhos. Não sobe
 // removendo ancestrais que ficaram sem filhos (comportamento antigo, existia só porque a exclusão

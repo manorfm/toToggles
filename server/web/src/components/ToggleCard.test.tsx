@@ -173,4 +173,145 @@ describe("ToggleCard", () => {
     expect(screen.queryByRole("button", { name: /configure/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
   });
+
+  // v2.6 §6.4 — o botão de favoritar existe pra QUALQUER role (confirmado no protótipo real:
+  // fica fora do branch canEdit/!canEdit), diferente de Configure/Delete/o switch de verdade.
+  describe("favorites (v2.6 §6.4)", () => {
+    it("shows an unfilled star and calls onToggleFavorite when clicked, for a non-favorite", async () => {
+      const onToggleFavorite = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit onToggleFavorite={onToggleFavorite} />
+      );
+
+      await user.click(screen.getByRole("button", { name: /favorite/i }));
+      expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows a filled star and 'Unfavorite' label when isFavorite is true", () => {
+      render(
+        <ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit isFavorite onToggleFavorite={vi.fn()} />
+      );
+
+      expect(screen.getByRole("button", { name: /unfavorite/i })).toBeInTheDocument();
+    });
+
+    it("shows the favorite star for a non-canEdit (read-only) role too", () => {
+      render(
+        <ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit={false} onToggleFavorite={vi.fn()} />
+      );
+
+      expect(screen.getByRole("button", { name: /favorite/i })).toBeInTheDocument();
+    });
+
+    it("renders no favorite button when onToggleFavorite isn't provided", () => {
+      render(<ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit />);
+
+      expect(screen.queryByRole("button", { name: /favorite/i })).not.toBeInTheDocument();
+    });
+  });
+
+  // v2.6 §6.5 — em modo de seleção, o checkbox substitui o StatusRing (nunca convivem).
+  describe("select mode (v2.6 §6.5)", () => {
+    it("shows a checkbox instead of the status ring when selectMode is on, and calls onSelectToggle(leafId)", async () => {
+      const onSelectToggle = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <ToggleCard
+          leaf={greenLeaf}
+          onEdit={vi.fn()}
+          onToggle={vi.fn()}
+          onDelete={vi.fn()}
+          canEdit
+          selectMode
+          selected={false}
+          onSelectToggle={onSelectToggle}
+        />
+      );
+
+      const checkbox = screen.getByRole("checkbox");
+      expect(checkbox).not.toBeChecked();
+      await user.click(checkbox);
+      expect(onSelectToggle).toHaveBeenCalledWith("card");
+    });
+
+    it("checks the box when selected is true", () => {
+      render(
+        <ToggleCard
+          leaf={greenLeaf}
+          onEdit={vi.fn()}
+          onToggle={vi.fn()}
+          onDelete={vi.fn()}
+          canEdit
+          selectMode
+          selected
+          onSelectToggle={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole("checkbox")).toBeChecked();
+    });
+
+    it("adds the 'sel' class when selected", () => {
+      const { container } = render(
+        <ToggleCard
+          leaf={greenLeaf}
+          onEdit={vi.fn()}
+          onToggle={vi.fn()}
+          onDelete={vi.fn()}
+          canEdit
+          selectMode
+          selected
+          onSelectToggle={vi.fn()}
+        />
+      );
+
+      expect(container.querySelector(".tg-card")).toHaveClass("sel");
+    });
+
+    it("does not show a checkbox when selectMode is on but canEdit is false", () => {
+      render(
+        <ToggleCard
+          leaf={greenLeaf}
+          onEdit={vi.fn()}
+          onToggle={vi.fn()}
+          onDelete={vi.fn()}
+          canEdit={false}
+          selectMode
+          selected={false}
+          onSelectToggle={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      expect(screen.getByRole("switch")).toBeInTheDocument();
+    });
+  });
+
+  // v2.6 §6.6 — "Suggest a change" só existe pra quem não pode editar (role user), nunca junto
+  // com o switch de verdade.
+  describe("suggest a change (v2.6 §6.6)", () => {
+    it("shows a rocket 'Suggest a change' button next to the read-only switch when onSuggest is provided", async () => {
+      const onSuggest = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit={false} onSuggest={onSuggest} />
+      );
+
+      await user.click(screen.getByRole("button", { name: /suggest a change/i }));
+      expect(onSuggest).toHaveBeenCalledWith(greenLeaf);
+    });
+
+    it("never shows the suggest button when canEdit is true, even if onSuggest is provided", () => {
+      render(<ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit onSuggest={vi.fn()} />);
+
+      expect(screen.queryByRole("button", { name: /suggest a change/i })).not.toBeInTheDocument();
+    });
+
+    it("does not show the suggest button when onSuggest isn't provided", () => {
+      render(<ToggleCard leaf={greenLeaf} onEdit={vi.fn()} onToggle={vi.fn()} onDelete={vi.fn()} canEdit={false} />);
+
+      expect(screen.queryByRole("button", { name: /suggest a change/i })).not.toBeInTheDocument();
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { deleteApplication, getApplication } from "../api/applications";
 import {
+  bulkUpdateEnabled,
   deleteToggle,
   getArchivedToggles,
   getToggleHierarchy,
@@ -23,7 +24,9 @@ import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
 import type { ApplicationDetailTab } from "../hooks/useAppUser";
 import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
+import { useFavorites } from "../hooks/useFavorites";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
+import { toggleFavoriteKey } from "../lib/favorites";
 import {
   activeLeavesUnder,
   ancestorsEnabledFor,
@@ -90,6 +93,7 @@ export function ApplicationDetailScreen() {
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(
     user.role === "root"
   );
+  const { favorites, toggleFavorite } = useFavorites();
 
   const canEdit = user.role === "root" || user.role === "admin";
 
@@ -273,6 +277,47 @@ export function ApplicationDetailScreen() {
     });
   }
 
+  // v2.6 §6.5: seleção múltipla — liga/desliga o bit PRÓPRIO das folhas escolhidas (nunca
+  // recursivo), reusando toggle_enable/toggle_disable como o resto do enable/disable (mesma
+  // guard, mesmo texto de toast confirmado no protótipo real: `${N} toggles ${enabled ?
+  // "enabled" : "disabled"}`).
+  async function handleBulkToggle(leafIds: string[], enabled: boolean) {
+    if (state.status !== "loaded") return;
+    const paths = leafIds
+      .map((id) => state.leaves.find((l) => l.leafId === id)?.segs.join("."))
+      .filter((p): p is string => !!p)
+      .join(", ");
+    const actionType = enabled ? "toggle_enable" : "toggle_disable";
+    const actionDesc = `${enabled ? "Enable" : "Disable"} ${leafIds.length} toggles`;
+
+    await guard(actionType, { actionDesc, path: paths }, async () => {
+      setMutating(true);
+      try {
+        const result = await bulkUpdateEnabled(applicationId, leafIds, enabled);
+        if (result.kind === "pending_approval") {
+          setPendingNotice("Solicitação enviada — aguardando aprovação antes de aplicar a mudança.");
+          toast("Action submitted for approval");
+        } else {
+          setPendingNotice(null);
+          load();
+          toast(`${leafIds.length} toggles ${enabled ? "enabled" : "disabled"}`);
+        }
+      } catch (err) {
+        setPendingNotice(err instanceof ApiError ? err.message : "Não foi possível atualizar os toggles.");
+      } finally {
+        setMutating(false);
+      }
+    });
+  }
+
+  function isFavoriteToggle(leaf: ToggleLeaf): boolean {
+    return favorites.includes(toggleFavoriteKey(applicationId, leaf.segs.join(".")));
+  }
+
+  function handleToggleFavorite(leaf: ToggleLeaf) {
+    toggleFavorite(toggleFavoriteKey(applicationId, leaf.segs.join(".")));
+  }
+
   return (
     <div className="page">
       <div className="page-head">
@@ -354,6 +399,9 @@ export function ApplicationDetailScreen() {
                 activeLeaves: found ? activeLeavesUnder(found.node, found.segs) : [],
               });
             }}
+            onBulkToggle={canEdit ? handleBulkToggle : undefined}
+            isFavorite={isFavoriteToggle}
+            onToggleFavorite={handleToggleFavorite}
           />
         </div>
       )}
