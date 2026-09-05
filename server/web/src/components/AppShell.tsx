@@ -6,10 +6,16 @@ import { useFavorites } from "../hooks/useFavorites";
 import { listApplications } from "../api/applications";
 import { listApprovableApprovals, listPendingApprovals } from "../api/approvals";
 import { listTeams } from "../api/teams";
+import { getToggleHierarchy } from "../api/toggles";
 import { listUsers } from "../api/users";
 import { logout } from "../api/profile";
 import { favoriteAppIds, favoriteToggleRefs } from "../lib/favorites";
+import type { CommandPaletteData, CommandPaletteToggleHit } from "../lib/commandPalette";
+import { leafDottedPaths } from "../lib/toggleLeaves";
 import type { Application } from "../types/application";
+import type { TeamWithCounts } from "../types/team";
+import type { User } from "../types/user";
+import { CommandPalette } from "./CommandPalette";
 import { Icon, type IconName } from "./Icon";
 import { RoleBadge } from "./RoleBadge";
 import { UserMenu } from "./UserMenu";
@@ -124,14 +130,23 @@ export function AppShell() {
   // alcançável.
   const [navOpen, setNavOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [appCount, setAppCount] = useState(0);
   // v2.6 §6.4: precisa da lista inteira (não só a contagem) pra resolver o nome de uma
   // aplicação favoritada na sidebar — reaproveita o mesmo fetch que já existia só pro badge de
-  // contagem, em vez de duplicar a chamada a GET /applications.
+  // contagem, em vez de duplicar a chamada a GET /applications. Contagens de nav (Applications/
+  // Teams/Usuários) derivam de `.length` destas listas em vez de um state próprio — evita 3
+  // pares "lista completa" + "contagem redundante" pro mesmo fetch.
   const [applications, setApplications] = useState<Application[]>([]);
-  const [teamCount, setTeamCount] = useState(0);
+  const [teams, setTeams] = useState<TeamWithCounts[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [openApp, setOpenApp] = useState<OpenAppInfo | null>(null);
   const { favorites } = useFavorites();
+  // v2.6 §6.1/§6.2: command palette (⌘K/Ctrl+K). O índice de toggles é buscado sob demanda (não
+  // no mount do shell) — teams/users já são fetchados eagerly de qualquer jeito pros badges da
+  // sidebar acima, mas varrer a hierarquia de TODA aplicação só faz sentido quando alguém de fato
+  // abre a busca. `null` = ainda não buscado; `[]` já é um resultado válido (nenhuma aplicação
+  // com toggles) e não deve refazer o fetch.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toggleIndex, setToggleIndex] = useState<CommandPaletteToggleHit[] | null>(null);
 
   // A tela de detalhe de aplicação é quem sabe esses dados (AppShell nunca busca uma aplicação
   // individual) — mas se o usuário navegar embora sem essa tela limpar o próprio estado (ex.:
@@ -140,8 +155,6 @@ export function AppShell() {
   useEffect(() => {
     if (!location.pathname.startsWith("/applications/")) setOpenApp(null);
   }, [location.pathname]);
-
-  const [userCount, setUserCount] = useState(0);
 
   const authenticatedUserId = currentUser.status === "authenticated" ? currentUser.user.id : null;
   const authenticatedUserIsRoot = currentUser.status === "authenticated" && currentUser.user.role === "root";
@@ -169,10 +182,7 @@ export function AppShell() {
     let cancelled = false;
     listApplications()
       .then((apps) => {
-        if (!cancelled) {
-          setAppCount(apps.length);
-          setApplications(apps);
-        }
+        if (!cancelled) setApplications(apps);
       })
       .catch(() => {
         // Idem: contagem informativa no badge de nav, não crítica.
@@ -186,8 +196,8 @@ export function AppShell() {
     if (!authenticatedUserId || !authenticatedUserIsRoot) return;
     let cancelled = false;
     listTeams()
-      .then((teams) => {
-        if (!cancelled) setTeamCount(teams.length);
+      .then((fetched) => {
+        if (!cancelled) setTeams(fetched);
       })
       .catch(() => {
         // Idem.
@@ -201,8 +211,8 @@ export function AppShell() {
     if (!authenticatedUserId || !authenticatedUserCanManageUsers) return;
     let cancelled = false;
     listUsers()
-      .then((users) => {
-        if (!cancelled) setUserCount(users.length);
+      .then((fetched) => {
+        if (!cancelled) setUsers(fetched);
       })
       .catch(() => {
         // Idem: contagem informativa no badge de nav, não crítica.
@@ -212,10 +222,49 @@ export function AppShell() {
     };
   }, [authenticatedUserId, authenticatedUserCanManageUsers]);
 
+  // v2.6 §6.1/§6.2: ⌘K/Ctrl+K abre/fecha a paleta de qualquer tela autenticada — precisa viver
+  // acima dos `return` antecipados abaixo (regra dos hooks), mesmo padrão dos demais useEffect
+  // deste componente.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Busca a hierarquia de toggles de TODA aplicação em paralelo — só na primeira vez que a
+  // paleta abre (não no mount do shell) e só uma vez por sessão (cache em `toggleIndex`,
+  // guardado por `!== null`). `applications` já vem do fetch de badge acima; nenhuma aplicação
+  // ainda carregada só adia a busca pro próximo open, não trava em `[]` permanentemente.
+  useEffect(() => {
+    if (!paletteOpen || toggleIndex !== null || applications.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      applications.map((app) =>
+        getToggleHierarchy(app.id).then((tree) =>
+          leafDottedPaths(tree).map((path): CommandPaletteToggleHit => ({ appId: app.id, appName: app.name, path }))
+        )
+      )
+    )
+      .then((perApp) => {
+        if (!cancelled) setToggleIndex(perApp.flat());
+      })
+      .catch(() => {
+        if (!cancelled) setToggleIndex([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paletteOpen, toggleIndex, applications]);
+
   function badgeCountFor(to: string): number {
-    if (to === "/") return appCount;
-    if (to === "/teams") return teamCount;
-    if (to === "/users") return userCount;
+    if (to === "/") return applications.length;
+    if (to === "/teams") return teams.length;
+    if (to === "/users") return users.length;
     if (to === "/approvals") return pendingCount;
     return 0;
   }
@@ -248,6 +297,37 @@ export function AppShell() {
   async function handleLogout() {
     await logout();
     navigate("/login", { replace: true });
+  }
+
+  // v2.6 §6.1/§6.2: Teams é root-only (mesma regra do item de nav "/teams" — a API por trás é
+  // RequireRoot()); People/Usuários segue canManageUsers (root ou admin), mesma regra do item de
+  // nav "/users". Gate fica aqui (quem monta os dados), não em lib/commandPalette.ts, que só
+  // filtra o que recebe.
+  const commandPaletteData: CommandPaletteData = {
+    apps: applications.map((a) => ({ id: a.id, name: a.name })),
+    toggles: toggleIndex ?? [],
+    teams: user.role === "root" ? teams.map((t) => ({ id: t.id, name: t.name })) : [],
+    people: authenticatedUserCanManageUsers ? users.map((u) => ({ id: u.id, name: u.name, username: u.username })) : [],
+  };
+
+  function goToApp(appId: string) {
+    setPaletteOpen(false);
+    navigate(`/applications/${appId}`);
+  }
+
+  function goToToggle(appId: string, path: string) {
+    setPaletteOpen(false);
+    navigate(`/applications/${appId}?tab=toggles&search=${encodeURIComponent(path)}`);
+  }
+
+  function goToTeams() {
+    setPaletteOpen(false);
+    navigate("/teams");
+  }
+
+  function goToUsers() {
+    setPaletteOpen(false);
+    navigate("/users");
   }
 
   return (
@@ -361,6 +441,17 @@ export function AppShell() {
         </div>
         <Outlet context={{ user, setOpenApp }} />
       </main>
+
+      {paletteOpen && (
+        <CommandPalette
+          data={commandPaletteData}
+          onClose={() => setPaletteOpen(false)}
+          onGoApp={goToApp}
+          onGoToggle={goToToggle}
+          onGoTeams={goToTeams}
+          onGoUsers={goToUsers}
+        />
+      )}
     </div>
   );
 }

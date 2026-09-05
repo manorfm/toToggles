@@ -141,6 +141,27 @@ export function ancestorsEnabledFor(leaves: ToggleLeaf[], toggleId: string): { o
   return { ok: true, blocker: null };
 }
 
+// Port de leafPaths() (data.js) — só o path pontilhado de cada folha, sem estado/regra. Único
+// consumidor: CommandPalette (v2.6 §6.1/§6.2), que busca texto entre aplicações sem precisar de
+// enabled/rule (ao contrário de flattenToLeaves, feito pro grid de cards).
+export function leafDottedPaths(hierarchy: ToggleNode[]): string[] {
+  const paths: string[] = [];
+
+  function walk(nodes: ToggleNode[], segs: string[]) {
+    for (const node of nodes) {
+      const nextSegs = [...segs, node.value];
+      if (node.toggles && node.toggles.length > 0) {
+        walk(node.toggles, nextSegs);
+      } else {
+        paths.push(nextSegs.join("."));
+      }
+    }
+  }
+
+  walk(hierarchy, []);
+  return paths;
+}
+
 export function filterLeaves(leaves: ToggleLeaf[], search: string): ToggleLeaf[] {
   const q = search.trim().toLowerCase();
   if (!q) return leaves;

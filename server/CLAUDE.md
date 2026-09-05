@@ -1209,7 +1209,40 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       Coberto por testes de handler (real-DB, incl. negação pra quem não é membro do team), de
       componente e um e2e completo (`suggest-toggle-change.spec.ts`: usuário `user` sugere com
       aprovação desligada, root vê e aprova, toggle aplica).
-    - **§6.1/§6.2 (command palette) e §6.7-6.9 (onboarding wizard)**: ainda não iniciados.
+    - ✅ **§6.1/§6.2 — command palette (⌘K/Ctrl+K)**: completo. Sem trabalho de backend — busca
+      só sobre dados já carregados ou buscados sob demanda. `lib/commandPalette.ts` isola o
+      cálculo puro dos 4 grupos/caps (Applications 5, Toggles 8, Teams 4, People 4 — cópia exata
+      do `CommandPalette` confirmado em `app.jsx`: Applications aparece mesmo com a busca vazia,
+      os outros 3 só depois de digitar algo), testável sem DOM. `components/CommandPalette.tsx`
+      é a UI (scrim/box/input/grupos), portada 1:1, com Escape fechando via o próprio `onKeyDown`
+      do input — sem precisar de um primitivo de pilha compartilhado (§8.3 continua não
+      construído; não havia dependência real dele aqui, já que só uma camada — a paleta — reage a
+      Escape/⌘K hoje). Dados e o atalho global vivem em `AppShell.tsx` (dono natural — é o shell
+      que já busca `applications`/`teams`/`users` pros badges da sidebar, reaproveitados aqui em
+      vez de um fetch duplicado): ⌘K/Ctrl+K abre/fecha (toggle, não só abre) via um único
+      `window.addEventListener("keydown", ...)`; o índice de toggles de TODA aplicação (para a
+      busca cross-app) é buscado em paralelo (`getToggleHierarchy` por app +
+      `lib/toggleLeaves.ts#leafDottedPaths`, novo — só o path pontilhado de cada folha, sem
+      estado/regra) **sob demanda na primeira abertura**, cacheado depois (`toggleIndex !== null`
+      evita refetch). Gate por papel decidido em `AppShell` (não em `lib/commandPalette.ts`, que
+      só filtra o que recebe): grupo Teams só para `root` (mesma regra de `/teams` ser
+      `RequireRoot()` — mostrar um resultado de time pra quem não pode abrir a tela seria um link
+      morto, divergência deliberada do protótipo, que não tinha essa restrição de rota); grupo
+      People segue `canManageUsers` (root ou admin), igual ao item de nav "Usuários". Refactor
+      colateral: os 3 states redundantes "lista completa" + "contagem" (`appCount`/`teamCount`/
+      `userCount`) viraram só as listas completas (`applications`/`teams`/`users`), com as
+      contagens dos badges derivadas via `.length` — a paleta precisava das listas completas de
+      qualquer forma, manter os dois era duplicação. Um efeito colateral do teste encontrado ao
+      vivo: como `commandPaletteData` agora roda em TODO render do `AppShell`, testes cujo mock de
+      fetch devolvia o corpo de sessão pra QUALQUER path (inclusive `/api/applications`) faziam
+      `applications.map` estourar assim que o fetch resolvia — `AppShell.test.tsx` ganhou um
+      helper `mockFetch(user, overrides)` com defaults seguros pros endpoints auxiliares,
+      substituindo ~20 mocks ad hoc duplicados no arquivo. Coberto por
+      `lib/commandPalette.test.ts`, `components/CommandPalette.test.tsx`,
+      `components/AppShell.test.tsx` (atalho, fetch lazy+cache, navegação, gate por papel) e
+      `e2e/tests/command-palette.spec.ts` (root navega entre app/toggle/team pela paleta; admin
+      nunca vê um resultado de Teams).
+    - **§6.7-6.9 (onboarding wizard)**: ainda não iniciado — maior peça restante da Phase 4.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura

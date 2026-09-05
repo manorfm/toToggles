@@ -1012,6 +1012,89 @@ input[type="checkbox"] {
   font-weight: 600;
   color: var(--accent);
 }
+/* v2.6 §6.1/§6.2: command palette (⌘K) */
+.cmdk-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+  background: oklch(0 0 0 / 0.55);
+  backdrop-filter: blur(3px);
+}
+.cmdk-box {
+  width: min(560px, 92vw);
+  max-height: 60vh;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-3);
+}
+.cmdk-input-row input {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font-size: 15px;
+}
+.cmdk-input-row input:focus {
+  outline: none;
+}
+.cmdk-esc {
+  font-size: 11px;
+  color: var(--ink-4);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+.cmdk-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+.cmdk-group {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+  font-weight: 600;
+  padding: 10px 10px 4px;
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.cmdk-item:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.cmdk-item svg {
+  flex-shrink: 0;
+  color: var(--ink-4);
+}
+.cmdk-sub {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
 .tg-card-top {
   display: flex;
   align-items: center;

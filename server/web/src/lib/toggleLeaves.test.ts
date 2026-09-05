@@ -9,6 +9,7 @@ import {
   filterLeaves,
   findToggleNode,
   flattenToLeaves,
+  leafDottedPaths,
 } from "./toggleLeaves";
 import type { ToggleDetail, ToggleNode } from "../types/toggle";
 
@@ -200,6 +201,19 @@ describe("activeLeavesUnder", () => {
     const billing = findToggleNode(hierarchy, "billing")!;
 
     expect(activeLeavesUnder(billing.node, billing.segs)).toEqual([]);
+  });
+});
+
+describe("leafDottedPaths", () => {
+  // v2.6 §6.1/§6.2: a busca de toggles do command palette só precisa do path pontilhado de cada
+  // folha (nunca estado/regra) — porta leafPaths() do protótipo real, mas sobre a árvore
+  // hierárquica que já temos (enabled cascateado é irrelevante aqui, só o texto pra buscar).
+  it("lists every leaf's full dotted path, skipping branch nodes", () => {
+    expect(leafDottedPaths(hierarchy)).toEqual(["user.payments.card", "user.payments.reader", "user.billing"]);
+  });
+
+  it("returns an empty array for an empty tree", () => {
+    expect(leafDottedPaths([])).toEqual([]);
   });
 });
 
