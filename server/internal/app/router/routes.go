@@ -70,6 +70,10 @@ func Init(router *gin.Engine) {
 				// Rotas de secret keys para aplicações (apenas admin/root)
 				applications.POST("/:id/generate-secret", handler.RequireApprovalAware(entity.UserRoleAdmin), handler.GenerateSecretKey)
 				applications.GET("/:id/secret-keys", handler.RequireAdmin(), handler.GetSecretKeys)
+
+				// Activity tab (v2.6 §7) — audit trail de UMA aplicação só, mesma postura de
+				// acesso de GET /applications/:id (qualquer autenticado, sem checagem de time).
+				applications.GET("/:id/audit", handler.GetApplicationAudit)
 			}
 
 			// Rotas de toggles
@@ -196,10 +200,12 @@ func Init(router *gin.Engine) {
 				approval.GET("/teams-without-approver", handler.GetTeamsWithoutApprover)
 			}
 
-			// Audit trail — qualquer usuário autenticado, sem RequireRoot/RequireAdmin: a
-			// visibilidade é escopada por time dentro do usecase (domain/policy.AuditAccess),
-			// mesmo padrão de GET /approval/requests.
+			// Audit trail (History) — qualquer usuário autenticado, sem RequireRoot/RequireAdmin:
+			// a visibilidade é escopada por time dentro do usecase (domain/policy.AuditAccess),
+			// mesmo padrão de GET /approval/requests. /audit/actors alimenta o filtro por ator do
+			// AuditToolbar (v2.6 §7), mesma visibilidade.
 			protected.GET("/audit", handler.GetAuditLog)
+			protected.GET("/audit/actors", handler.GetAuditActors)
 		}
 	}
 

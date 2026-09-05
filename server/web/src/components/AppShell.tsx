@@ -84,7 +84,7 @@ function Crumbs({ pathname, onHome, openApp }: { pathname: string; onHome: () =>
           {openApp.name}
         </button>
         <span className="sep">/</span>
-        <span className="c now">{openApp.tab === "keys" ? "Service key" : "Toggles"}</span>
+        <span className="c now">{openApp.tab === "keys" ? "Service key" : openApp.tab === "activity" ? "Activity" : "Toggles"}</span>
       </div>
     );
   }
@@ -408,6 +408,14 @@ export function AppShell() {
               >
                 <Icon name="key" size={17} /> Service key
                 {openApp.hasSecretKey && <span className="count key-active-dot">●</span>}
+              </button>
+              {/* v2.6 §7 — 3ª aba nova (posicionamento decidido com o usuário, ver
+                  hooks/useAppUser.ts#ApplicationDetailTab). */}
+              <button
+                className={"nav-item" + (openApp.tab === "activity" ? " active" : "")}
+                onClick={() => openApp.onTabChange("activity")}
+              >
+                <Icon name="history" size={17} /> Activity
               </button>
             </>
           )}

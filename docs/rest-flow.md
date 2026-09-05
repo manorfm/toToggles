@@ -1404,16 +1404,24 @@ scheduled automatically by the server — intended to be triggered by an externa
 ## 10. Audit Trail
 
 ```http
-GET /api/audit?category=toggles&cursor=<opaque>&limit=30
+GET /api/audit?category=toggles&actor_id=<id>&range=7d&cursor=<opaque>&limit=30
 ```
 
 Any authenticated role. Root sees every event; anyone else only sees events scoped to a team they're a
 member of (`domain/policy.AuditAccess` — same team-membership rule as `GET /api/approval/requests`, not
 the narrower "is an approver" rule). A handful of events (only the approval-system on/off toggle today)
-carry no team at all and are therefore only ever visible to root.
+carry no team at all and are therefore only ever visible to root. **Deliberate divergence from the real
+prototype**: its `HistoryView` copy reads "Root only — changes to toggles live in each application's
+Activity tab," but this endpoint stays open to every role scoped by team, same as before v2.6 §7 —
+restricting it to root would remove an already-shipped, already-tested capability non-root roles rely on
+today; see `server/CLAUDE.md` for the full reasoning.
 
 - `category` — one of `toggles`, `keys`, `access`, `approvals`; omit for all categories. Matches the 4
   filter chips of the real prototype's `HistoryView`.
+- `actor_id` (v2.6 §7) — exact `actor_id` match; omit for every actor. Feeds the `AuditToolbar`'s actor
+  `<select>`, populated from `GET /api/audit/actors` below.
+- `range` (v2.6 §7) — one of `24h`, `7d`, `30d`; omit (or any other value) for no time cutoff. Matches
+  the `AuditToolbar`'s 4 range chips (`"All time"` sends no `range` at all).
 - `cursor` — opaque string from a previous response's `next_cursor`; omit for the first page. This is
   **infinite-scroll pagination, not page numbers** — there is no "page 3", only "the next slice before
   what I already have."
@@ -1429,6 +1437,9 @@ carry no team at all and are therefore only ever visible to root.
       "text": "Deleted toggle payments.card",
       "target": "",
       "team_id": "01TEAM000000000000000001",
+      "application_id": null,
+      "before": null,
+      "after": null,
       "actor_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
       "actor_name": "alice",
       "created_at": "2026-08-30T10:00:00Z"
@@ -1437,6 +1448,13 @@ carry no team at all and are therefore only ever visible to root.
   "next_cursor": "MjAyNi0wOC0zMFQxMDowMDowMFp8MDFBVURJVDAwMDAwMDAwMDAwMDAwMDAwMDE"
 }
 ```
+
+`application_id` (v2.6 §7) is set whenever the referenced application still existed at the moment the
+event was written (every toggle event, plus `application_created`/`application_updated`; never
+`application_deleted`, since the row is already gone by then) — it's what `GET
+/api/applications/:id/audit` below filters on. `before`/`after` (v2.6 §7) are only ever both non-null on
+`toggle_rule_set`, holding a plain-text summary of the activation rule before and after the change (e.g.
+`"No rule"` → `"percentage: 40%"`); every other event leaves them `null`.
 
 `next_cursor` is `""` when there is no further page. `text` may embed the literal markers `<b>...</b>`
 around the key term of the sentence (e.g. `"Disabled <b>experiments</b> branch"`) and, only on
@@ -1465,3 +1483,27 @@ event itself (`toggle_created`, `key_generated`, etc., text suffixed `" (after a
 Only gap left: `POST /api/toggles/disable` (the kill switch) authenticates by secret key, not a
 session, so there's no `entity.User` to be the actor — deliberately uncovered rather than inventing a
 synthetic "the secret key" actor.
+
+```http
+GET /api/audit/actors
+```
+
+Any authenticated role, same team-scoped visibility as `GET /api/audit` above (root sees every actor).
+Feeds the `AuditToolbar`'s actor filter `<select>` — a distinct `{id, name}` per author who has ever
+written a visible entry, most-recently-seen name first if the same `actor_id` ever logged under a
+different name.
+
+```json
+{ "data": [{ "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "name": "alice" }] }
+```
+
+```http
+GET /api/applications/:id/audit?cursor=<opaque>&limit=30
+```
+
+The per-application **Activity tab** (v2.6 §7) — every authenticated role, **no team-membership check
+at all**, matching `GET /api/applications/:id`'s own (lack of) access control. Returns exactly the
+events with `application_id` equal to `:id` (see above for when that's set), same shape/pagination as
+`GET /api/audit`, but never scoped by category/actor/range — an application's own activity is always
+homogeneous enough (toggle + application lifecycle events for that one app) that those filters weren't
+worth adding here too.

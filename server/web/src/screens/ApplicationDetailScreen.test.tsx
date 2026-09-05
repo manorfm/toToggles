@@ -731,4 +731,48 @@ describe("ApplicationDetailScreen", () => {
     await vi.waitFor(() => expect(suggestBody).toEqual({ enabled: false, note: "looks stale" }));
     expect(await screen.findByText("Suggestion sent to the team's approvers")).toBeInTheDocument();
   });
+
+  // v2.6 §7 — Activity tab: audit trail escopado a esta aplicação.
+  it("seeds the Activity tab from ?tab=activity and shows this application's audit trail", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/applications/app1") {
+        return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      if (path.includes("hierarchy=true")) {
+        return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [] }));
+      }
+      if (path === "/api/applications/app1/toggles") {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (path.startsWith("/api/applications/app1/audit")) {
+        return Promise.resolve(
+          jsonResponse(200, {
+            data: [
+              {
+                id: "au1",
+                event_type: "toggle_created",
+                category: "toggles",
+                text: "Created toggle <b>payments.card</b>",
+                target: "",
+                team_id: "team-1",
+                application_id: "app1",
+                before: null,
+                after: null,
+                actor_id: "u1",
+                actor_name: "Alice",
+                created_at: new Date().toISOString(),
+              },
+            ],
+            next_cursor: "",
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderScreen(undefined, "/applications/app1?tab=activity");
+
+    expect(await screen.findByText((_, node) => node?.textContent === "Created toggle payments.card")).toBeInTheDocument();
+  });
 });

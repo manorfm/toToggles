@@ -29,6 +29,19 @@ func NewToggleHandler(toggleUseCase *usecase.ToggleUseCase, applicationUseCase *
 	}
 }
 
+// describeActivationRule resume o estado de uma regra de ativação em texto puro pra virar o
+// before/after de um evento toggle_rule_set (v2.6 §7) — mesmo formato do `ruleText` já usado no
+// texto principal do evento (percentage ganha o sufixo "%", os outros 6 tipos não).
+func describeActivationRule(hasRule bool, rule *entity.ActivationRule) string {
+	if !hasRule || rule == nil || rule.Type == "" {
+		return "No rule"
+	}
+	if rule.Type == entity.ActivationRuleTypePercentage {
+		return string(rule.Type) + ": " + rule.Value + "%"
+	}
+	return string(rule.Type) + ": " + rule.Value
+}
+
 // applicationName resolve o nome da aplicação pro `target` do audit log — nunca falha a
 // requisição principal se a busca der erro (mesma tolerância de RecordForApplication a falhas
 // de auditoria: a mutação já aconteceu, um `target` vazio é preferível a travar a resposta).
@@ -217,6 +230,14 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		return
 	}
 
+	// Estado ANTES da mutação (v2.6 §7) — só pra montar before/after do evento de auditoria
+	// quando a regra muda; buscado antes de UpdateToggleWithRule sobrescrever o toggle. Falha
+	// aqui não trava a atualização em si, só perde o "before" (fica "No rule" por omissão).
+	var beforeToggle *entity.Toggle
+	if req.HasActivationRule && req.ActivationRule != nil {
+		beforeToggle, _ = h.toggleUseCase.GetToggleByID(toggleID, appID)
+	}
+
 	updatedToggle, err := h.toggleUseCase.UpdateToggleWithRule(toggleID, req.Enabled, req.HasActivationRule, req.ActivationRule, appID)
 	if err != nil {
 		appErr, ok := err.(*entity.AppError)
@@ -246,7 +267,12 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 		if req.ActivationRule.Type == entity.ActivationRuleTypePercentage {
 			ruleText += " to <b>" + req.ActivationRule.Value + "%</b>"
 		}
-		h.auditUseCase.RecordForApplication(entity.AuditEventToggleRuleSet, ruleText, updatedToggle.Path, appID, auditActor(c))
+		before := "No rule"
+		if beforeToggle != nil {
+			before = describeActivationRule(beforeToggle.HasActivationRule, beforeToggle.ActivationRule)
+		}
+		after := describeActivationRule(true, req.ActivationRule)
+		h.auditUseCase.RecordRuleChange(ruleText, updatedToggle.Path, appID, before, after, auditActor(c))
 	} else {
 		eventType := entity.AuditEventToggleDisabled
 		verb := "Disabled"

@@ -104,3 +104,11 @@ export function renderAuditText(text: string): ReactNode[] {
     return part;
   });
 }
+
+// v2.6 §7 — CSV export (lib/csvExport.ts) precisa do MESMO texto de renderAuditText acima, mas
+// como string plana (uma célula de planilha não tem negrito/itálico) em vez de nós React: só
+// remove os dois marcadores literais, mantendo o conteúdo — mesma garantia de segurança de
+// renderAuditText (nunca interpreta o texto como HTML de verdade, só reconhece esses marcadores).
+export function stripAuditMarkup(text: string): string {
+  return text.replace(/<\/?[bi]>/g, "");
+}

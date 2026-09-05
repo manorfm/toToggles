@@ -369,6 +369,23 @@ describe("AppShell", () => {
     expect(screen.getByText("Toggles", { selector: ".c.now" })).toBeInTheDocument();
   });
 
+  // v2.6 §7 — 3ª aba nova (Toggles/Service key/Activity).
+  it("shows an Activity sub-nav item that switches the tab and the breadcrumb's 3rd level", async () => {
+    vi.stubGlobal("fetch", mockFetch({ id: "1", username: "root", role: "root", must_change_password: false }));
+    const user = userEvent.setup();
+
+    renderShell("/applications/app1");
+    await screen.findByText("App detail content");
+
+    const activityTab = screen.getByRole("button", { name: /activity/i });
+    expect(activityTab).not.toHaveClass("active");
+
+    await user.click(activityTab);
+
+    expect(activityTab).toHaveClass("active");
+    expect(screen.getByText("Activity", { selector: ".c.now" })).toBeInTheDocument();
+  });
+
   it("hides the sidebar sub-navigation once the route leaves the open application", async () => {
     vi.stubGlobal("fetch", mockFetch({ id: "1", username: "root", role: "root", must_change_password: false }));
     const user = userEvent.setup();

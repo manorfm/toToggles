@@ -10,6 +10,9 @@ const entry: AuditLogEntry = {
   text: "Deleted toggle <b>payments.card</b>",
   target: "Checkout Service",
   team_id: "team-1",
+  application_id: null,
+  before: null,
+  after: null,
   actor_id: "u1",
   actor_name: "Alice Ribeiro",
   created_at: new Date(Date.now() - 5 * 60000).toISOString(),
@@ -60,5 +63,19 @@ describe("AuditRow", () => {
 
     rerender(<AuditRow entry={entry} isLast />);
     expect(container.querySelector(".audit-line")).not.toBeInTheDocument();
+  });
+
+  // v2.6 §7: "{before} → {after}" abaixo do texto, só quando presentes (AuditFeed real,
+  // confirmado via design-graph: `e.meta && (e.meta.before !== undefined) && (...)`).
+  it("shows a before → after line when both are present", () => {
+    render(<AuditRow entry={{ ...entry, before: "No rule", after: "percentage: 25%" }} isLast={false} />);
+
+    expect(screen.getByText((_, node) => node?.textContent === "No rule → percentage: 25%")).toBeInTheDocument();
+  });
+
+  it("omits the before/after line when they are absent", () => {
+    render(<AuditRow entry={entry} isLast={false} />);
+
+    expect(screen.queryByText(/→/)).not.toBeInTheDocument();
   });
 });

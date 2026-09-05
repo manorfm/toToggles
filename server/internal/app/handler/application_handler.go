@@ -80,11 +80,13 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 	}
 
 	// Confirmado no protótipo real: `Created application <b>{name}</b>`, target `{team} team`.
+	// RecordForApplication (não Record) porque a associação ao team já aconteceu logo acima —
+	// resolve team_id sozinho E grava application_id (v2.6 §7, alimenta a Activity tab).
 	teamTarget := ""
 	if team, err := h.teamUseCase.GetTeamByID(req.TeamID); err == nil {
 		teamTarget = team.Name + " team"
 	}
-	h.auditUseCase.Record(entity.AuditEventApplicationCreated, "Created application <b>"+app.Name+"</b>", teamTarget, &req.TeamID, auditActor(c))
+	h.auditUseCase.RecordForApplication(entity.AuditEventApplicationCreated, "Created application <b>"+app.Name+"</b>", teamTarget, app.ID, auditActor(c))
 
 	c.JSON(http.StatusCreated, app)
 }
@@ -261,6 +263,12 @@ func (h *ApplicationHandler) UpdateApplication(c *gin.Context) {
 			return
 		}
 	}
+
+	// Gap real fechado no v2.6 §7: editar uma aplicação direto (root, sem passar pelo workflow
+	// de aprovação) não gravava evento nenhum — só a EXECUÇÃO de uma edição aprovada
+	// (approval_usecase.go) tinha esse audit. A Activity tab de uma aplicação precisa dele pros
+	// dois casos.
+	h.auditUseCase.RecordForApplication(entity.AuditEventApplicationUpdated, "Updated application <b>"+app.Name+"</b>", "", app.ID, auditActor(c))
 
 	c.JSON(http.StatusOK, app)
 }

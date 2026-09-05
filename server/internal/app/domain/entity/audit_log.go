@@ -115,8 +115,18 @@ type AuditLog struct {
 	Target    string         `json:"target" gorm:"type:varchar(255)"`
 	// TeamID escopa a visibilidade (domain/policy.AuditAccess) — null só pra eventos globais
 	// (hoje, só approval_system_toggled), que são sempre root-only independente disso.
-	TeamID    *string   `json:"team_id" gorm:"type:varchar(26);index"`
-	ActorID   string    `json:"actor_id" gorm:"not null;type:varchar(26)"`
+	TeamID *string `json:"team_id" gorm:"type:varchar(26);index"`
+	// ApplicationID (v2.6 §7) alimenta a Activity tab por aplicação — só é setado quando a
+	// aplicação referida ainda existe no momento da gravação (ver
+	// usecase/audit_usecase.go#RecordForApplication); um evento de "aplicação apagada" nunca o
+	// carrega, já que a linha da aplicação já não existe mais quando o evento é gravado.
+	ApplicationID *string `json:"application_id" gorm:"type:varchar(26);index"`
+	// Before/After (v2.6 §7): estado textual antes/depois de uma mudança — hoje só populado na
+	// troca de regra de ativação de um toggle (ver ToggleHandler#UpdateToggle). Texto puro, mesma
+	// garantia XSS de Text/Target acima.
+	Before    *string   `json:"before" gorm:"column:before_value;type:varchar(255)"`
+	After     *string   `json:"after" gorm:"column:after_value;type:varchar(255)"`
+	ActorID   string    `json:"actor_id" gorm:"not null;type:varchar(26);index"`
 	ActorName string    `json:"actor_name" gorm:"not null;type:varchar(100)"`
 	CreatedAt time.Time `json:"created_at" gorm:"index"`
 }

@@ -23,19 +23,42 @@ func setupAuditLogTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// seedOpts controla os campos opcionais de um evento semeado — a maioria dos testes só precisa
+// de team/category/when, então os demais (actor, application) ficam com defaults sensatos quando
+// omitidos.
+type seedOpts struct {
+	teamID        *string
+	category      entity.AuditCategory
+	when          time.Time
+	actorID       string
+	actorName     string
+	applicationID string
+}
+
 // seedAt cria uma entrada com created_at explícito (BeforeCreate não mexe nesse campo — só no
 // ID), pra controlar a ordem sem depender do relógio real entre chamadas de Create.
-func seedAt(t *testing.T, db *gorm.DB, repo repository.AuditLogRepository, teamID *string, category entity.AuditCategory, when time.Time) *entity.AuditLog {
+func seedAt(t *testing.T, db *gorm.DB, repo repository.AuditLogRepository, opts seedOpts) *entity.AuditLog {
 	t.Helper()
-	log := entity.NewAuditLog(entity.AuditEventToggleCreated, "Created toggle x", "app.x", teamID, "user-1", "alice")
-	log.Category = category
+	actorID := opts.actorID
+	if actorID == "" {
+		actorID = "user-1"
+	}
+	actorName := opts.actorName
+	if actorName == "" {
+		actorName = "alice"
+	}
+	log := entity.NewAuditLog(entity.AuditEventToggleCreated, "Created toggle x", "app.x", opts.teamID, actorID, actorName)
+	log.Category = opts.category
+	if opts.applicationID != "" {
+		log.ApplicationID = &opts.applicationID
+	}
 	if err := repo.Create(context.Background(), log); err != nil {
 		t.Fatalf("failed to create audit log: %v", err)
 	}
-	if err := db.Model(&entity.AuditLog{}).Where("id = ?", log.ID).Update("created_at", when).Error; err != nil {
+	if err := db.Model(&entity.AuditLog{}).Where("id = ?", log.ID).Update("created_at", opts.when).Error; err != nil {
 		t.Fatalf("failed to force created_at: %v", err)
 	}
-	log.CreatedAt = when
+	log.CreatedAt = opts.when
 	return log
 }
 
@@ -60,10 +83,10 @@ func TestAuditLogRepository_List_OrdersNewestFirst(t *testing.T) {
 	repo := NewAuditLogRepository(db)
 	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 
-	older := seedAt(t, db, repo, nil, entity.AuditCategoryToggles, base)
-	newer := seedAt(t, db, repo, nil, entity.AuditCategoryToggles, base.Add(time.Hour))
+	older := seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base})
+	newer := seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base.Add(time.Hour)})
 
-	results, err := repo.List(context.Background(), nil, true, "", nil, 10)
+	results, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, Limit: 10})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -77,10 +100,10 @@ func TestAuditLogRepository_List_FiltersByCategory(t *testing.T) {
 	repo := NewAuditLogRepository(db)
 	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 
-	seedAt(t, db, repo, nil, entity.AuditCategoryToggles, base)
-	key := seedAt(t, db, repo, nil, entity.AuditCategoryKeys, base.Add(time.Minute))
+	seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base})
+	key := seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryKeys, when: base.Add(time.Minute)})
 
-	results, err := repo.List(context.Background(), nil, true, entity.AuditCategoryKeys, nil, 10)
+	results, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, Category: entity.AuditCategoryKeys, Limit: 10})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -95,10 +118,10 @@ func TestAuditLogRepository_List_ScopesByTeam(t *testing.T) {
 	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	teamA, teamB := "team-a", "team-b"
 
-	inTeamA := seedAt(t, db, repo, &teamA, entity.AuditCategoryToggles, base)
-	seedAt(t, db, repo, &teamB, entity.AuditCategoryToggles, base.Add(time.Minute))
+	inTeamA := seedAt(t, db, repo, seedOpts{teamID: &teamA, category: entity.AuditCategoryToggles, when: base})
+	seedAt(t, db, repo, seedOpts{teamID: &teamB, category: entity.AuditCategoryToggles, when: base.Add(time.Minute)})
 
-	results, err := repo.List(context.Background(), []string{teamA}, false, "", nil, 10)
+	results, err := repo.List(context.Background(), repository.AuditLogFilter{TeamIDs: []string{teamA}, Limit: 10})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -106,7 +129,7 @@ func TestAuditLogRepository_List_ScopesByTeam(t *testing.T) {
 		t.Fatalf("expected only team-a's entry, got %+v", results)
 	}
 
-	empty, err := repo.List(context.Background(), []string{}, false, "", nil, 10)
+	empty, err := repo.List(context.Background(), repository.AuditLogFilter{TeamIDs: []string{}, Limit: 10})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -122,11 +145,11 @@ func TestAuditLogRepository_List_PaginatesByCursor(t *testing.T) {
 
 	var seeded []*entity.AuditLog
 	for i := 0; i < 5; i++ {
-		seeded = append(seeded, seedAt(t, db, repo, nil, entity.AuditCategoryToggles, base.Add(time.Duration(i)*time.Minute)))
+		seeded = append(seeded, seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base.Add(time.Duration(i) * time.Minute)}))
 	}
 	// seeded[4] é o mais novo (base+4min) — List devolve mais novo primeiro.
 
-	firstPage, err := repo.List(context.Background(), nil, true, "", nil, 2)
+	firstPage, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, Limit: 2})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -135,7 +158,7 @@ func TestAuditLogRepository_List_PaginatesByCursor(t *testing.T) {
 	}
 
 	cursor := &repository.AuditLogCursor{CreatedAt: firstPage[1].CreatedAt, ID: firstPage[1].ID}
-	secondPage, err := repo.List(context.Background(), nil, true, "", cursor, 2)
+	secondPage, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, Cursor: cursor, Limit: 2})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -144,11 +167,111 @@ func TestAuditLogRepository_List_PaginatesByCursor(t *testing.T) {
 	}
 
 	cursor2 := &repository.AuditLogCursor{CreatedAt: secondPage[1].CreatedAt, ID: secondPage[1].ID}
-	thirdPage, err := repo.List(context.Background(), nil, true, "", cursor2, 2)
+	thirdPage, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, Cursor: cursor2, Limit: 2})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(thirdPage) != 1 || thirdPage[0].ID != seeded[0].ID {
 		t.Fatalf("expected only the oldest entry left, got %+v", thirdPage)
 	}
+}
+
+// v2.6 §7 — três filtros novos: actor exato, corte por data (range), e escopo por aplicação (a
+// Activity tab), este último ignorando TeamIDs/Unrestricted de propósito (ver o header de
+// AuditLogFilter).
+func TestAuditLogRepository_List_FiltersByActor(t *testing.T) {
+	db := setupAuditLogTestDB(t)
+	repo := NewAuditLogRepository(db)
+	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+
+	byAlice := seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base, actorID: "u-alice", actorName: "Alice"})
+	seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base.Add(time.Minute), actorID: "u-bob", actorName: "Bob"})
+
+	results, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, ActorID: "u-alice", Limit: 10})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(results) != 1 || results[0].ID != byAlice.ID {
+		t.Fatalf("expected only alice's entry, got %+v", results)
+	}
+}
+
+func TestAuditLogRepository_List_FiltersByCreatedAfter(t *testing.T) {
+	db := setupAuditLogTestDB(t)
+	repo := NewAuditLogRepository(db)
+	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+
+	seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base.Add(-2 * time.Hour)})
+	recent := seedAt(t, db, repo, seedOpts{category: entity.AuditCategoryToggles, when: base})
+
+	cutoff := base.Add(-time.Hour)
+	results, err := repo.List(context.Background(), repository.AuditLogFilter{Unrestricted: true, CreatedAfter: &cutoff, Limit: 10})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(results) != 1 || results[0].ID != recent.ID {
+		t.Fatalf("expected only the entry after the cutoff, got %+v", results)
+	}
+}
+
+func TestAuditLogRepository_List_ScopesByApplication_IgnoringTeamRestriction(t *testing.T) {
+	db := setupAuditLogTestDB(t)
+	repo := NewAuditLogRepository(db)
+	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	teamA := "team-a"
+
+	inApp := seedAt(t, db, repo, seedOpts{teamID: &teamA, category: entity.AuditCategoryToggles, when: base, applicationID: "app-1"})
+	seedAt(t, db, repo, seedOpts{teamID: &teamA, category: entity.AuditCategoryToggles, when: base.Add(time.Minute), applicationID: "app-2"})
+
+	// TeamIDs vazio/Unrestricted=false normalmente devolveria página vazia — mas ApplicationID
+	// setado ignora essa restrição de propósito (qualquer autenticado pode ver a Activity de uma
+	// aplicação, mesma postura de GET /applications/:id).
+	results, err := repo.List(context.Background(), repository.AuditLogFilter{ApplicationID: "app-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(results) != 1 || results[0].ID != inApp.ID {
+		t.Fatalf("expected only app-1's entry, got %+v", results)
+	}
+}
+
+func TestAuditLogRepository_ListActors(t *testing.T) {
+	db := setupAuditLogTestDB(t)
+	repo := NewAuditLogRepository(db)
+	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	teamA, teamB := "team-a", "team-b"
+
+	seedAt(t, db, repo, seedOpts{teamID: &teamA, category: entity.AuditCategoryToggles, when: base, actorID: "u-alice", actorName: "Alice"})
+	seedAt(t, db, repo, seedOpts{teamID: &teamA, category: entity.AuditCategoryKeys, when: base.Add(time.Minute), actorID: "u-alice", actorName: "Alice"})
+	seedAt(t, db, repo, seedOpts{teamID: &teamB, category: entity.AuditCategoryToggles, when: base.Add(2 * time.Minute), actorID: "u-carol", actorName: "Carol"})
+
+	t.Run("de-dupes by actor within the visible teams", func(t *testing.T) {
+		actors, err := repo.ListActors(context.Background(), []string{teamA}, false)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(actors) != 1 || actors[0].ID != "u-alice" || actors[0].Name != "Alice" {
+			t.Fatalf("expected only alice (2 events, 1 team), got %+v", actors)
+		}
+	})
+
+	t.Run("unrestricted sees every actor across teams", func(t *testing.T) {
+		actors, err := repo.ListActors(context.Background(), nil, true)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(actors) != 2 {
+			t.Fatalf("expected 2 distinct actors, got %+v", actors)
+		}
+	})
+
+	t.Run("no visible teams yields an empty list, not an error", func(t *testing.T) {
+		actors, err := repo.ListActors(context.Background(), []string{}, false)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if len(actors) != 0 {
+			t.Errorf("expected no actors, got %+v", actors)
+		}
+	})
 }

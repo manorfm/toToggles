@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -98,7 +99,10 @@ func setupAuditIntegrationTestRouter(t *testing.T) (router *gin.Engine, db *gorm
 	router.DELETE("/secret-keys/:id", RequireApprovalAware(entity.UserRoleAdmin), DeleteSecretKey)
 	router.POST("/teams/:id/users", AddUserToTeam)
 	router.POST("/users", CreateUser)
+	router.PUT("/applications/:id", RequireApprovalAware(entity.UserRoleAdmin), UpdateApplication)
 	router.GET("/audit", GetAuditLog)
+	router.GET("/audit/actors", GetAuditActors)
+	router.GET("/applications/:id/audit", GetApplicationAudit)
 
 	return router, db, teamAdmin, otherTeamAdmin, root
 }
@@ -893,3 +897,211 @@ func TestAuditIntegration_ApprovalFlow_Rejected_TextMatchesApprovedTemplate(t *t
 		t.Errorf("expected target (toggle path) %q, got %q", want, rejectedTarget)
 	}
 }
+
+// v2.6 §7: before/after, filtro por ator, filtro por intervalo (range), lista de atores, e a
+// Activity tab por aplicação — as 5 peças novas desta fase.
+
+func TestAuditIntegration_ToggleRuleSet_RecordsBeforeAndAfter(t *testing.T) {
+	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
+
+	app := &entity.Application{ID: "app-1", Name: "Checkout Web"}
+	if err := db.Create(app).Error; err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	if err := db.Create(&entity.TeamApplication{TeamID: "team-1", ApplicationID: app.ID, Permission: entity.PermissionAdmin}).Error; err != nil {
+		t.Fatalf("failed to associate application to team: %v", err)
+	}
+	toggle := &entity.Toggle{ID: "toggle-1", AppID: app.ID, Value: "rollout", Path: "rollout", Enabled: true}
+	if err := db.Create(toggle).Error; err != nil {
+		t.Fatalf("failed to create toggle: %v", err)
+	}
+
+	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40"}}`
+	req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/toggle-1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", teamAdmin.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 setting the rule, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var stored entity.AuditLog
+	if err := db.Where("event_type = ?", "toggle_rule_set").First(&stored).Error; err != nil {
+		t.Fatalf("expected a toggle_rule_set entry: %v", err)
+	}
+	if stored.Before == nil || *stored.Before != "No rule" {
+		t.Errorf("expected before=%q, got %+v", "No rule", stored.Before)
+	}
+	if stored.After == nil || *stored.After != "percentage: 40%" {
+		t.Errorf("expected after=%q, got %+v", "percentage: 40%", stored.After)
+	}
+	if stored.ApplicationID == nil || *stored.ApplicationID != "app-1" {
+		t.Errorf("expected application_id=%q, got %+v", "app-1", stored.ApplicationID)
+	}
+}
+
+func TestAuditIntegration_GetAuditLog_FiltersByActorAndRange(t *testing.T) {
+	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
+
+	app := &entity.Application{ID: "app-1", Name: "Checkout Web"}
+	if err := db.Create(app).Error; err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	if err := db.Create(&entity.TeamApplication{TeamID: "team-1", ApplicationID: app.ID, Permission: entity.PermissionAdmin}).Error; err != nil {
+		t.Fatalf("failed to associate application to team: %v", err)
+	}
+
+	// Um evento recente de teamAdmin e um antigo de outro ator, os dois inseridos direto no
+	// banco (mais simples que passar pelas rotas reais aqui — o que este teste exercita é o
+	// filtro de GET /audit, não a gravação em si, já coberta pelos testes acima).
+	recent := entity.NewAuditLog(entity.AuditEventToggleCreated, "Created toggle payments.card", "Checkout Web", stringPtr("team-1"), teamAdmin.ID, teamAdmin.Name)
+	if err := db.Create(recent).Error; err != nil {
+		t.Fatalf("failed to seed recent entry: %v", err)
+	}
+
+	old := entity.NewAuditLog(entity.AuditEventToggleDeleted, "Deleted toggle old", "Checkout Web", stringPtr("team-1"), "someone-else", "Someone Else")
+	if err := db.Create(old).Error; err != nil {
+		t.Fatalf("failed to seed old entry: %v", err)
+	}
+	if err := db.Model(&entity.AuditLog{}).Where("id = ?", old.ID).Update("created_at", time.Now().Add(-48*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to force created_at: %v", err)
+	}
+
+	t.Run("actor_id narrows to that one actor's events", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/audit?actor_id=someone-else", nil)
+		req.Header.Set("X-Test-User", teamAdmin.ID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		var resp struct {
+			Data []struct {
+				ActorID string `json:"actor_id"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON response: %v", err)
+		}
+		if len(resp.Data) != 1 || resp.Data[0].ActorID != "someone-else" {
+			t.Fatalf("expected only someone-else's entry, got %+v", resp.Data)
+		}
+	})
+
+	t.Run("range=24h excludes the 48h-old entry", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/audit?range=24h", nil)
+		req.Header.Set("X-Test-User", teamAdmin.ID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		var resp struct {
+			Data []struct {
+				EventType string `json:"event_type"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON response: %v", err)
+		}
+		for _, e := range resp.Data {
+			if e.EventType == "toggle_deleted" {
+				t.Errorf("expected the 48h-old entry to be excluded by range=24h, got %+v", resp.Data)
+			}
+		}
+	})
+}
+
+func TestAuditIntegration_GetAuditActors_ScopedByTeamLikeHistory(t *testing.T) {
+	router, _, teamAdmin, otherTeamAdmin, root := setupAuditIntegrationTestRouter(t)
+
+	body, _ := json.Marshal(map[string]string{"name": "Checkout Web", "team_id": "team-1"})
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", teamAdmin.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	fetchActorNames := func(userID string) []string {
+		req := httptest.NewRequest(http.MethodGet, "/audit/actors", nil)
+		req.Header.Set("X-Test-User", userID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 from GET /audit/actors, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data []struct {
+				Name string `json:"name"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON response: %v", err)
+		}
+		names := make([]string, len(resp.Data))
+		for i, a := range resp.Data {
+			names[i] = a.Name
+		}
+		return names
+	}
+
+	if names := fetchActorNames(teamAdmin.ID); len(names) != 1 || names[0] != "Admin One" {
+		t.Errorf("expected team-1's member to see only Admin One, got %v", names)
+	}
+	if names := fetchActorNames(otherTeamAdmin.ID); len(names) != 0 {
+		t.Errorf("expected a different team's admin to see no actors, got %v", names)
+	}
+	if names := fetchActorNames(root.ID); len(names) != 1 || names[0] != "Admin One" {
+		t.Errorf("expected root to see every actor, got %v", names)
+	}
+}
+
+func TestAuditIntegration_GetApplicationAudit_VisibleToAnyAuthenticatedUser(t *testing.T) {
+	router, db, teamAdmin, otherTeamAdmin, _ := setupAuditIntegrationTestRouter(t)
+
+	body, _ := json.Marshal(map[string]string{"name": "Checkout Web", "team_id": "team-1"})
+	req := httptest.NewRequest(http.MethodPost, "/applications", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", teamAdmin.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var created entity.Application
+	if err := db.Where("name = ?", "Checkout Web").First(&created).Error; err != nil {
+		t.Fatalf("failed to find created application: %v", err)
+	}
+
+	fetchEventTypes := func(userID string) []string {
+		req := httptest.NewRequest(http.MethodGet, "/applications/"+created.ID+"/audit", nil)
+		req.Header.Set("X-Test-User", userID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 from GET .../audit, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data []struct {
+				EventType string `json:"event_type"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON response: %v", err)
+		}
+		types := make([]string, len(resp.Data))
+		for i, e := range resp.Data {
+			types[i] = e.EventType
+		}
+		return types
+	}
+
+	// Diferente de GET /audit (History, escopado por time): a Activity de uma aplicação é
+	// visível pra QUALQUER autenticado, mesmo de outro time — mesma postura de GET
+	// /applications/:id, que também não checa time nenhum.
+	for _, userID := range []string{teamAdmin.ID, otherTeamAdmin.ID} {
+		if types := fetchEventTypes(userID); len(types) != 1 || types[0] != "application_created" {
+			t.Errorf("user %s: expected to see application_created, got %v", userID, types)
+		}
+	}
+}
+
+func stringPtr(s string) *string { return &s }

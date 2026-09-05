@@ -802,19 +802,19 @@ func (m *MockApprovalSettingsRepository) GetExpirationDays(ctx context.Context) 
 
 // MockAuditLogRepository represents a mock implementation of repository.AuditLogRepository
 type MockAuditLogRepository struct {
-	Created     []*entity.AuditLog
-	CreateError error
-	ListResult  []*entity.AuditLog
-	ListError   error
-	// LastListCall captura os argumentos da última chamada a List, pra testar que o usecase
-	// repassa teamIDs/unrestricted/category/cursor/limit corretamente sem reimplementar a
-	// lógica de paginação/filtro aqui (isso já é coberto pelos testes do repositório real).
-	LastListCall *struct {
+	Created        []*entity.AuditLog
+	CreateError    error
+	ListResult     []*entity.AuditLog
+	ListError      error
+	ActorsResult   []repository.AuditActor
+	ActorsError    error
+	LastListFilter *repository.AuditLogFilter
+	// LastActorsCall captura os argumentos da última chamada a ListActors, mesmo motivo de
+	// LastListFilter abaixo: testar que o usecase repassa teamIDs/unrestricted corretamente sem
+	// reimplementar a lógica de visibilidade aqui (já coberta pelos testes do repositório real).
+	LastActorsCall *struct {
 		TeamIDs      []string
 		Unrestricted bool
-		Category     entity.AuditCategory
-		Cursor       *repository.AuditLogCursor
-		Limit        int
 	}
 }
 
@@ -830,18 +830,28 @@ func (m *MockAuditLogRepository) Create(ctx context.Context, log *entity.AuditLo
 	return nil
 }
 
-func (m *MockAuditLogRepository) List(ctx context.Context, teamIDs []string, unrestricted bool, category entity.AuditCategory, cursor *repository.AuditLogCursor, limit int) ([]*entity.AuditLog, error) {
-	m.LastListCall = &struct {
-		TeamIDs      []string
-		Unrestricted bool
-		Category     entity.AuditCategory
-		Cursor       *repository.AuditLogCursor
-		Limit        int
-	}{teamIDs, unrestricted, category, cursor, limit}
+// List captura o filtro recebido (LastListFilter), pra testar que o usecase monta/repassa
+// TeamIDs/Unrestricted/Category/ActorID/CreatedAfter/ApplicationID/Cursor/Limit corretamente sem
+// reimplementar a lógica de paginação/filtro aqui (isso já é coberto pelos testes do repositório
+// real).
+func (m *MockAuditLogRepository) List(ctx context.Context, filter repository.AuditLogFilter) ([]*entity.AuditLog, error) {
+	f := filter
+	m.LastListFilter = &f
 	if m.ListError != nil {
 		return nil, m.ListError
 	}
 	return m.ListResult, nil
+}
+
+func (m *MockAuditLogRepository) ListActors(ctx context.Context, teamIDs []string, unrestricted bool) ([]repository.AuditActor, error) {
+	m.LastActorsCall = &struct {
+		TeamIDs      []string
+		Unrestricted bool
+	}{teamIDs, unrestricted}
+	if m.ActorsError != nil {
+		return nil, m.ActorsError
+	}
+	return m.ActorsResult, nil
 }
 
 type MockSecretKeyRepository struct {

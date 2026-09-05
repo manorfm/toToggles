@@ -1749,6 +1749,69 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
   ver "Separação API vs SPA" na seção "API e Rotas" acima pro detalhe completo da mudança
   estrutural (não foi um remendo pontual como o do bullet anterior, e sim uma mudança na forma
   como o middleware inteiro decide servir API vs SPA).
+- ✅ **v2.6 §7 — Audit trail: filtros, before/after, CSV export e Activity por aplicação**
+  (Phase 5 do plano). Confirmado via design-graph (`get_component_full("AuditToolbar"/"AuditChips"/
+  "AuditFeed")`, `get_screen_full("HistoryView")`), não pelo bundle decodificado (técnica
+  descontinuada — ver o aviso no topo desta seção "Frontend").
+  - **Backend**: migration nova (`20260905000000_add_audit_log_application_and_diff_columns.sql`)
+    acrescenta `application_id`/`before_value`/`after_value` a `audit_logs` (sem FK explícita,
+    mesmo padrão já usado por `toggles.deleted_by` — SQLite recusaria um INSERT referenciando uma
+    aplicação já apagada, e `application_deleted` grava DEPOIS do delete de propósito) + índice em
+    `actor_id` (faltava desde a criação da tabela, agora faz parte do WHERE de todo filtro por
+    ator). `AuditUseCase.Record` virou um núcleo privado (`record`) com 4 métodos públicos
+    finos por cima — `Record` (sem app/before/after), `RecordSystem` (ator sintético, já existia),
+    `RecordForApplication` (resolve team_id da aplicação E grava application_id — só seguro
+    quando ela ainda existe no momento da chamada), `RecordRuleChange` (mesma resolução, mas
+    também grava before/after — único evento que os popula, `toggle_rule_set`; `ToggleHandler`
+    busca o toggle ANTES de `UpdateToggleWithRule` rodar pra capturar o "before"). `List` ganhou
+    `AuditListOptions{Category, ActorID, CreatedAfter}` (era só `category`); `repository.
+    AuditLogFilter` substitui os 5 parâmetros posicionais antigos de `List` por uma struct só, com
+    dois modos de visibilidade mutuamente exclusivos documentados no próprio tipo — por time
+    (History) ou por `ApplicationID` (Activity, ignora TeamIDs/Unrestricted de propósito: qualquer
+    autenticado vê, mesma postura de `GET /applications/:id`). Novo `ListForApplication` (sem
+    `caller` nenhum — não passa por `AuditAccess`) e `ListActors` (mesma visibilidade de `List`,
+    de-dupe por `actor_id` mantendo o nome mais recente). Handler ganhou `GetAuditActors`
+    (`GET /audit/actors`) e `GetApplicationAudit` (`GET /applications/:id/audit`); `parseAuditPaging`/
+    `paginateAuditLogs` extraídos pra evitar duplicar a lógica de cursor+limit+lookahead entre os
+    dois endpoints de listagem.
+  - **Decisão deliberada, divergindo do texto confirmado do protótipo**: `HistoryView` real diz
+    "Root only — changes to toggles live in each application's Activity tab", mas `GET /api/audit`
+    **não** foi restrito a root — isso removeria a visibilidade por time pra roles não-root
+    (`domain/policy.AuditAccess`), uma funcionalidade real, já testada, já em uso (`admin`/`user`
+    veem o histórico dos próprios times hoje). Restringir exigiria quebrar/reescrever ~900 linhas
+    de teste de integração que dependem desse acesso. A Activity tab por aplicação foi construída
+    como um COMPLEMENTO focado (útil por já estar na tela da aplicação), não como substituição.
+  - **Posicionamento da Activity tab decidido com o usuário, não confirmado pelo design-graph**:
+    `ActivityView` só aparece ligado à árvore de `HistoryView` no grafo indexado (nunca a uma tela
+    de detalhe de aplicação — nenhuma existe como "Screen" própria, mesmo buraco de cobertura da
+    árvore autenticada de `App`), e o comentário já confirmado no código desta reescrita dizia que
+    a aplicação só tinha 2 abas reais ("toggles"/"keys"). Perguntado diretamente: usuário escolheu
+    adicionar "Activity" como 3ª aba em `ApplicationDetailScreen` (`hooks/useAppUser.ts#
+    ApplicationDetailTab` ganhou o valor `"activity"`; `AppShell.tsx` ganhou o 3º item de sub-nav
+    e o 3º ramo do breadcrumb). Fica montada o tempo todo como as outras duas (`hidden`), mesmo
+    padrão de `SecretKeySection`.
+  - **Frontend**: `lib/csvExport.ts` (`toCSV`/`downloadCSV`, Blob+`<a download>`, CSV RFC 4180 —
+    aspas dobradas, nunca barra invertida) reusa `stripAuditMarkup` (novo, em `lib/auditEvents.tsx`,
+    ao lado de `renderAuditText` — mesma garantia de nunca interpretar `text` como HTML de
+    verdade, só remove os marcadores `<b>`/`<i>` pra virar célula de planilha plana).
+    `components/AuditToolbar.tsx` porta o `<select>` de ator + 4 chips de intervalo + botão Export
+    1:1, com uma adaptação deliberada: o protótipo filtra por NOME solto; aqui o backend filtra
+    por `actor_id` exato, então o `<select>` usa `{id,name}` de verdade. **Refactor colateral
+    importante**: a paginação infinita por cursor (antes só dentro de `HistoryScreen`) virou
+    `components/AuditFeed.tsx` — reusado por `HistoryScreen` E pela nova Activity tab, evitando
+    duplicar a mesma lógica de fetch/scroll/sentinel/estados de loading-erro-vazio nos dois
+    lugares. `AuditFeed` só se importa com uma função `fetchPage(cursor?)`; quem chama decide o
+    que "categoria"/"ator"/"intervalo"/"application_id" significam. **Bug real encontrado
+    construindo isso**: um `data`/`next_cursor` ausente (slice nil no Go serializa como `null`
+    dentro de um `gin.H`, nunca omitido) quebrava `entries.length` — `AuditFeed` agora trata os
+    dois com `?? []`/`?? ""`, mesmo cuidado já documentado noutros endpoints opcionais deste
+    backend. `AuditRow.tsx` ganhou a linha "{before} → {after}", só quando os dois não são `null`.
+  - Coberto por testes reais em toda camada (repositório real via SQLite, usecase com mocks,
+    handler via integração real end-to-end, componentes/telas via Testing Library) e 3 e2e novos
+    (`history-and-activity.spec.ts`): filtro por ator narrows corretamente entre dois atores
+    reais, Export CSV baixa um arquivo de verdade com cabeçalho+linha esperada
+    (`page.waitForEvent("download")`), e a Activity tab de uma aplicação mostra só os eventos
+    daquela aplicação, acessível como admin (não só root).
 - ✅ **User Management** (`/users`, `screens/UserManagementScreen.tsx`, root ou admin) —
   **reconstruído do zero** depois que o protótipo (`docs/toToggle v2.1.html`) ganhou uma tela
   real de usuários que não existia na versão anterior (`UsersView`/`UserModal`/

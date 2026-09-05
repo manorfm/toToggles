@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AuditRow } from "../components/AuditRow";
-import { Icon } from "../components/Icon";
-import { ApiError } from "../api/client";
-import { listAuditLog } from "../api/audit";
-import type { AuditCategory, AuditLogEntry } from "../types/audit";
+import { useCallback, useEffect, useState } from "react";
+import { AuditFeed } from "../components/AuditFeed";
+import { AuditToolbar } from "../components/AuditToolbar";
+import { listAuditActors, listAuditLog } from "../api/audit";
+import { downloadCSV } from "../lib/csvExport";
+import type { AuditActor, AuditCategory, AuditLogEntry, AuditRange } from "../types/audit";
 
 // "" = aba "All", sem filtro de categoria no request.
 type CategoryFilter = "" | AuditCategory;
+// "all" = chip "All time" do AuditToolbar, sem filtro de intervalo no request (ver AuditToolbar).
+type RangeFilter = "all" | AuditRange;
 
 const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
   { key: "", label: "All" },
@@ -16,75 +18,41 @@ const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
   { key: "approvals", label: "Approvals" },
 ];
 
-type State =
-  | { status: "loading" }
-  | { status: "loaded"; entries: AuditLogEntry[]; nextCursor: string; loadingMore: boolean }
-  | { status: "error"; message: string };
-
-// Audit trail real — reconstruído do HistoryView real (design-graph não indexa esta tela, mesmo
-// buraco documentado em server/CLAUDE.md pra árvore autenticada de App; fonte confiável é o
-// bundle comprimido embutido em docs/toToggle.html). Consome GET /api/audit, adicionado numa
-// fase anterior desta reescrita depois que o backend ganhou um audit log genérico de verdade
-// (antes, esta tela só reaproveitava o histórico de aprovações — ver git blame se precisar do
-// texto antigo). Duas divergências deliberadas do protótipo, as duas discutidas com o usuário
+// Audit trail real — reconstruído do HistoryView real (get_screen_full("HistoryView") via
+// design-graph, que confirmou a estrutura AuditChips/AuditToolbar/AuditFeed usada abaixo — a
+// paginação em si vive em components/AuditFeed.tsx, reusada pela Activity tab de uma aplicação,
+// ver ApplicationDetailScreen). Divergências deliberadas do protótipo, discutidas com o usuário
 // antes de implementar:
-// - Paginação infinita por cursor (IntersectionObserver num sentinel no fim da lista), não a
-//   lista estática única do protótipo — o audit trail real cresce sem limite.
-// - Filtro por categoria é resolvido no SERVIDOR (troca de aba reinicia a paginação do zero
-//   nessa categoria), não filtrado em memória sobre um array já carregado como o protótipo faz —
-//   com paginação infinita só uma fatia dos dados está carregada por vez.
+// - Paginação infinita por cursor (AuditFeed), não a lista estática única do protótipo — o
+//   audit trail real cresce sem limite.
+// - Filtro por categoria/ator/intervalo é resolvido no SERVIDOR (qualquer mudança reinicia a
+//   paginação do zero), não filtrado em memória sobre um array já carregado como o protótipo faz.
+// - v2.6 §7 confirmou o texto real da tela como "Root only... changes to toggles live in each
+//   application's Activity tab". NÃO restringimos History a root aqui: isso removeria uma
+//   funcionalidade real já existente e testada (visibilidade por time pra qualquer role, ver
+//   domain/policy.AuditAccess), uma divergência deliberada demais pra fazer sem confirmar com o
+//   usuário primeiro. A Activity tab por aplicação foi construída como um complemento focado,
+//   não como substituição.
 export function HistoryScreen() {
   const [category, setCategory] = useState<CategoryFilter>("");
-  const [state, setState] = useState<State>({ status: "loading" });
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [actorId, setActorId] = useState("");
+  const [range, setRange] = useState<RangeFilter>("all");
+  const [actors, setActors] = useState<AuditActor[]>([]);
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
 
   useEffect(() => {
-    let cancelled = false;
-    setState({ status: "loading" });
-    listAuditLog({ category: category || undefined })
-      .then((page) => {
-        if (cancelled) return;
-        setState({ status: "loaded", entries: page.data, nextCursor: page.next_cursor, loadingMore: false });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setState({ status: "error", message: err instanceof ApiError ? err.message : "Não foi possível carregar o histórico." });
+    listAuditActors()
+      .then(setActors)
+      .catch(() => {
+        // Lista de atores é só uma conveniência de filtro — falhar aqui não deve travar a tela.
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [category]);
+  }, []);
 
-  const loadMore = useCallback(() => {
-    setState((prev) => {
-      if (prev.status !== "loaded" || !prev.nextCursor || prev.loadingMore) return prev;
-      listAuditLog({ category: category || undefined, cursor: prev.nextCursor })
-        .then((page) => {
-          setState((cur) =>
-            cur.status === "loaded"
-              ? { status: "loaded", entries: [...cur.entries, ...page.data], nextCursor: page.next_cursor, loadingMore: false }
-              : cur
-          );
-        })
-        .catch(() => {
-          // Falha ao carregar mais não deve derrubar o que já está na tela — só destrava o
-          // sentinel pra tentar de novo no próximo scroll (ou o usuário rolar de volta).
-          setState((cur) => (cur.status === "loaded" ? { ...cur, loadingMore: false } : cur));
-        });
-      return { ...prev, loadingMore: true };
-    });
-  }, [category]);
-
-  const nextCursor = state.status === "loaded" ? state.nextCursor : "";
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !nextCursor) return;
-    const observer = new IntersectionObserver((observed) => {
-      if (observed[0]?.isIntersecting) loadMore();
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [nextCursor, loadMore]);
+  const fetchPage = useCallback(
+    (cursor?: string) =>
+      listAuditLog({ category: category || undefined, actorId: actorId || undefined, range: range === "all" ? undefined : range, cursor }),
+    [category, actorId, range]
+  );
 
   return (
     <div className="page">
@@ -103,27 +71,17 @@ export function HistoryScreen() {
         ))}
       </div>
 
-      {state.status === "loading" && <div className="empty">Carregando…</div>}
-      {state.status === "error" && <div className="empty">{state.message}</div>}
-      {state.status === "loaded" && (
-        // O empty state fica DENTRO de .audit no protótipo real (get_full_jsx via bundle
-        // decodificado: `<div className="audit">{items.length === 0 && <div className="empty">
-        // ...}{items.map(...)}</div>`), não como irmão — herda o position:relative;
-        // padding-left:6px de .audit, que um empty solto no nível de .page não tem.
-        <div className="audit">
-          {state.entries.length === 0 && (
-            <div className="empty">
-              <Icon name="history" size={40} />
-              <div className="et">Nothing here yet</div>
-              <div className="ed">No events in this category.</div>
-            </div>
-          )}
-          {state.entries.map((entry, i) => (
-            <AuditRow key={entry.id} entry={entry} isLast={i === state.entries.length - 1} />
-          ))}
-        </div>
-      )}
-      {state.status === "loaded" && state.nextCursor && <div ref={sentinelRef} aria-hidden style={{ height: 1 }} />}
+      <AuditToolbar
+        actors={actors}
+        actorId={actorId}
+        onActorChange={setActorId}
+        range={range}
+        onRangeChange={setRange}
+        exportDisabled={entries.length === 0}
+        onExport={() => downloadCSV(entries, "totoggle-history.csv")}
+      />
+
+      <AuditFeed fetchPage={fetchPage} emptyDescription="No events in this category." onEntriesChange={setEntries} />
     </div>
   );
 }

@@ -32,6 +32,14 @@ export function AuditRow({ entry, isLast }: AuditRowProps) {
       <div className="audit-body">
         <div className="audit-text">{renderAuditText(entry.text)}</div>
         {entry.target && <div className="audit-target">{entry.target}</div>}
+        {/* v2.6 §7: "{before} → {after}" — só existe no evento toggle_rule_set (confirmado via
+            design-graph, AuditFeed real: `e.meta && (e.meta.before !== undefined) && (...)`),
+            `null` em todo o resto. */}
+        {entry.before !== null && entry.after !== null && (
+          <div className="audit-target" style={{ color: "var(--ink-4)" }}>
+            {entry.before} → {entry.after}
+          </div>
+        )}
         <div className="audit-meta">
           <span className="who">
             <span className="audit-av">{initials}</span> {entry.actor_name}

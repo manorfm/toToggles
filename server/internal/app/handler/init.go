@@ -401,6 +401,14 @@ func GetAuditLog(c *gin.Context) {
 	auditHandler.GetAuditLog(c)
 }
 
+func GetAuditActors(c *gin.Context) {
+	auditHandler.GetAuditActors(c)
+}
+
+func GetApplicationAudit(c *gin.Context) {
+	auditHandler.GetApplicationAudit(c)
+}
+
 // RequireApprovalAware cria um middleware que verifica aprovação antes de aplicar restrições de role
 func RequireApprovalAware(requiredRole entity.UserRole) gin.HandlerFunc {
 	return middleware.ApprovalAware(globalApprovalUseCase, requiredRole)

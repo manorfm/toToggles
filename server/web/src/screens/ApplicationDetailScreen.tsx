@@ -11,9 +11,11 @@ import {
   setToggleEnabled,
   updateToggleRule,
 } from "../api/toggles";
+import { listApplicationAudit } from "../api/audit";
 import { ApiError } from "../api/client";
 import { ArchivedModal } from "../components/ArchivedModal";
 import { ApprovalInterceptModal } from "../components/ApprovalInterceptModal";
+import { AuditFeed } from "../components/AuditFeed";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { CreateToggleModal } from "../components/CreateToggleModal";
 import { EditToggleDrawer, type ToggleRuleSnapshot } from "../components/EditToggleDrawer";
@@ -52,17 +54,27 @@ type LoadState =
   | { status: "loading" }
   | { status: "error"; message: string };
 
-// Tela de detalhe de uma aplicação: DUAS abas reais (`tab`, confirmado no app.jsx real como
-// `setTab("toggles"|"keys")` — nunca as duas visíveis ao mesmo tempo), não uma página só
-// empilhada como numa fase anterior desta reescrita. "Toggles": grade de cards de toggles
-// (TogglePaths/ToggleCard, GET .../toggles?hierarchy=true fundido com GET .../toggles — ver
-// lib/toggleLeaves.ts) + criação (CreateToggleModal) + liga/desliga recursivo (PUT
-// .../toggle/:id, singular) + edição de regra de ativação (EditToggleDrawer, PUT
-// .../toggles/:id não-recursivo). "Service key": gerenciamento da chave (SecretKeySection).
-// Ambas ficam montadas o tempo todo (`hidden`, não desmontadas ao trocar de aba) — assim
+// AppCard.tsx/AppShell.tsx navegam direto pra cá com `?tab=keys`/`?tab=activity` (ex.: clicar na
+// faixa de chave do card) sem passar pela sub-nav da sidebar (que só existe DEPOIS de já estar
+// nesta tela) — lido uma vez no mount, ver o `useState(parseInitialTab(...))` abaixo. Qualquer
+// valor não reconhecido cai em "toggles", a aba padrão.
+function parseInitialTab(raw: string | null): ApplicationDetailTab {
+  return raw === "keys" || raw === "activity" ? raw : "toggles";
+}
+
+// Tela de detalhe de uma aplicação: 3 abas reais (`tab` — "toggles"/"keys" confirmados no app.jsx
+// real como `setTab("toggles"|"keys")`; "activity" é nova, v2.6 §7, posicionamento decidido com o
+// usuário — ver hooks/useAppUser.ts#ApplicationDetailTab), nunca duas visíveis ao mesmo tempo.
+// "Toggles": grade de cards de toggles (TogglePaths/ToggleCard, GET .../toggles?hierarchy=true
+// fundido com GET .../toggles — ver lib/toggleLeaves.ts) + criação (CreateToggleModal) + liga/
+// desliga recursivo (PUT .../toggle/:id, singular) + edição de regra de ativação
+// (EditToggleDrawer, PUT .../toggles/:id não-recursivo). "Service key": gerenciamento da chave
+// (SecretKeySection). "Activity": audit trail desta aplicação (AuditFeed + GET .../audit).
+// Todas ficam montadas o tempo todo (`hidden`, não desmontadas ao trocar de aba) — assim
 // `SecretKeySection` continua sendo o único dono do fetch de `GET /secret-keys` mesmo com o
-// usuário na aba Toggles (`hasSecretKey` alimenta o indicador da sub-nav da sidebar
-// independente da aba ativa). Exclusão de toggle individual fica para uma próxima fatia.
+// usuário noutra aba (`hasSecretKey` alimenta o indicador da sub-nav da sidebar independente da
+// aba ativa), mesmo padrão agora extendido a `AuditFeed`. Exclusão de toggle individual fica para
+// uma próxima fatia.
 export function ApplicationDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const applicationId = id!;
@@ -77,7 +89,7 @@ export function ApplicationDetailScreen() {
   // AppShell.tsx). Só lido uma vez, no mount — depois disso quem manda na aba é o estado local
   // (`onTabChange`, exposto pro AppShell via `openApp`), igual ao `setTab` do protótipo real.
   const [initialSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<ApplicationDetailTab>(initialSearchParams.get("tab") === "keys" ? "keys" : "toggles");
+  const [tab, setTab] = useState<ApplicationDetailTab>(parseInitialTab(initialSearchParams.get("tab")));
   // v2.6 §6.4: clicar num toggle favoritado na sidebar navega direto pra cá com `?search=` já
   // preenchido — mesmo padrão de `?tab=keys` (AppCard) acima, lido uma vez no mount.
   const [search, setSearch] = useState(initialSearchParams.get("search") ?? "");
@@ -322,6 +334,11 @@ export function ApplicationDetailScreen() {
     toggleFavorite(toggleFavoriteKey(applicationId, leaf.segs.join(".")));
   }
 
+  // v2.6 §7 — Activity tab: audit trail escopado a ESTA aplicação (GET .../audit), visível pra
+  // qualquer usuário autenticado (nenhuma checagem de time, diferente de History) — ver
+  // AuditUseCase.ListForApplication no backend.
+  const fetchActivityPage = useCallback((cursor?: string) => listApplicationAudit(applicationId, { cursor }), [applicationId]);
+
   return (
     <div className="page">
       <div className="page-head">
@@ -424,6 +441,12 @@ export function ApplicationDetailScreen() {
               toast("Action submitted for approval");
             }}
           />
+        </div>
+      )}
+
+      {state.status === "loaded" && (
+        <div hidden={tab !== "activity"}>
+          <AuditFeed fetchPage={fetchActivityPage} emptyDescription="No changes recorded for this application yet." />
         </div>
       )}
 
