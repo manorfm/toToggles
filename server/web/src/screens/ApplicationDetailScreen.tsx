@@ -19,6 +19,7 @@ import { CreateToggleModal } from "../components/CreateToggleModal";
 import { EditToggleDrawer, type ToggleRuleSnapshot } from "../components/EditToggleDrawer";
 import { Icon } from "../components/Icon";
 import { SecretKeySection } from "../components/SecretKeySection";
+import { SuggestChangeModal } from "../components/SuggestChangeModal";
 import { TogglePaths } from "../components/TogglePaths";
 import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
@@ -77,7 +78,9 @@ export function ApplicationDetailScreen() {
   // (`onTabChange`, exposto pro AppShell via `openApp`), igual ao `setTab` do protótipo real.
   const [initialSearchParams] = useSearchParams();
   const [tab, setTab] = useState<ApplicationDetailTab>(initialSearchParams.get("tab") === "keys" ? "keys" : "toggles");
-  const [search, setSearch] = useState("");
+  // v2.6 §6.4: clicar num toggle favoritado na sidebar navega direto pra cá com `?search=` já
+  // preenchido — mesmo padrão de `?tab=keys` (AppCard) acima, lido uma vez no mount.
+  const [search, setSearch] = useState(initialSearchParams.get("search") ?? "");
   const [creating, setCreating] = useState(false);
   const [configuring, setConfiguring] = useState<
     { toggleId: string; childrenCount: number; ancestorsOn: boolean; blockerSeg: string | null } | null
@@ -90,6 +93,7 @@ export function ApplicationDetailScreen() {
   const [mutating, setMutating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [suggesting, setSuggesting] = useState<ToggleLeaf | null>(null);
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(
     user.role === "root"
   );
@@ -402,6 +406,7 @@ export function ApplicationDetailScreen() {
             onBulkToggle={canEdit ? handleBulkToggle : undefined}
             isFavorite={isFavoriteToggle}
             onToggleFavorite={handleToggleFavorite}
+            onSuggest={!canEdit ? setSuggesting : undefined}
           />
         </div>
       )}
@@ -509,6 +514,15 @@ export function ApplicationDetailScreen() {
 
       {archivedOpen && state.status === "loaded" && (
         <ArchivedModal entries={state.archived} onClose={() => setArchivedOpen(false)} onRestore={restoreArchivedEntry} />
+      )}
+
+      {suggesting && (
+        <SuggestChangeModal
+          applicationId={applicationId}
+          leaf={suggesting}
+          onClose={() => setSuggesting(null)}
+          onSuggested={() => toast("Suggestion sent to the team's approvers")}
+        />
       )}
 
       {intercept && (

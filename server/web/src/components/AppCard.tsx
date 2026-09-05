@@ -11,6 +11,10 @@ interface AppCardProps {
   accentIndex: number;
   canEdit?: boolean;
   onEdit?: (application: Application) => void;
+  // v2.6 §6.4 — diferente do favorito de ToggleCard (existe pra qualquer role), o do AppCard só
+  // aparece pra quem pode editar (confirmado no protótipo real: mesma condição do botão Edit).
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 // Adaptado do AppCard real do protótipo (decodificado do bundle comprimido embutido em
@@ -20,7 +24,7 @@ interface AppCardProps {
 // gap conhecido em server/CLAUDE.md. O 3º stat "Key" e a faixa `.app-key-row` (indicador real de
 // presença de secret key) usam `has_secret_key`, que veio de uma query nova no backend
 // (EXISTS sobre secret_keys, ver application_repository.go#GetAllWithToggleCounts).
-export function AppCard({ application, accentIndex, canEdit = false, onEdit }: AppCardProps) {
+export function AppCard({ application, accentIndex, canEdit = false, onEdit, isFavorite, onToggleFavorite }: AppCardProps) {
   const { accent, soft } = applicationAccent(accentIndex);
   const navigate = useNavigate();
   const hasKey = application.has_secret_key;
@@ -38,6 +42,20 @@ export function AppCard({ application, accentIndex, canEdit = false, onEdit }: A
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="app-card-title">{application.name}</div>
         </div>
+        {canEdit && onToggleFavorite && (
+          <button
+            className="icon-btn"
+            title={isFavorite ? "Unfavorite" : "Favorite"}
+            aria-label={isFavorite ? "Unfavorite" : "Favorite"}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleFavorite();
+            }}
+          >
+            <Icon name="star" size={15} fill={isFavorite} style={isFavorite ? { color: "var(--warn)" } : undefined} />
+          </button>
+        )}
         {canEdit && onEdit && (
           <button
             className="icon-btn"

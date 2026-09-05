@@ -1178,15 +1178,37 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       de intenção, não como fix por si só. O botão de favoritar em `ToggleCard` existe pra
       QUALQUER role (confirmado no protótipo: fica fora do branch `canEdit`/`!canEdit`) —
       diferente de Configure/Delete/o switch de verdade, que continuam exclusivos de quem pode
-      editar. **Ainda pendente desta fatia**: a estrela em `AppCard` e a seção "Favorited" na
-      sidebar (`AppShell`) — só o lado de toggles (`ToggleCard`) foi fechado nesta passada.
-    - **§6.6 — "Suggest a change" (rocket icon)**: `ToggleCard`/`TogglePaths` já ganharam o prop
-      `onSuggest` (botão foguete ao lado do switch somente-leitura, só quando `!canEdit`) nesta
-      mesma passada, já que estava no mesmo arquivo/JSX confirmado dos dois itens acima — mas o
-      endpoint novo (`POST .../toggles/:toggleId/suggest`, restrito a role `user`, sempre cria uma
-      aprovação pendente independente do `required_actions` global) e o `SuggestChangeModal` que
-      de fato chamam esse prop ainda não foram construídos. `onSuggest` fica sem consumidor em
-      `ApplicationDetailScreen` até essa fatia ser fechada.
+      editar. **Fechado numa fase seguinte**: a estrela em `AppCard` (aqui SIM gated por `canEdit`
+      — confirmado no protótipo real, mesma condição do botão Edit, diferente da estrela de
+      `ToggleCard`) e a seção "Favorited" na sidebar (`AppShell`, `.nav-label` "Favorited" + um
+      `.nav-item` por app/toggle favoritado + `.nav-divider`, inserida no topo do `<nav>`,
+      confirmada no `app.jsx` real). `AppShell` reaproveitou o `GET /applications` que já buscava
+      só pra alimentar o badge de contagem — passou a guardar a lista inteira também, em vez de
+      duplicar a chamada. Clicar num toggle favoritado navega com `?tab=toggles&search={path}`;
+      `ApplicationDetailScreen` ganhou a leitura de `?search=` no mount (mesmo padrão de `?tab=`
+      já existente pro clique em "Manage" na faixa de chave do `AppCard`). Uma entrada de
+      favorito cujo app já foi apagado é descartada em silêncio (`.filter(Boolean)`/`.filter(f =>
+      f.app)`, mesma resiliência do protótipo real) — nunca quebra a sidebar.
+    - ✅ **§6.6 — "Suggest a change" (rocket icon)**: completo. `ToggleCard`/`TogglePaths` já
+      tinham o prop `onSuggest` (botão foguete ao lado do switch somente-leitura, só quando
+      `!canEdit`) da mesma passada de §6.4/§6.5. Backend: `POST
+      .../applications/:id/toggles/:toggleId/suggest` (`ApprovalHandler.SuggestToggleChange`,
+      registrada em `toggleById` — fora de `RequireApprovalAware` de propósito, já que aqui virar
+      uma solicitação nunca é condicional). Usa uma nova `ApprovalUseCase.CreateSuggestion`,
+      extraída de `CreateApprovalRequest` via `createApprovalRequestUnchecked` (o núcleo comum de
+      validação/persistência/audit), que pula o gate de `required_actions` — diferente de toda
+      outra solicitação do sistema, uma sugestão SEMPRE vira um `ApprovalRequest` pendente, porque
+      não há "aplicar direto" possível pra quem não pode editar. `teamID` resolvido via
+      `GetUserTeamForApplication` (mesmo mecanismo de toda ação de toggle); a nota opcional do
+      usuário é anexada à `description` (`"Suggested: enable/disable toggle — {note}"`) — visível
+      no audit trail (History), não na linha da lista de Approvals, que sempre usa o label fixo
+      por `action_type` (`ApprovalRow#ACTION_LABELS`), igual a qualquer outro enable/disable.
+      Frontend: `components/SuggestChangeModal.tsx` portado 1:1 do `SuggestChangeModal` confirmado
+      em `app.jsx` (nota opcional, cópia "Suggesting to **enable/disable** this toggle"), sem
+      passar pelo `useApprovalIntercept` — não existe "aplicar direto" aqui pra interceptar.
+      Coberto por testes de handler (real-DB, incl. negação pra quem não é membro do team), de
+      componente e um e2e completo (`suggest-toggle-change.spec.ts`: usuário `user` sugere com
+      aprovação desligada, root vê e aprova, toggle aplica).
     - **§6.1/§6.2 (command palette) e §6.7-6.9 (onboarding wizard)**: ainda não iniciados.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta

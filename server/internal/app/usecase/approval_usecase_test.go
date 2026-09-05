@@ -440,3 +440,46 @@ func TestApprovalUseCase_CreateApprovalRequest(t *testing.T) {
 		}
 	})
 }
+
+// v2.6 §6.6: "Suggest a change" precisa criar uma solicitação mesmo quando o action_type
+// correspondente NÃO está configurado pra exigir aprovação (required_actions.toggle_enable
+// desligado) — é a única forma de um role read-only propor uma mudança, então o gate normal de
+// CreateApprovalRequest não pode se aplicar aqui.
+func TestApprovalUseCase_CreateSuggestion(t *testing.T) {
+	uc, requests, teams, _, users := newApprovalUseCaseForAccessTests()
+	settingsRepo := uc.approvalSettingsRepo.(*MockApprovalSettingsRepository)
+	settingsRepo.RequiresApprovalResult = false // o ponto central deste teste
+
+	team := &entity.Team{ID: "team-a", Name: "Team A"}
+	teamRepoConcrete := uc.teamRepo.(*MockTeamRepository)
+	teamRepoConcrete.Teams[team.ID] = team
+
+	requester := &entity.User{ID: "requester-1", Role: entity.UserRoleUser}
+	users.Users[requester.ID] = requester
+	teams.TeamsByUser[requester.ID] = []string{team.ID}
+
+	t.Run("creates a request even when the action type doesn't require approval", func(t *testing.T) {
+		request, err := uc.CreateSuggestion(
+			context.Background(), entity.ApprovalActionToggleEnable, "Suggested: enable toggle", requester.ID, team.ID, nil, nil, nil,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if request.Status != entity.ApprovalStatusPending {
+			t.Errorf("expected a pending request, got status %q", request.Status)
+		}
+		if len(requests.Requests) != 1 {
+			t.Fatalf("expected the request to be persisted, got %d", len(requests.Requests))
+		}
+	})
+
+	t.Run("still enforces team membership, same access rule as CreateApprovalRequest", func(t *testing.T) {
+		outsider := &entity.User{ID: "outsider-1", Role: entity.UserRoleUser}
+		users.Users[outsider.ID] = outsider
+
+		_, err := uc.CreateSuggestion(context.Background(), entity.ApprovalActionToggleEnable, "desc", outsider.ID, team.ID, nil, nil, nil)
+		if !errors.Is(err, ErrApprovalAccessDenied) {
+			t.Fatalf("expected ErrApprovalAccessDenied, got %v", err)
+		}
+	})
+}

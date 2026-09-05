@@ -157,6 +157,25 @@ func (uc *ApprovalUseCase) CreateApprovalRequest(ctx context.Context, actionType
 		return nil, errors.New("this action does not require approval")
 	}
 
+	return uc.createApprovalRequestUnchecked(ctx, actionType, description, requestedBy, teamID, applicationID, toggleID, actionData)
+}
+
+// CreateSuggestion (v2.6 §6.6) cria uma solicitação de aprovação SEM checar required_actions —
+// usada só pelo fluxo "Suggest a change" (POST .../toggles/:toggleId/suggest), a única mutação
+// que um usuário read-only (role user) pode disparar. Diferente de qualquer outra solicitação do
+// sistema, que só existe quando o action_type correspondente está configurado pra exigir
+// aprovação (ver CreateApprovalRequest acima), uma sugestão SEMPRE vira uma solicitação — não há
+// como um role sem permissão de editar "aplicar direto", então o gate de required_actions não se
+// aplica aqui.
+func (uc *ApprovalUseCase) CreateSuggestion(ctx context.Context, actionType entity.ApprovalActionType, description string, requestedBy string, teamID string, applicationID *string, toggleID *string, actionData interface{}) (*entity.ApprovalRequest, error) {
+	return uc.createApprovalRequestUnchecked(ctx, actionType, description, requestedBy, teamID, applicationID, toggleID, actionData)
+}
+
+// createApprovalRequestUnchecked concentra a criação de verdade (validação de requester/team/
+// application/toggle, o caso especial de secret_key_create, persistência e o audit trail de
+// "Requested: X") — chamado pelos dois pontos de entrada acima depois que cada um decide, à sua
+// própria maneira, SE a solicitação deve mesmo ser criada.
+func (uc *ApprovalUseCase) createApprovalRequestUnchecked(ctx context.Context, actionType entity.ApprovalActionType, description string, requestedBy string, teamID string, applicationID *string, toggleID *string, actionData interface{}) (*entity.ApprovalRequest, error) {
 	// Validar se o usuário existe
 	requester, err := uc.userRepo.GetByID(requestedBy)
 	if err != nil {

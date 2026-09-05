@@ -644,6 +644,83 @@ func (h *ApprovalHandler) ExecuteApprovedAction(ctx *gin.Context) {
 }
 
 // ============================
+// Sugestão de mudança (v2.6 §6.6)
+// ============================
+
+// suggestToggleChangeRequest é o corpo aceito por SuggestToggleChange.
+type suggestToggleChangeRequest struct {
+	Enabled bool   `json:"enabled"`
+	Note    string `json:"note"`
+}
+
+// SuggestToggleChange cria uma solicitação de aprovação para habilitar/desabilitar um toggle —
+// sempre, mesmo quando toggle_enable/toggle_disable não estão configurados para exigir aprovação
+// (ver ApprovalUseCase.CreateSuggestion). É o único jeito de alguém sem permissão de editar a
+// aplicação (tipicamente role user) propor uma mudança em vez de aplicá-la direto; por isso a
+// rota fica fora de RequireApprovalAware de propósito — aqui "virar uma solicitação" nunca é
+// condicional ao required_actions configurado.
+func (h *ApprovalHandler) SuggestToggleChange(ctx *gin.Context) {
+	user := getUserFromSession(ctx)
+	if user == nil {
+		ctx.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
+		return
+	}
+
+	appID := ctx.Param("id")
+	toggleID := ctx.Param("toggleId")
+	if appID == "" || toggleID == "" {
+		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "application ID and toggle ID are required"))
+		return
+	}
+
+	var req suggestToggleChangeRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+		return
+	}
+
+	teamID, err := h.approvalUseCase.GetUserTeamForApplication(ctx.Request.Context(), user.ID, appID)
+	if err != nil {
+		ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+		return
+	}
+
+	actionType := entity.ApprovalActionToggleDisable
+	description := "Suggested: disable toggle"
+	if req.Enabled {
+		actionType = entity.ApprovalActionToggleEnable
+		description = "Suggested: enable toggle"
+	}
+	if req.Note != "" {
+		description += " — " + req.Note
+	}
+
+	request, err := h.approvalUseCase.CreateSuggestion(
+		ctx.Request.Context(),
+		actionType,
+		description,
+		user.ID,
+		teamID,
+		&appID,
+		&toggleID,
+		map[string]interface{}{"enabled": req.Enabled},
+	)
+	if err != nil {
+		if errors.Is(err, usecase.ErrApprovalAccessDenied) {
+			ctx.JSON(http.StatusForbidden, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, gin.H{
+		"message": "suggestion sent to the team's approvers",
+		"data":    request,
+	})
+}
+
+// ============================
 // Funções auxiliares
 // ============================
 

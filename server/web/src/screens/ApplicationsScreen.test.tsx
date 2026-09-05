@@ -35,6 +35,7 @@ const readOnlyUser: AuthenticatedUser = { id: "3", username: "bob", role: "user"
 describe("ApplicationsScreen", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it("renders every application returned by the API", async () => {
@@ -191,5 +192,39 @@ describe("ApplicationsScreen", () => {
     await user.click(screen.getByRole("button", { name: /edit application/i }));
 
     expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
+  });
+
+  // v2.6 §6.4: favoritar uma aplicação no grid persiste em localStorage sob a chave confirmada
+  // ("app:{id}") — só existe pra quem pode editar (canCreate), mesma condição do botão Edit.
+  it("favorites an application from the grid, persisting the key to localStorage", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+      )
+    );
+    const user = userEvent.setup();
+
+    renderScreen();
+    await screen.findByText("Checkout Web");
+
+    await user.click(screen.getByRole("button", { name: /^favorite$/i }));
+
+    expect(screen.getByRole("button", { name: /^unfavorite$/i })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem("totoggle_v2_favs") ?? "[]")).toContain("app:1");
+  });
+
+  it("does not show a favorite button for a non-root, non-admin (read-only) user", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+      )
+    );
+
+    renderScreen(readOnlyUser);
+    await screen.findByText("Checkout Web");
+
+    expect(screen.queryByRole("button", { name: /favorite/i })).not.toBeInTheDocument();
   });
 });

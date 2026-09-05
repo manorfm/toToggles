@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import type { OpenAppInfo } from "../hooks/useAppUser";
+import { useFavorites } from "../hooks/useFavorites";
 import { listApplications } from "../api/applications";
 import { listApprovableApprovals, listPendingApprovals } from "../api/approvals";
 import { listTeams } from "../api/teams";
 import { listUsers } from "../api/users";
 import { logout } from "../api/profile";
+import { favoriteAppIds, favoriteToggleRefs } from "../lib/favorites";
+import type { Application } from "../types/application";
 import { Icon, type IconName } from "./Icon";
 import { RoleBadge } from "./RoleBadge";
 import { UserMenu } from "./UserMenu";
@@ -122,8 +125,13 @@ export function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [appCount, setAppCount] = useState(0);
+  // v2.6 §6.4: precisa da lista inteira (não só a contagem) pra resolver o nome de uma
+  // aplicação favoritada na sidebar — reaproveita o mesmo fetch que já existia só pro badge de
+  // contagem, em vez de duplicar a chamada a GET /applications.
+  const [applications, setApplications] = useState<Application[]>([]);
   const [teamCount, setTeamCount] = useState(0);
   const [openApp, setOpenApp] = useState<OpenAppInfo | null>(null);
+  const { favorites } = useFavorites();
 
   // A tela de detalhe de aplicação é quem sabe esses dados (AppShell nunca busca uma aplicação
   // individual) — mas se o usuário navegar embora sem essa tela limpar o próprio estado (ex.:
@@ -160,8 +168,11 @@ export function AppShell() {
     if (!authenticatedUserId) return;
     let cancelled = false;
     listApplications()
-      .then((applications) => {
-        if (!cancelled) setAppCount(applications.length);
+      .then((apps) => {
+        if (!cancelled) {
+          setAppCount(apps.length);
+          setApplications(apps);
+        }
       })
       .catch(() => {
         // Idem: contagem informativa no badge de nav, não crítica.
@@ -209,6 +220,19 @@ export function AppShell() {
     return 0;
   }
 
+  // v2.6 §6.4: seção "Favorited" na sidebar — confirmado no app.jsx real (favApps/favToggles,
+  // decodificado do bundle comprimido). Só existe quando há pelo menos um favorito de qualquer
+  // tipo; um toggle favoritado cujo app já não existe mais (apagado) é descartado em silêncio
+  // (mesmo `.filter(Boolean)`/`.filter(f => f.app)` do protótipo real).
+  const favApps = favoriteAppIds(favorites)
+    .map((id) => applications.find((a) => a.id === id))
+    .filter((a): a is Application => !!a);
+  const favToggles: { path: string; app: Application }[] = [];
+  for (const ref of favoriteToggleRefs(favorites)) {
+    const app = applications.find((a) => a.id === ref.appId);
+    if (app) favToggles.push({ path: ref.path, app });
+  }
+
   if (currentUser.status === "loading") {
     return <div className="empty">Carregando…</div>;
   }
@@ -247,6 +271,26 @@ export function AppShell() {
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {(favApps.length > 0 || favToggles.length > 0) && (
+            <>
+              <div className="nav-label">Favorited</div>
+              {favApps.map((a) => (
+                <button key={a.id} className="nav-item" onClick={() => navigate(`/applications/${a.id}`)}>
+                  <Icon name="apps" size={17} /> {a.name}
+                </button>
+              ))}
+              {favToggles.map((ft, i) => (
+                <button
+                  key={i}
+                  className="nav-item"
+                  onClick={() => navigate(`/applications/${ft.app.id}?tab=toggles&search=${encodeURIComponent(ft.path)}`)}
+                >
+                  <Icon name="layers" size={17} /> <span className="mono" style={{ fontSize: 12 }}>{ft.path}</span>
+                </button>
+              ))}
+              <div className="nav-divider" />
+            </>
+          )}
           {NAV_ITEMS.filter(
             (item) => (!item.rootOnly || user.role === "root") && (!item.adminOrRoot || user.role === "root" || user.role === "admin")
           ).map((item) => {

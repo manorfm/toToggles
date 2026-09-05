@@ -392,6 +392,10 @@ func GetTeamsWithoutApprover(c *gin.Context) {
 	approvalHandler.GetTeamsWithoutApprover(c)
 }
 
+func SuggestToggleChange(c *gin.Context) {
+	approvalHandler.SuggestToggleChange(c)
+}
+
 // Auditoria
 func GetAuditLog(c *gin.Context) {
 	auditHandler.GetAuditLog(c)

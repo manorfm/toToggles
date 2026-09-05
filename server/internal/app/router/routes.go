@@ -93,6 +93,11 @@ func Init(router *gin.Engine) {
 				// Restaurar não passa pelo workflow de aprovação — é uma correção/desfazer de uma
 				// ação já decidida (e já auditada), não uma mutação de negócio nova a revisar.
 				toggleById.POST("/restore", handler.RequireAdmin(), handler.RestoreToggle)
+				// Sugerir mudança (v2.6 §6.6) — qualquer membro do team dono da aplicação pode
+				// propor, mesmo sem permissão de editar; NÃO passa por RequireApprovalAware
+				// porque aqui virar uma solicitação nunca é opcional (ver ApprovalHandler.
+				// SuggestToggleChange / ApprovalUseCase.CreateSuggestion).
+				toggleById.POST("/suggest", handler.SuggestToggleChange)
 			}
 
 			// Rota para atualizar enabled recursivamente (apenas admin/root)

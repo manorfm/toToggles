@@ -97,3 +97,7 @@ export type RestoreToggleResult = { kind: "restored" };
 export type BulkUpdateEnabledResult =
   | { kind: "updated" }
   | { kind: "pending_approval"; actionType: string };
+
+// POST .../toggles/:toggleId/suggest (v2.6 §6.6) — NÃO approval-aware no sentido usual: sempre
+// cria uma solicitação (201), nunca aplica direto, então não existe um resultado "updated" aqui.
+export type SuggestToggleChangeResult = { kind: "suggested" };

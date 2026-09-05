@@ -46,6 +46,7 @@ function renderShell(initialPath = "/") {
 describe("AppShell", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it("renders the sidebar, topbar and routed content once authenticated", async () => {
@@ -456,5 +457,86 @@ describe("AppShell", () => {
     await user.click(screen.getByRole("button", { name: /change password/i }));
 
     expect(await screen.findByText("Account security content")).toBeInTheDocument();
+  });
+
+  // v2.6 §6.4: seção "Favorited" na sidebar — um item por app favoritada, um item por toggle
+  // favoritado (mostrando o path pontilhado), com um divisor abaixo. `useFavorites` guarda seu
+  // estado numa store módulo-level lida do localStorage só uma vez, no import (ver
+  // hooks/useFavorites.ts) — testes que pré-semeiam localStorage precisam de
+  // vi.resetModules() + reimport pra essa leitura acontecer de novo, diferente dos outros testes
+  // deste arquivo, que nunca tocam favoritos.
+  describe("Favorited section (v2.6 §6.4)", () => {
+    function fetchMockWithApps(apps: { id: string; name: string }[]) {
+      return vi.fn().mockImplementation((path: string) => {
+        if (path === "/api/applications") return Promise.resolve(jsonResponse(200, apps));
+        return Promise.resolve(
+          jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
+        );
+      });
+    }
+
+    async function renderShellWithFreshFavorites(seedFavorites: string[]) {
+      if (seedFavorites.length > 0) {
+        window.localStorage.setItem("totoggle_v2_favs", JSON.stringify(seedFavorites));
+      }
+      vi.resetModules();
+      const { AppShell: FreshAppShell } = await import("./AppShell");
+      return render(
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route element={<FreshAppShell />}>
+              <Route path="/" element={<div>Applications content</div>} />
+              <Route
+                path="/applications/:id"
+                element={<FakeOpenAppScreen name="Billing Service" toggleCount={5} hasSecretKey={true} />}
+              />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      );
+    }
+
+    it("does not show the Favorited section when nothing is favorited", async () => {
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+
+      await renderShellWithFreshFavorites([]);
+      await screen.findByText("Applications content");
+
+      expect(screen.queryByText("Favorited")).not.toBeInTheDocument();
+    });
+
+    it("shows a favorited application and navigates to it on click", async () => {
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+      const user = userEvent.setup();
+
+      await renderShellWithFreshFavorites(["app:1"]);
+      await screen.findByText("Applications content");
+      await screen.findByText("Favorited");
+
+      await user.click(screen.getByRole("button", { name: /checkout web/i }));
+
+      expect(await screen.findByText("App detail content")).toBeInTheDocument();
+    });
+
+    it("shows a favorited toggle by its dotted path and navigates with ?search= on click", async () => {
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+      const user = userEvent.setup();
+
+      await renderShellWithFreshFavorites(["tg:1:payments.card"]);
+      await screen.findByText("Applications content");
+
+      await user.click(await screen.findByText("payments.card"));
+
+      expect(await screen.findByText("App detail content")).toBeInTheDocument();
+    });
+
+    it("silently drops a favorite pointing at an application that no longer exists", async () => {
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+
+      await renderShellWithFreshFavorites(["app:gone", "tg:gone:x.y"]);
+      await screen.findByText("Applications content");
+
+      expect(screen.queryByText("Favorited")).not.toBeInTheDocument();
+    });
   });
 });

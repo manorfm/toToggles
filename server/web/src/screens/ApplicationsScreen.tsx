@@ -9,7 +9,9 @@ import { Icon } from "../components/Icon";
 import { useToast } from "../components/ToastProvider";
 import { useAppUser } from "../hooks/useAppUser";
 import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
+import { useFavorites } from "../hooks/useFavorites";
 import { creationOrderIndex } from "../lib/applicationAccent";
+import { appFavoriteKey } from "../lib/favorites";
 import type { Application } from "../types/application";
 
 type LoadState =
@@ -34,6 +36,7 @@ export function ApplicationsScreen() {
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(
     user.role === "root"
   );
+  const { favorites, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +122,8 @@ export function ApplicationsScreen() {
                 accentIndex={accentIndexByID.get(application.id) ?? 0}
                 canEdit={canCreate}
                 onEdit={setEditing}
+                isFavorite={favorites.includes(appFavoriteKey(application.id))}
+                onToggleFavorite={() => toggleFavorite(appFavoriteKey(application.id))}
               />
             ));
           })()}

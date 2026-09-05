@@ -115,4 +115,51 @@ describe("AppCard", () => {
 
     expect(await screen.findByText("detail screen")).toBeInTheDocument();
   });
+
+  // v2.6 §6.4: confirmado no protótipo real que o botão de favoritar do AppCard (diferente do de
+  // ToggleCard) SÓ existe pra quem pode editar — mesma condição do botão de Edit.
+  describe("favorites (v2.6 §6.4)", () => {
+    it("shows a favorite button when canEdit, calling onToggleFavorite without navigating", async () => {
+      const onToggleFavorite = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <AppCard application={app} accentIndex={0} canEdit onToggleFavorite={onToggleFavorite} />
+        </MemoryRouter>
+      );
+
+      await user.click(screen.getByRole("button", { name: /favorite/i }));
+      expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows 'Unfavorite' when isFavorite is true", () => {
+      render(
+        <MemoryRouter>
+          <AppCard application={app} accentIndex={0} canEdit isFavorite onToggleFavorite={vi.fn()} />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByRole("button", { name: /unfavorite/i })).toBeInTheDocument();
+    });
+
+    it("does not show the favorite button when canEdit is false", () => {
+      render(
+        <MemoryRouter>
+          <AppCard application={app} accentIndex={0} canEdit={false} onToggleFavorite={vi.fn()} />
+        </MemoryRouter>
+      );
+
+      expect(screen.queryByRole("button", { name: /favorite/i })).not.toBeInTheDocument();
+    });
+
+    it("does not show the favorite button when onToggleFavorite isn't provided", () => {
+      render(
+        <MemoryRouter>
+          <AppCard application={app} accentIndex={0} canEdit />
+        </MemoryRouter>
+      );
+
+      expect(screen.queryByRole("button", { name: /favorite/i })).not.toBeInTheDocument();
+    });
+  });
 });

@@ -32,7 +32,7 @@ func setupApprovalWorkflowTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, *enti
 	if err := db.AutoMigrate(
 		&entity.User{}, &entity.Team{}, &entity.Application{},
 		&entity.Toggle{}, &entity.SecretKey{}, &entity.Session{},
-		&entity.ApprovalRequest{}, &entity.ApprovalSettings{},
+		&entity.ApprovalRequest{}, &entity.ApprovalSettings{}, &entity.AuditLog{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -80,6 +80,16 @@ func setupApprovalWorkflowTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, *enti
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
+		// SuggestToggleChange's tests need a caller other than admin (a plain-role team member) —
+		// falls back to admin (every existing test's expectation) when the header is absent.
+		if actorID := c.GetHeader("X-Test-User"); actorID != "" {
+			var actor entity.User
+			if err := db.First(&actor, "id = ?", actorID).Error; err == nil {
+				c.Set("user", &actor)
+				c.Next()
+				return
+			}
+		}
 		c.Set("user", admin)
 		c.Next()
 	})
@@ -90,6 +100,7 @@ func setupApprovalWorkflowTestRouter(t *testing.T) (*gin.Engine, *gorm.DB, *enti
 	router.PUT("/applications/:id/toggles/:toggleId", RequireApprovalAware(entity.UserRoleAdmin), UpdateToggle)
 	router.PUT("/applications/:id", RequireApprovalAware(entity.UserRoleAdmin), UpdateApplication)
 	router.POST("/applications", RequireApprovalAware(entity.UserRoleAdmin), CreateApplication)
+	router.POST("/applications/:id/toggles/:toggleId/suggest", SuggestToggleChange)
 
 	return router, db, admin
 }
@@ -561,6 +572,89 @@ func TestApprovalWorkflow_SecretKeyCreate_ApprovedAndExecuted_ActivatesKeyAndRot
 	}
 	if !sawNewCurrent {
 		t.Error("expected the new key to be active and current after approve+execute")
+	}
+}
+
+// TestApprovalWorkflow_SuggestToggleChange_AlwaysCreatesRequest_EvenWithoutApprovalConfigured
+// cobre o núcleo do v2.6 §6.6: um membro do time SEM permissão de editar (role user) não pode
+// aplicar a mudança direto, mas também não pode ficar travado só porque o admin nunca configurou
+// toggle_enable/toggle_disable para exigir aprovação — CreateSuggestion ignora esse gate de
+// propósito (diferente de toda outra rota approval-aware deste arquivo).
+func TestApprovalWorkflow_SuggestToggleChange_AlwaysCreatesRequest_EvenWithoutApprovalConfigured(t *testing.T) {
+	router, db, _ := setupApprovalWorkflowTestRouter(t)
+	// Aprovação nem chega a estar habilitada — a suggestion precisa funcionar mesmo assim.
+
+	plainUser := &entity.User{ID: "user-1", Username: "plainuser", Role: entity.UserRoleUser}
+	if err := db.Create(plainUser).Error; err != nil {
+		t.Fatalf("failed to create plain user: %v", err)
+	}
+	if err := db.Create(&entity.TeamUser{TeamID: "team-1", UserID: plainUser.ID}).Error; err != nil {
+		t.Fatalf("failed to associate plain user to team-1: %v", err)
+	}
+
+	toggle := &entity.Toggle{ID: "toggle-1", AppID: "app-1", Value: "feature", Path: "feature", Enabled: true}
+	if err := db.Create(toggle).Error; err != nil {
+		t.Fatalf("failed to create toggle: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/applications/app-1/toggles/toggle-1/suggest", strings.NewReader(`{"enabled": false, "note": "seems stale"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", plainUser.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var pending entity.ApprovalRequest
+	if err := db.Where("toggle_id = ? AND action_type = ?", "toggle-1", entity.ApprovalActionToggleDisable).First(&pending).Error; err != nil {
+		t.Fatalf("expected a pending toggle_disable request, got: %v", err)
+	}
+	if pending.RequestedBy != plainUser.ID {
+		t.Errorf("expected requested_by=%q, got %q", plainUser.ID, pending.RequestedBy)
+	}
+	if pending.TeamID != "team-1" {
+		t.Errorf("expected team_id=%q, got %q", "team-1", pending.TeamID)
+	}
+	if !strings.Contains(pending.Description, "seems stale") {
+		t.Errorf("expected the note to be reflected in the description, got %q", pending.Description)
+	}
+
+	// A suggestion nunca aplica a mudança direto, independente de required_actions.
+	var untouched entity.Toggle
+	if err := db.First(&untouched, "id = ?", "toggle-1").Error; err != nil {
+		t.Fatalf("toggle disappeared: %v", err)
+	}
+	if !untouched.Enabled {
+		t.Errorf("expected the toggle to remain unchanged (enabled=true) until approved, got enabled=%v", untouched.Enabled)
+	}
+}
+
+// TestApprovalWorkflow_SuggestToggleChange_NonTeamMember_Denied confirma que o gate de
+// pertencimento ao team (o mesmo access.CanRead usado por toda solicitação de aprovação) também
+// vale aqui — uma sugestão não é uma brecha pra propor mudanças em qualquer aplicação do sistema.
+func TestApprovalWorkflow_SuggestToggleChange_NonTeamMember_Denied(t *testing.T) {
+	router, db, _ := setupApprovalWorkflowTestRouter(t)
+
+	outsider := &entity.User{ID: "outsider-1", Username: "outsider", Role: entity.UserRoleUser}
+	if err := db.Create(outsider).Error; err != nil {
+		t.Fatalf("failed to create outsider: %v", err)
+	}
+
+	toggle := &entity.Toggle{ID: "toggle-1", AppID: "app-1", Value: "feature", Path: "feature", Enabled: true}
+	if err := db.Create(toggle).Error; err != nil {
+		t.Fatalf("failed to create toggle: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/applications/app-1/toggles/toggle-1/suggest", strings.NewReader(`{"enabled": false}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", outsider.ID)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

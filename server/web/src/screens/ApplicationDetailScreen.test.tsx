@@ -15,10 +15,13 @@ function FakeShell({ user }: { user: AuthenticatedUser }) {
   return <Outlet context={{ user, setOpenApp: () => {} }} />;
 }
 
-function renderScreen(user: AuthenticatedUser = { id: "1", username: "root", role: "root", must_change_password: false }) {
+function renderScreen(
+  user: AuthenticatedUser = { id: "1", username: "root", role: "root", must_change_password: false },
+  initialPath = "/applications/app1"
+) {
   return render(
     <ToastProvider>
-      <MemoryRouter initialEntries={["/applications/app1"]}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route element={<FakeShell user={user} />}>
             <Route path="/" element={<div>Applications list</div>} />
@@ -222,6 +225,24 @@ describe("ApplicationDetailScreen", () => {
 
     expect(screen.getByRole("button", { name: /^unfavorite$/i })).toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem("totoggle_v2_favs") ?? "[]")).toContain("tg:app1:user");
+  });
+
+  // v2.6 §6.4: clicar num toggle favoritado na sidebar (AppShell, fora do escopo deste teste)
+  // navega pra cá com `?search=` já preenchido — a tela só precisa honrar isso no mount.
+  it("seeds the search filter from the ?search= query param", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchMockFor([
+        { id: "1", value: "user", enabled: true, toggles: [{ id: "2", value: "payments", enabled: true }] },
+        { id: "3", value: "billing", enabled: true },
+      ])
+    );
+
+    renderScreen(undefined, "/applications/app1?search=user.payments");
+
+    await screen.findByText("payments", { selector: ".seg-link" });
+    expect(screen.getByPlaceholderText("Filter paths… e.g. payments.card")).toHaveValue("user.payments");
+    expect(screen.queryByText("billing", { selector: ".root-chip" })).not.toBeInTheDocument();
   });
 
   it("creates a toggle via the modal and shows it in the grid", async () => {
@@ -670,5 +691,44 @@ describe("ApplicationDetailScreen", () => {
 
     await screen.findByText("Nothing archived.");
     expect(screen.getByText("Archived toggles")).toBeInTheDocument();
+  });
+
+  // v2.6 §6.6: um role `user` (canEdit=false) não pode aplicar a mudança direto — o switch fica
+  // read-only e um botão-foguete "Suggest a change" abre o SuggestChangeModal, que sempre chama
+  // POST .../suggest (nunca o endpoint de enable/disable direto).
+  it("lets a read-only (user role) caller suggest a change instead of applying it directly", async () => {
+    let suggestBody: unknown = null;
+    const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/applications/app1") {
+        return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      if (path === "/api/applications/app1/toggles/1/suggest" && init?.method === "POST") {
+        suggestBody = JSON.parse(init.body as string);
+        return Promise.resolve(jsonResponse(201, { message: "suggestion sent to the team's approvers" }));
+      }
+      if (path.includes("hierarchy=true")) {
+        return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [{ id: "1", value: "user", enabled: true }] }));
+      }
+      if (path === "/api/applications/app1/toggles") {
+        return Promise.resolve(jsonResponse(200, [detail({ id: "1", value: "user", enabled: true })]));
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen({ id: "2", username: "plainuser", role: "user", must_change_password: false });
+    await screen.findByText("user", { selector: ".root-chip" });
+
+    // O switch fica desabilitado (não passa a aplicar direto) e o botão de sugestão aparece.
+    expect(screen.getByRole("switch")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /suggest a change/i }));
+
+    expect(await screen.findByText("Suggest a change")).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("Why this change?"), "looks stale");
+    await user.click(screen.getByRole("button", { name: /send suggestion/i }));
+
+    await vi.waitFor(() => expect(suggestBody).toEqual({ enabled: false, note: "looks stale" }));
+    expect(await screen.findByText("Suggestion sent to the team's approvers")).toBeInTheDocument();
   });
 });

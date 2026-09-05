@@ -425,6 +425,11 @@ input[type="checkbox"] {
   padding: 14px 10px 6px;
   font-weight: 600;
 }
+.nav-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 6px 4px;
+}
 .user-chip {
   display: flex;
   align-items: center;

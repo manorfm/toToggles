@@ -6,6 +6,7 @@ import type {
   DeleteToggleResult,
   RestoreToggleResult,
   SetToggleEnabledResult,
+  SuggestToggleChangeResult,
   ToggleDetail,
   ToggleHierarchy,
   ToggleNode,
@@ -126,6 +127,21 @@ export async function bulkUpdateEnabled(
     return { kind: "pending_approval", actionType: body.action_type };
   }
   return { kind: "updated" };
+}
+
+// POST .../toggles/:toggleId/suggest (v2.6 §6.6) — quem não pode editar propõe em vez de aplicar
+// direto; o servidor sempre cria uma solicitação de aprovação (201), nunca 202 approval_required.
+export async function suggestToggleChange(
+  applicationId: string,
+  toggleId: string,
+  enabled: boolean,
+  note: string
+): Promise<SuggestToggleChangeResult> {
+  await apiFetch<{ message: string }>(`/applications/${applicationId}/toggles/${toggleId}/suggest`, {
+    method: "POST",
+    body: JSON.stringify({ enabled, note }),
+  });
+  return { kind: "suggested" };
 }
 
 interface ArchivedToggleBody {
