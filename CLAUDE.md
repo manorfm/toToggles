@@ -38,7 +38,17 @@ completo**. O design system foi totalmente reformulado; o protótipo novo está 
 **Regra obrigatória**: qualquer tarefa que crie ou altere algo em `server/static/` (ou o que vier
 a substituí-lo) deve primeiro consultar o MCP `design-graph` para reconstruir a tela/componente a
 partir do protótipo — nunca copiar padrões do frontend legado nem inventar layout/estilo. Detalhes
-do fluxo completo estão na skill `design-graph-frontend`.
+do fluxo completo estão na skill `design-graph-ui-context`.
+
+**Toda busca de informação sobre o protótipo (layout, JSX, estilos, textos, comportamento) passa
+pelo MCP `design-graph`** — `list_screens`/`search`/`get_screen_full`/`get_component_spec`/
+`get_component_full`/`get_full_jsx`/`get_tokens` etc. Nunca leia ou decodifique
+`docs/toToggle*.html` diretamente (nem o HTML bruto, nem o bundle `__bundler/manifest` embutido
+nele) enquanto o protótipo estiver carregado no design-graph — isso vale mesmo que uma sessão
+anterior tenha documentado um buraco de cobertura do design-graph (ver o aviso correspondente em
+`server/CLAUDE.md`): tente `get_full_jsx` primeiro (extração sem corte, cobre a maioria dos casos
+de truncamento) e, se o design-graph genuinamente não tiver a informação, pergunte ao usuário em
+vez de recorrer à decodificação manual do HTML.
 
 O frontend permanece **autocontido e servido pelo próprio server Go** (mesma origem, sem CORS/SPA
 separada) — essa restrição segue valendo na reescrita; veja o caveat de `SameSite=Strict` em
@@ -50,7 +60,7 @@ separada) — essa restrição segue valendo na reescrita; veja o caveat de `Sam
   arquitetura (Clean Architecture), Gin, GORM/SQLite, qualidade/idiomas de Go
   (`golang-code-quality`), segurança (`security-go-web`) e testes com testify (com cobertura
   mínima e testes de integração via `httptest`+SQLite in-memory).
-- `.claude/skills/design-graph-frontend/` — regra de consulta ao design-graph antes de trabalho
+- `.claude/skills/design-graph-ui-context/` — regra de consulta ao design-graph antes de trabalho
   de UI, escopada ao repo inteiro (a reescrita do frontend ainda não tem diretório definitivo).
 - Plugins habilitados em `.claude/settings.json`: `gopls-lsp` (inteligência de código Go — requer
   `gopls` instalado via `go install golang.org/x/tools/gopls@latest`, já feito neste ambiente) e

@@ -11,12 +11,14 @@ import { listUsers } from "../api/users";
 import { logout } from "../api/profile";
 import { favoriteAppIds, favoriteToggleRefs } from "../lib/favorites";
 import type { CommandPaletteData, CommandPaletteToggleHit } from "../lib/commandPalette";
+import { isOnboarded } from "../lib/onboarding";
 import { leafDottedPaths } from "../lib/toggleLeaves";
 import type { Application } from "../types/application";
 import type { TeamWithCounts } from "../types/team";
 import type { User } from "../types/user";
 import { CommandPalette } from "./CommandPalette";
 import { Icon, type IconName } from "./Icon";
+import { OnboardingModal } from "./OnboardingModal";
 import { RoleBadge } from "./RoleBadge";
 import { UserMenu } from "./UserMenu";
 
@@ -147,6 +149,12 @@ export function AppShell() {
   // com toggles) e não deve refazer o fetch.
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toggleIndex, setToggleIndex] = useState<CommandPaletteToggleHit[] | null>(null);
+  // v2.6 §6.7-6.9: onboarding wizard — root only (criar um team é RequireRoot() no backend, o
+  // primeiro passo do wizard, então nenhum outro papel consegue completá-lo de qualquer forma).
+  // `onboarded` só é reavaliado ao fechar o modal (não precisa ser reativo o tempo todo — é uma
+  // flag de localStorage que só muda dentro desta mesma tela).
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboarded, setOnboarded] = useState(isOnboarded());
 
   // A tela de detalhe de aplicação é quem sabe esses dados (AppShell nunca busca uma aplicação
   // individual) — mas se o usuário navegar embora sem essa tela limpar o próprio estado (ex.:
@@ -405,6 +413,15 @@ export function AppShell() {
           )}
         </nav>
 
+        {user.role === "root" && (
+          <button
+            className={"nav-item" + (onboardingOpen ? " active" : "")}
+            onClick={() => setOnboardingOpen(true)}
+          >
+            <Icon name="rocket" size={17} /> {onboarded ? "Review setup" : "Getting started"}
+          </button>
+        )}
+
         <div className="sidebar-foot" style={{ position: "relative" }}>
           <button className="user-chip" onClick={() => setMenuOpen((open) => !open)}>
             <div className="avatar">{user.username.slice(0, 2).toUpperCase()}</div>
@@ -450,6 +467,18 @@ export function AppShell() {
           onGoToggle={goToToggle}
           onGoTeams={goToTeams}
           onGoUsers={goToUsers}
+        />
+      )}
+
+      {onboardingOpen && (
+        <OnboardingModal
+          existingTeams={teams.map((t) => ({ id: t.id, name: t.name }))}
+          existingApps={applications.map((a) => ({ id: a.id, name: a.name }))}
+          existingUsernames={users.map((u) => u.username)}
+          onClose={() => {
+            setOnboardingOpen(false);
+            setOnboarded(isOnboarded());
+          }}
         />
       )}
     </div>

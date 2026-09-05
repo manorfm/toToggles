@@ -647,4 +647,46 @@ describe("AppShell", () => {
       expect(screen.queryByText("Alice Root")).not.toBeInTheDocument();
     });
   });
+
+  // v2.6 §6.7-6.9: onboarding wizard nav item — root only (creating a team, the wizard's first
+  // step, is RequireRoot() on the backend, so no other role could ever finish it).
+  describe("Onboarding wizard nav item (v2.6 §6.7-6.9)", () => {
+    it("shows 'Getting started' for root and opens the wizard on click", async () => {
+      vi.stubGlobal("fetch", mockFetch({ id: "1", username: "root", role: "root", must_change_password: false }));
+      const user = userEvent.setup();
+
+      renderShell();
+      await screen.findByText("Applications content");
+      const navItem = screen.getByRole("button", { name: /getting started/i });
+
+      await user.click(navItem);
+
+      expect(await screen.findByText("Set up toToggle in 6 steps")).toBeInTheDocument();
+    });
+
+    it("hides the nav item entirely for a non-root role", async () => {
+      vi.stubGlobal("fetch", mockFetch({ id: "2", username: "alice", role: "admin", must_change_password: false }));
+
+      renderShell();
+
+      expect(await screen.findByText("Applications content")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /getting started/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /review setup/i })).not.toBeInTheDocument();
+    });
+
+    it("shows 'Review setup' instead of 'Getting started' once already onboarded, and closing the wizard keeps the label in sync", async () => {
+      window.localStorage.setItem("totoggle_v2_onboarded", "1");
+      vi.stubGlobal("fetch", mockFetch({ id: "1", username: "root", role: "root", must_change_password: false }));
+      const user = userEvent.setup();
+
+      renderShell();
+      await screen.findByText("Applications content");
+      expect(screen.getByRole("button", { name: /review setup/i })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /review setup/i }));
+      await user.click(screen.getByRole("button", { name: /skip tour/i }));
+
+      expect(screen.getByRole("button", { name: /review setup/i })).toBeInTheDocument();
+    });
+  });
 });

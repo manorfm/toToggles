@@ -585,21 +585,34 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
 > ⚠️ **Em reescrita completa.** O frontend antigo (HTML/CSS/JS monolítico vanilla, sem framework)
 > foi **removido por completo** — não existe mais em `static/`. Está sendo reconstruído do zero em
 > `server/web/` (React + Vite + TypeScript) a partir do design system reformulado. Antes de tocar em
-> qualquer tela, veja o harness em `../CLAUDE.md` e siga a skill `design-graph-frontend` (consultar
-> o MCP `design-graph` como fonte de verdade do novo design — nunca reaproveitar padrões do frontend
-> antigo, que não existe mais nem deveria servir de referência).
+> qualquer tela, veja o harness em `../CLAUDE.md` e siga a skill `design-graph-ui-context`
+> (consultar o MCP `design-graph` como fonte de verdade do novo design — nunca reaproveitar padrões
+> do frontend antigo, que não existe mais nem deveria servir de referência).
 
-> ⚠️ **design-graph tem um buraco grande e conhecido: a árvore JSX autenticada do componente
-> `App` nunca é indexada.** `get_full_jsx`/`get_component_spec`/`get_screen_full` para `App`
-> sempre devolvem só o branch de login (`<LoginScreen onLogin={login} />`) — o `return` real,
-> depois de `if (!authed) return <LoginScreen .../>`, nunca é capturado. Isso já causou várias
+> ⚠️ **Toda busca de informação sobre o protótipo passa pelo MCP `design-graph`** — nunca leia ou
+> decodifique `docs/toToggle*.html` diretamente (nem o HTML bruto, nem o bundle `__bundler/manifest`
+> comprimido embutido nele). Isso vale mesmo à luz do histórico abaixo, que documenta um buraco de
+> cobertura real encontrado no passado (a árvore JSX autenticada do componente `App` não era
+> indexada) e a decodificação manual do bundle como workaround usado então — esse workaround está
+> **descontinuado por instrução direta do usuário**: ao topar com uma lacuna do design-graph,
+> primeiro tente `get_full_jsx(name)` (extração sem corte, cobre a maioria dos casos de
+> truncamento) e outras tools (`get_screen_full`/`get_component_full`/`search`) antes de concluir
+> que há mesmo uma lacuna; se ainda faltar informação, pergunte ao usuário em vez de decodificar o
+> HTML manualmente. O histórico abaixo (achados, arquivos-fonte do bundle antigo, técnica de
+> decode) fica só como registro do que já foi investigado — não é mais o método a seguir.
+>
+> <details>
+> <summary>Histórico: o buraco de cobertura do design-graph e o workaround descontinuado (decode manual do bundle)</summary>
+>
+> **design-graph tinha um buraco grande e conhecido: a árvore JSX autenticada do componente
+> `App` nunca era indexada.** `get_full_jsx`/`get_component_spec`/`get_screen_full` para `App`
+> sempre devolviam só o branch de login (`<LoginScreen onLogin={login} />`) — o `return` real,
+> depois de `if (!authed) return <LoginScreen .../>`, nunca era capturado. Isso já causou várias
 > reconstruções erradas nesta reescrita (sidebar sem ícone/contador, topbar inexistente, perfil
 > sem avatar/role, e — mais grave — a lógica de status verde/âmbar/vermelho de
-> `lib/toggleLeaves.ts` estava semanticamente errada até ser corrigida). **Existe uma fonte de
-> verdade melhor**: `docs/toToggle.html` não é só HTML/CSS — embute um bundle comprimido com o
-> JSX-fonte REAL, legível, de cada componente. Antes de reconstruir qualquer tela pela lógica
-> "design-graph não achou, então invento a partir do screenshot", tente decodificar o bundle
-> primeiro:
+> `lib/toggleLeaves.ts` estava semanticamente errada até ser corrigida). O workaround usado então
+> (agora descontinuado, ver aviso acima) decodificava o bundle comprimido embutido em
+> `docs/toToggle.html`:
 > ```python
 > import re, json, base64, gzip
 > html = open('docs/toToggle.html', encoding='utf-8').read()
@@ -609,23 +622,19 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
 >     if entry.get('compressed'): raw = gzip.decompress(raw)
 >     open(f'/tmp/toToggle-proto/{uuid}.{"js" if "javascript" in entry["mime"] else "txt"}', 'w').write(raw.decode('utf-8', 'replace'))
 > ```
-> Isso produz ~21 arquivos; a maioria (`react.js`/`react-dom.js`/Babel standalone) é vendor, ruído
-> — os arquivos-fonte de verdade (grep por `AppCard`/`TeamsView`/`function App(` etc. pra achar
-> os certos) são: `app.jsx` (App inteiro — sidebar/topbar/roteamento/estado/todo handler),
-> `views.jsx` (AppList/AppCard/EditDrawer/KeysView/TeamsView/MemberRow/Approvals*/HistoryView),
-> `paths.jsx` (StatusRing/ToggleCard/TogglePaths), `modals.jsx` (Modal/ConfirmModal/ServiceKeyModal/
-> AppModal/NewToggleModal/MemberModal/TeamModal/ApprovalInterceptModal/RejectModal),
-> `auth.jsx` (LoginScreen/ChangePasswordModal/UserMenu/RoleBadge), `onboarding.jsx`
-> (OnboardingModal, 7 passos), `icons.jsx` (todo o set real de paths SVG — `ICONS`, mais confiável
-> que os glifos "convenção, não originais" já documentados em `components/Icon.tsx`), `data.js`
-> (mock data + `leafPaths`/`pathStatus`/`countTree`/`findNode`/`addPath`, as funções que
-> `lib/toggleLeaves.ts` porta 1:1). Regras de CSS específicas (não confirmáveis por classe solta
-> no `get_tokens`) ainda saem melhor via grep direto no HTML bruto (`.classe {` ou
-> `.classe {\n` — o arquivo NÃO é minificado nos seletores CSS, só o JS é que fica comprimido no
-> manifest), técnica já usada pra extrair `.app`/`.page`/`.topbar`/`.count`/`.user-chip` etc.
-> Screenshots (`server/prototipo.png`/`atual.png`, quando o usuário os fornece) continuam válidos
-> como conferência visual final, mas decodificar o bundle primeiro é estritamente melhor que
-> reconstruir a partir de pixels — dá a lógica exata, não só a aparência.
+> Isso produzia ~21 arquivos; a maioria (`react.js`/`react-dom.js`/Babel standalone) era vendor,
+> ruído — os arquivos-fonte de verdade eram: `app.jsx` (App inteiro — sidebar/topbar/roteamento/
+> estado/todo handler), `views.jsx` (AppList/AppCard/EditDrawer/KeysView/TeamsView/MemberRow/
+> Approvals*/HistoryView), `paths.jsx` (StatusRing/ToggleCard/TogglePaths), `modals.jsx` (Modal/
+> ConfirmModal/ServiceKeyModal/AppModal/NewToggleModal/MemberModal/TeamModal/
+> ApprovalInterceptModal/RejectModal), `auth.jsx` (LoginScreen/ChangePasswordModal/UserMenu/
+> RoleBadge), `onboarding.jsx` (OnboardingModal, 7 passos), `icons.jsx` (todo o set real de paths
+> SVG — `ICONS`), `data.js` (mock data + `leafPaths`/`pathStatus`/`countTree`/`findNode`/
+> `addPath`, as funções que `lib/toggleLeaves.ts` porta 1:1). Regras de CSS específicas também
+> saíam via grep direto no HTML bruto (`.classe {` — o arquivo não é minificado nos seletores
+> CSS, só o JS fica comprimido no manifest), técnica usada pra extrair `.app`/`.page`/`.topbar`/
+> `.count`/`.user-chip` etc.
+> </details>
 
 ### Stack Frontend
 - **React + TypeScript + Vite**, código-fonte em `server/web/`.
@@ -1242,7 +1251,46 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       `components/AppShell.test.tsx` (atalho, fetch lazy+cache, navegação, gate por papel) e
       `e2e/tests/command-palette.spec.ts` (root navega entre app/toggle/team pela paleta; admin
       nunca vê um resultado de Teams).
-    - **§6.7-6.9 (onboarding wizard)**: ainda não iniciado — maior peça restante da Phase 4.
+    - ✅ **§6.7-6.9 — onboarding wizard**: completo, fecha a Phase 4. Confirmado via design-graph
+      (`get_component_full("OnboardingModal")` — não pelo bundle decodificado, técnica agora
+      descontinuada, ver o aviso no topo desta seção "Frontend"): 7 passos (Welcome → Team →
+      People → Application → Toggle → Service Key → Integration), `ObProgress` com barra +
+      indicadores por passo, `ObLeft` (painel explicativo à esquerda de cada passo intermediário),
+      `CascadeDemo` (visualização do efeito cascata no passo Toggle), syntax highlighter Kotlin/
+      Gradle pro passo Integration. Diferente do protótipo (que recebe `onCreateTeam`/
+      `onAddMember`/`onCreateApp`/`onCreateToggle`/`onGenerateKey` como callbacks de um App-
+      monolito em memória), `OnboardingModal` chama a API real diretamente — mesmo padrão de todo
+      outro modal de criação já existente (`CreateToggleModal`, `CreateApplicationModal` etc.).
+      **Só root consegue completar o wizard**: criar um team é `RequireRoot()` no backend (nem
+      approval-aware, sempre síncrono) — o item de nav "Getting started"/"Review setup" só aparece
+      pra root em `AppShell.tsx`. `existingTeams`/`existingApps`/`existingUsernames` vêm de
+      `AppShell` (já carregados pros badges/command palette) — evita um fetch duplicado só pra
+      dedupe-by-name. Novo `lib/onboarding.ts`: `isOnboarded`/`markOnboarded` (localStorage
+      `totoggle_v2_onboarded`, mesma flag do protótipo real, controla o rótulo do nav item),
+      `suggestUsername` (reusa `lib/userDisplay.ts#slugUsername` + sufixo numérico incremental até
+      não colidir com nenhum username existente — diferente do protótipo, que também gera a senha
+      temporária no cliente; aqui o servidor já gera a senha em `POST /users`, só o username
+      precisava de sugestão client-side), `findByNameCaseInsensitive` (dedupe genérico reusado nos
+      passos Team e Application). Cada "Next" chama a API real do passo (criar team/usuário/app/
+      toggle) e trata erro (403/409/rede) sem avançar — divergência deliberada do protótipo, que
+      nunca falha por ser síncrono/em memória. Passo "Service Key" é opcional/pulável (hint "You
+      can generate it later..."), mas se uma chave for gerada, exige o checkbox "I stored the key
+      somewhere safe" antes de avançar (reusa `.skey-ack`/`.field-hint` já existentes). Amostras de
+      código do passo Integration usam a API real do `totoggle_java` (`ToToggleConfig.builder()`,
+      `ToToggleClient`, `isActive()`), verificada 1:1 contra
+      `totoggle_java/src/main/kotlin/com/totoggle/client/`, não uma cópia cega do protótipo. Duas
+      substituições deliberadas de ícone por falta de dado confirmado (design-graph não indexa o
+      path SVG de ícones individuais, só o wrapper genérico do componente `Icon`): o card
+      "Integration" do Welcome reusa `"settings"` em vez de um ícone "code" novo; toda seta "→"
+      reusa `"chevron-down"` rotacionado -90°. CSS (`.ob-*`) derivado das tabelas de estilo
+      estruturadas do design-graph + tokens já existentes — cores do syntax-highlighter não vieram
+      confirmadas (só a estrutura veio), escolhidas por consistência com o design system, não
+      inventadas do zero. Coberto por `lib/onboarding.test.ts`, `OnboardingCodeBlock.test.tsx`
+      (tokenizer Kotlin), `OnboardingModal.test.tsx` (fluxo completo, dedupe, erro de API, Back
+      sem re-criar, ack da chave obrigatório) e `AppShell.test.tsx` (gate por papel, rótulo do nav
+      item), mais dois e2e reais (`onboarding-wizard.spec.ts`): fluxo completo confirmando que
+      team/app/toggle/membro realmente existem no servidor (não só a tela de resumo), e reabertura
+      do wizard reusando team/app já criados em vez de duplicar.
 - ✅ **Approvals** (`/approvals`, `screens/ApprovalsScreen.tsx`) — **uma única tela com abas**
   (Pending/Approvable, Mine, Settings), não três rotas separadas como em fases anteriores desta
   reescrita. Reconstruída a partir de `get_screen_full("ApprovalsView")`, que revelou a estrutura
