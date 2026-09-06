@@ -7,13 +7,11 @@ import (
 	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
-	"github.com/manorfm/totoogle/internal/app/domain/policy"
 	"github.com/manorfm/totoogle/internal/app/domain/repository"
 )
 
 func newAuditUseCaseForTest(teamRepo *MockTeamRepository, auditRepo *MockAuditLogRepository) *AuditUseCase {
-	access := policy.NewAuditAccess(teamRepo)
-	return NewAuditUseCase(auditRepo, access, teamRepo)
+	return NewAuditUseCase(auditRepo, teamRepo)
 }
 
 func TestAuditUseCase_Record(t *testing.T) {
@@ -97,6 +95,63 @@ func TestAuditUseCase_RecordSystem(t *testing.T) {
 
 		uc.RecordSystem(entity.AuditEventPasswordResetRequested, "text", "target")
 		// Não deve ter panicado — se chegou aqui, passou.
+	})
+}
+
+// v2.6 §7 — bug real encontrado em uso ao vivo (usuário reportou Activity vazio mesmo com dados
+// novos): toda ação que passa pelo workflow de aprovação grava seu evento de domínio final via
+// ApprovalUseCase.ExecuteApprovedAction, que usava Record puro (sem application_id) — só o
+// caminho de execução DIRETA (sem aprovação) tinha sido migrado pra RecordForApplication/
+// RecordRuleChange. RecordWithApplication existe pra esse caminho especificamente: teamID E
+// applicationID já vêm prontos do ApprovalRequest, então não deve re-resolver nenhum dos dois
+// (ao contrário de RecordForApplication, que sempre resolve team_id a partir da aplicação).
+func TestAuditUseCase_RecordWithApplication(t *testing.T) {
+	t.Run("writes an entry with both team_id and application_id exactly as given, no resolution", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+		actor := &entity.User{ID: "u1", Name: "Alice", Username: "alice"}
+		teamID, appID := "team-1", "app-1"
+
+		uc.RecordWithApplication(entity.AuditEventToggleCreated, "Created toggle payments.card", "Checkout Service", &teamID, &appID, actor)
+
+		if len(auditRepo.Created) != 1 {
+			t.Fatalf("expected 1 audit entry, got %d", len(auditRepo.Created))
+		}
+		entry := auditRepo.Created[0]
+		if entry.TeamID == nil || *entry.TeamID != "team-1" {
+			t.Errorf("expected team_id=%q, got %+v", "team-1", entry.TeamID)
+		}
+		if entry.ApplicationID == nil || *entry.ApplicationID != "app-1" {
+			t.Errorf("expected application_id=%q, got %+v", "app-1", entry.ApplicationID)
+		}
+	})
+
+	t.Run("accepts a nil application_id (e.g. a brand-new application, not yet threaded back)", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+		actor := &entity.User{ID: "u1", Username: "alice"}
+		teamID := "team-1"
+
+		uc.RecordWithApplication(entity.AuditEventApplicationCreated, "Created application X", "", &teamID, nil, actor)
+
+		if len(auditRepo.Created) != 1 {
+			t.Fatalf("expected 1 audit entry, got %d", len(auditRepo.Created))
+		}
+		if auditRepo.Created[0].ApplicationID != nil {
+			t.Errorf("expected nil application_id, got %v", *auditRepo.Created[0].ApplicationID)
+		}
+	})
+
+	t.Run("does nothing when actor is nil", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+		teamID, appID := "team-1", "app-1"
+
+		uc.RecordWithApplication(entity.AuditEventToggleCreated, "text", "target", &teamID, &appID, nil)
+
+		if len(auditRepo.Created) != 0 {
+			t.Errorf("expected no entry for a nil actor, got %d", len(auditRepo.Created))
+		}
 	})
 }
 
@@ -203,52 +258,17 @@ func TestAuditUseCase_RecordForUser(t *testing.T) {
 	})
 }
 
+// v2.6 §7: List devolve TODO o audit trail (History), sem filtro por time — só root chega aqui
+// (GET /api/audit exige RequireRoot(), ver routes.go), então a antiga visibilidade por time
+// (domain/policy.AuditAccess) foi removida junto com o parâmetro `caller`.
 func TestAuditUseCase_List(t *testing.T) {
-	t.Run("root is unrestricted", func(t *testing.T) {
-		auditRepo := NewMockAuditLogRepository()
-		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
-
-		if _, err := uc.List(context.Background(), root, AuditListOptions{}, nil, 0); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !auditRepo.LastListFilter.Unrestricted {
-			t.Error("expected root to be passed to the repository as unrestricted")
-		}
-		if len(auditRepo.LastListFilter.TeamIDs) != 0 {
-			t.Errorf("expected no team filter for root, got %v", auditRepo.LastListFilter.TeamIDs)
-		}
-	})
-
-	t.Run("non-root is scoped to its own teams", func(t *testing.T) {
-		teamRepo := NewMockTeamRepository()
-		teamRepo.TeamsByUser = map[string][]string{"u1": {"team-a", "team-b"}}
-		auditRepo := NewMockAuditLogRepository()
-		uc := newAuditUseCaseForTest(teamRepo, auditRepo)
-		admin := &entity.User{ID: "u1", Role: entity.UserRoleAdmin}
-
-		if _, err := uc.List(context.Background(), admin, AuditListOptions{Category: entity.AuditCategoryKeys}, nil, 0); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if auditRepo.LastListFilter.Unrestricted {
-			t.Error("expected non-root to be restricted")
-		}
-		if len(auditRepo.LastListFilter.TeamIDs) != 2 {
-			t.Errorf("expected the user's 2 teams, got %v", auditRepo.LastListFilter.TeamIDs)
-		}
-		if auditRepo.LastListFilter.Category != entity.AuditCategoryKeys {
-			t.Errorf("expected category to be passed through, got %q", auditRepo.LastListFilter.Category)
-		}
-	})
-
 	// v2.6 §7: actor exato e corte por data (range) — os dois novos filtros do AuditToolbar.
 	t.Run("passes actor and created-after through to the repository", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
 		cutoff := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 
-		if _, err := uc.List(context.Background(), root, AuditListOptions{ActorID: "u-alice", CreatedAfter: &cutoff}, nil, 0); err != nil {
+		if _, err := uc.List(context.Background(), AuditListOptions{ActorID: "u-alice", CreatedAfter: &cutoff}, nil, 0); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if auditRepo.LastListFilter.ActorID != "u-alice" {
@@ -259,19 +279,30 @@ func TestAuditUseCase_List(t *testing.T) {
 		}
 	})
 
+	t.Run("passes category through to the repository", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+
+		if _, err := uc.List(context.Background(), AuditListOptions{Category: entity.AuditCategoryKeys}, nil, 0); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if auditRepo.LastListFilter.Category != entity.AuditCategoryKeys {
+			t.Errorf("expected category to be passed through, got %q", auditRepo.LastListFilter.Category)
+		}
+	})
+
 	t.Run("clamps limit to the default and max page size", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
 
-		if _, err := uc.List(context.Background(), root, AuditListOptions{}, nil, 0); err != nil {
+		if _, err := uc.List(context.Background(), AuditListOptions{}, nil, 0); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if auditRepo.LastListFilter.Limit != DefaultAuditPageSize {
 			t.Errorf("expected default limit %d for limit<=0, got %d", DefaultAuditPageSize, auditRepo.LastListFilter.Limit)
 		}
 
-		if _, err := uc.List(context.Background(), root, AuditListOptions{}, nil, 9999); err != nil {
+		if _, err := uc.List(context.Background(), AuditListOptions{}, nil, 9999); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if auditRepo.LastListFilter.Limit != MaxAuditPageSize {
@@ -282,10 +313,9 @@ func TestAuditUseCase_List(t *testing.T) {
 	t.Run("passes the cursor through unchanged", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
 		cursor := &repository.AuditLogCursor{ID: "au5"}
 
-		if _, err := uc.List(context.Background(), root, AuditListOptions{}, cursor, 10); err != nil {
+		if _, err := uc.List(context.Background(), AuditListOptions{}, cursor, 10); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if auditRepo.LastListFilter.Cursor != cursor {
@@ -297,19 +327,17 @@ func TestAuditUseCase_List(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		auditRepo.ListError = errors.New("boom")
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
 
-		if _, err := uc.List(context.Background(), root, AuditListOptions{}, nil, 0); err == nil {
+		if _, err := uc.List(context.Background(), AuditListOptions{}, nil, 0); err == nil {
 			t.Error("expected an error when the repository fails")
 		}
 	})
 }
 
 // v2.6 §7: a Activity tab de uma aplicação — qualquer autenticado pode ver (mesma postura de GET
-// /applications/:id, sem checagem de time), então ListForApplication não recebe `caller` nenhum
-// nem consulta AuditAccess.
+// /applications/:id, sem checagem de time), então ListForApplication não recebe `caller` nenhum.
 func TestAuditUseCase_ListForApplication(t *testing.T) {
-	t.Run("scopes strictly by application_id, ignoring team visibility", func(t *testing.T) {
+	t.Run("scopes strictly by application_id", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
 
@@ -318,12 +346,6 @@ func TestAuditUseCase_ListForApplication(t *testing.T) {
 		}
 		if auditRepo.LastListFilter.ApplicationID != "app-1" {
 			t.Errorf("expected application_id to be passed through, got %q", auditRepo.LastListFilter.ApplicationID)
-		}
-		if auditRepo.LastListFilter.Unrestricted {
-			t.Error("expected Unrestricted to stay false — ApplicationID alone drives visibility here")
-		}
-		if len(auditRepo.LastListFilter.TeamIDs) != 0 {
-			t.Errorf("expected no team filter to be set, got %v", auditRepo.LastListFilter.TeamIDs)
 		}
 	})
 
@@ -350,37 +372,20 @@ func TestAuditUseCase_ListForApplication(t *testing.T) {
 	})
 }
 
-// v2.6 §7: lista de atores pro <select> do AuditToolbar — mesma visibilidade de List (por time),
+// v2.6 §7: lista de atores pro <select> do AuditToolbar — root-only (mesmo motivo de List),
 // nunca escopada por aplicação (o filtro de ator é sempre relativo a History).
 func TestAuditUseCase_ListActors(t *testing.T) {
-	t.Run("root is unrestricted", func(t *testing.T) {
+	t.Run("delegates to the repository", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
+		auditRepo.ActorsResult = []repository.AuditActor{{ID: "u1", Name: "Alice"}}
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
 
-		if _, err := uc.ListActors(context.Background(), root); err != nil {
+		actors, err := uc.ListActors(context.Background())
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !auditRepo.LastActorsCall.Unrestricted {
-			t.Error("expected root to be passed to the repository as unrestricted")
-		}
-	})
-
-	t.Run("non-root is scoped to its own teams", func(t *testing.T) {
-		teamRepo := NewMockTeamRepository()
-		teamRepo.TeamsByUser = map[string][]string{"u1": {"team-a"}}
-		auditRepo := NewMockAuditLogRepository()
-		uc := newAuditUseCaseForTest(teamRepo, auditRepo)
-		admin := &entity.User{ID: "u1", Role: entity.UserRoleAdmin}
-
-		if _, err := uc.ListActors(context.Background(), admin); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if auditRepo.LastActorsCall.Unrestricted {
-			t.Error("expected non-root to be restricted")
-		}
-		if len(auditRepo.LastActorsCall.TeamIDs) != 1 {
-			t.Errorf("expected the user's team, got %v", auditRepo.LastActorsCall.TeamIDs)
+		if len(actors) != 1 || actors[0].ID != "u1" {
+			t.Errorf("expected the repository's actors to be returned, got %+v", actors)
 		}
 	})
 
@@ -388,9 +393,8 @@ func TestAuditUseCase_ListActors(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		auditRepo.ActorsError = errors.New("boom")
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
-		root := &entity.User{ID: "root-1", Role: entity.UserRoleRoot}
 
-		if _, err := uc.ListActors(context.Background(), root); err == nil {
+		if _, err := uc.ListActors(context.Background()); err == nil {
 			t.Error("expected an error when the repository fails")
 		}
 	})

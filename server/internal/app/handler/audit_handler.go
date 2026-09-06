@@ -100,12 +100,13 @@ func paginateAuditLogs(logs []*entity.AuditLog, limit int) (page []*entity.Audit
 
 // GetAuditLog lista o audit trail (History) — paginação infinita por cursor e filtros
 // confirmados no AuditToolbar real (v2.6 §7): categoria (chips All/Toggles/Keys/Access/
-// Approvals), ator exato e intervalo de tempo (24h/7d/30d). Visibilidade escopada por time via
-// domain/policy.AuditAccess, dentro de AuditUseCase.List.
+// Approvals), ator exato e intervalo de tempo (24h/7d/30d). Root-only (RequireRoot() no grupo de
+// rota, ver routes.go) — o texto confirmado da tela é "Root only... changes to toggles live in
+// each application's Activity tab"; admin/user veem o audit trail de uma aplicação só pela
+// Activity tab (GetApplicationAudit, abaixo), nunca este endpoint.
 // GET /api/audit?category=toggles&actor_id=<id>&range=7d&cursor=<opaco>&limit=30
 func (h *AuditHandler) GetAuditLog(c *gin.Context) {
-	user := auditActor(c)
-	if user == nil {
+	if auditActor(c) == nil {
 		c.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
 		return
 	}
@@ -129,7 +130,7 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 		ActorID:      c.Query("actor_id"),
 		CreatedAfter: auditRangeCutoff(c.Query("range")),
 	}
-	logs, err := h.auditUseCase.List(c.Request.Context(), user, opts, cursor, limit+1)
+	logs, err := h.auditUseCase.List(c.Request.Context(), opts, cursor, limit+1)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "error fetching audit log"))
 		return
@@ -142,17 +143,16 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 	})
 }
 
-// GetAuditActors lista os autores distintos visíveis pro caller — alimenta o `<select>` de
-// filtro por ator do AuditToolbar. Mesma visibilidade por time de GetAuditLog.
+// GetAuditActors lista TODOS os autores distintos — alimenta o `<select>` de filtro por ator do
+// AuditToolbar. Root-only, mesmo motivo de GetAuditLog.
 // GET /api/audit/actors
 func (h *AuditHandler) GetAuditActors(c *gin.Context) {
-	user := auditActor(c)
-	if user == nil {
+	if auditActor(c) == nil {
 		c.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
 		return
 	}
 
-	actors, err := h.auditUseCase.ListActors(c.Request.Context(), user)
+	actors, err := h.auditUseCase.ListActors(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "error fetching audit actors"))
 		return

@@ -200,12 +200,13 @@ func Init(router *gin.Engine) {
 				approval.GET("/teams-without-approver", handler.GetTeamsWithoutApprover)
 			}
 
-			// Audit trail (History) — qualquer usuário autenticado, sem RequireRoot/RequireAdmin:
-			// a visibilidade é escopada por time dentro do usecase (domain/policy.AuditAccess),
-			// mesmo padrão de GET /approval/requests. /audit/actors alimenta o filtro por ator do
-			// AuditToolbar (v2.6 §7), mesma visibilidade.
-			protected.GET("/audit", handler.GetAuditLog)
-			protected.GET("/audit/actors", handler.GetAuditActors)
+			// Audit trail (History) — root-only: o texto confirmado da tela é "Root only... changes
+			// to toggles live in each application's Activity tab". Restrição pedida explicitamente
+			// pelo usuário depois que admin/user viam o audit trail geral por aqui; mudanças de uma
+			// aplicação específica continuam visíveis pra qualquer role autenticado via
+			// GET /applications/:id/audit (Activity tab, fora deste grupo).
+			protected.GET("/audit", handler.RequireRoot(), handler.GetAuditLog)
+			protected.GET("/audit/actors", handler.RequireRoot(), handler.GetAuditActors)
 		}
 	}
 

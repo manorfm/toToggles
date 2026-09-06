@@ -323,9 +323,8 @@ Unauthenticated (this is what the login screen's "Forgot password?" link calls),
 otherwise be a username-enumeration oracle. When the username *does* exist, it writes a
 `password_reset_requested` audit event (`text`: `` `Password reset requested for <b>@{username}</b>` ``,
 `target`: `"Self-service (login screen)"`) with a synthetic system actor (there is no session yet to attribute
-it to) and a `null` `team_id` — root-only visibility in `GET /api/audit`, same rule as
-`approval_system_toggled`. A root/admin sees it in History and resolves it the ordinary way:
-`POST /api/users/:id/reset-password` (§3).
+it to) and a `null` `team_id`, same as `approval_system_toggled`. Root sees it in History (root-only, see
+§10) and resolves it the ordinary way: `POST /api/users/:id/reset-password` (§3).
 
 ```http
 GET /api/auth/check-first-access
@@ -1407,14 +1406,13 @@ scheduled automatically by the server — intended to be triggered by an externa
 GET /api/audit?category=toggles&actor_id=<id>&range=7d&cursor=<opaque>&limit=30
 ```
 
-Any authenticated role. Root sees every event; anyone else only sees events scoped to a team they're a
-member of (`domain/policy.AuditAccess` — same team-membership rule as `GET /api/approval/requests`, not
-the narrower "is an approver" rule). A handful of events (only the approval-system on/off toggle today)
-carry no team at all and are therefore only ever visible to root. **Deliberate divergence from the real
-prototype**: its `HistoryView` copy reads "Root only — changes to toggles live in each application's
-Activity tab," but this endpoint stays open to every role scoped by team, same as before v2.6 §7 —
-restricting it to root would remove an already-shipped, already-tested capability non-root roles rely on
-today; see `server/CLAUDE.md` for the full reasoning.
+**Root only** (`RequireRoot()`) — matches the real prototype's `HistoryView` copy verbatim: "Root only —
+changes to toggles live in each application's Activity tab." A non-root caller gets `403`. An earlier
+version of this endpoint stayed open to every role, scoped by team (`domain/policy.AuditAccess`), as a
+deliberate divergence from that copy — reverted at the user's explicit request once admin/user were seen
+using the general audit trail when they should only ever see a single application's own activity via
+`GET /api/applications/:id/audit` below. `domain/policy.AuditAccess` no longer exists — see
+`server/CLAUDE.md` for the full history of this decision.
 
 - `category` — one of `toggles`, `keys`, `access`, `approvals`; omit for all categories. Matches the 4
   filter chips of the real prototype's `HistoryView`.
@@ -1452,9 +1450,15 @@ today; see `server/CLAUDE.md` for the full reasoning.
 `application_id` (v2.6 §7) is set whenever the referenced application still existed at the moment the
 event was written (every toggle event, plus `application_created`/`application_updated`; never
 `application_deleted`, since the row is already gone by then) — it's what `GET
-/api/applications/:id/audit` below filters on. `before`/`after` (v2.6 §7) are only ever both non-null on
-`toggle_rule_set`, holding a plain-text summary of the activation rule before and after the change (e.g.
-`"No rule"` → `"percentage: 40%"`); every other event leaves them `null`.
+/api/applications/:id/audit` below filters on. This includes the approval-workflow's own lifecycle
+events (`approval_requested`/`approval_approved`/`approval_rejected`/`approval_withdrawn`), not just the
+final domain event: an application's Activity tab shows the full requested → approved → executed journey
+for anything that went through approval, not only the last step. The one exception is a brand-new
+application's own `approval_requested`/`approval_approved` — the application doesn't exist yet at those
+two points, so there is no ID to carry; only its final `application_created` event (once actually
+created) gets one. `before`/`after` (v2.6 §7) are only ever both non-null on `toggle_rule_set`, holding a
+plain-text summary of the activation rule before and after the change (e.g. `"No rule"` →
+`"percentage: 40%"`); every other event leaves them `null`.
 
 `next_cursor` is `""` when there is no further page. `text` may embed the literal markers `<b>...</b>`
 around the key term of the sentence (e.g. `"Disabled <b>experiments</b> branch"`) and, only on
@@ -1488,10 +1492,9 @@ synthetic "the secret key" actor.
 GET /api/audit/actors
 ```
 
-Any authenticated role, same team-scoped visibility as `GET /api/audit` above (root sees every actor).
-Feeds the `AuditToolbar`'s actor filter `<select>` — a distinct `{id, name}` per author who has ever
-written a visible entry, most-recently-seen name first if the same `actor_id` ever logged under a
-different name.
+Root only, same as `GET /api/audit` above. Feeds the `AuditToolbar`'s actor filter `<select>` — a
+distinct `{id, name}` per author who has ever written an entry, most-recently-seen name first if the
+same `actor_id` ever logged under a different name.
 
 ```json
 { "data": [{ "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "name": "alice" }] }

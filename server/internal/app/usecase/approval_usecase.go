@@ -79,13 +79,19 @@ func NewApprovalUseCase(
 	}
 }
 
-// recordAudit grava um evento se auditUseCase estiver configurado — nunca panica quando nil
-// (testes de autorização passam nil de propósito, ver o comentário no campo).
-func (uc *ApprovalUseCase) recordAudit(eventType entity.AuditEventType, text, target string, teamID *string, actor *entity.User) {
+// recordAuditWithApplication grava um evento se auditUseCase estiver configurado — nunca panica
+// quando nil (testes de autorização passam nil de propósito, ver o comentário no campo). Todo
+// chamador passa `request.ApplicationID` quando o tem em mãos (v2.6 §7: requested/approved/
+// rejected/withdrawn E o evento de execução) — nil só quando a aplicação genuinamente não existe
+// ainda (application_create no momento do PEDIDO) ou não há aplicação nenhuma envolvida
+// (approval_system_toggled). Sem isso, a Activity de uma aplicação só mostrava o passo final de
+// uma ação aprovada, nunca a jornada completa pedido→aprovação→execução — gap real reportado em
+// uso ao vivo ("deveria ter o pedido, a aprovação e a criação, só tem a criação listada").
+func (uc *ApprovalUseCase) recordAuditWithApplication(eventType entity.AuditEventType, text, target string, teamID, applicationID *string, actor *entity.User) {
 	if uc.auditUseCase == nil {
 		return
 	}
-	uc.auditUseCase.Record(eventType, text, target, teamID, actor)
+	uc.auditUseCase.RecordWithApplication(eventType, text, target, teamID, applicationID, actor)
 }
 
 // ============================
@@ -129,14 +135,15 @@ func (uc *ApprovalUseCase) UpdateApprovalSettings(ctx context.Context, userID st
 		return nil, err
 	}
 
-	// Evento global (team_id nil) — só root chega aqui (checado acima), e nenhum não-root
-	// nunca vê uma linha com team_id nil (AuditAccess), então isso já é root-only "de graça".
+	// Evento global (team_id/application_id nil) — só root chega aqui (checado acima), e nenhum
+	// não-root nunca vê uma linha com team_id nil (AuditAccess), então isso já é root-only "de
+	// graça". Não tem nenhuma aplicação envolvida, então nem faz sentido carregar application_id.
 	if req.ApprovalEnabled != nil && *req.ApprovalEnabled != wasEnabled {
 		verb := "disabled"
 		if settings.ApprovalEnabled {
 			verb = "enabled"
 		}
-		uc.recordAudit(entity.AuditEventApprovalSystemToggled, "Approval system "+verb, "", nil, user)
+		uc.recordAuditWithApplication(entity.AuditEventApprovalSystemToggled, "Approval system "+verb, "", nil, nil, user)
 	}
 
 	return settings.ToResponse()
@@ -258,8 +265,13 @@ func (uc *ApprovalUseCase) createApprovalRequestUnchecked(ctx context.Context, a
 	// <b>...</b> em volta da descrição: mesmo tratamento de negrito usado pelo protótipo real em
 	// `Aprovou/Rejeitou <b>{action}</b>` — aplicado aqui também pro texto de solicitação, pela
 	// mesma razão (destacar o termo-chave da linha).
+	// request.ApplicationID (v2.6 §7): carrega application_id sempre que a aplicação já existe no
+	// momento do pedido (nil só pra application_create, que ainda não tem ID nenhum) — sem isso, a
+	// Activity de uma aplicação só mostrava o passo final ("Created X"), nunca a jornada completa
+	// pedido→aprovação→execução; gap real reportado em uso ao vivo ("deveria ter o pedido, a
+	// aprovação e a criação, só tem a criação listada").
 	teamIDCopy := teamID
-	uc.recordAudit(entity.AuditEventApprovalRequested, "Requested: <b>"+description+"</b>", uc.approvalRequestTarget(request), &teamIDCopy, requester)
+	uc.recordAuditWithApplication(entity.AuditEventApprovalRequested, "Requested: <b>"+description+"</b>", uc.approvalRequestTarget(request), &teamIDCopy, request.ApplicationID, requester)
 
 	return request, nil
 }
@@ -409,7 +421,7 @@ func (uc *ApprovalUseCase) ApproveRequest(ctx context.Context, requestID string,
 	// Sem ":" depois de "Approved" e com o sufixo " request" — confirmado literalmente no
 	// AUDIT_SEED real (au5: "Approved <b>Enable toggle</b> request"), diferente do que este texto
 	// tinha antes ("Approved: <b>X</b>", sem o sufixo).
-	uc.recordAudit(entity.AuditEventApprovalApproved, "Approved <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, approver)
+	uc.recordAuditWithApplication(entity.AuditEventApprovalApproved, "Approved <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, request.ApplicationID, approver)
 	return nil
 }
 
@@ -458,7 +470,7 @@ func (uc *ApprovalUseCase) RejectRequest(ctx context.Context, requestID string, 
 	// exemplo de "approved", não de "rejected", mas o par Aprovou/Rejeitou sempre compartilhou o
 	// mesmo template no protótipo (`${decision === "approved" ? "Aprovou" : "Rejeitou"} <b>...`),
 	// então a extensão do sufixo pro caso "rejected" é inferência direta, não um chute solto.
-	uc.recordAudit(entity.AuditEventApprovalRejected, "Rejected <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, rejector)
+	uc.recordAuditWithApplication(entity.AuditEventApprovalRejected, "Rejected <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, request.ApplicationID, rejector)
 	return nil
 }
 
@@ -500,7 +512,7 @@ func (uc *ApprovalUseCase) WithdrawRequest(ctx context.Context, requestID string
 	}
 
 	teamID := request.TeamID
-	uc.recordAudit(entity.AuditEventApprovalWithdrawn, "Withdrew <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, requester)
+	uc.recordAuditWithApplication(entity.AuditEventApprovalWithdrawn, "Withdrew <b>"+request.Description+"</b> request", uc.approvalRequestTarget(request), &teamID, request.ApplicationID, requester)
 	return nil
 }
 
@@ -680,6 +692,13 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	eventType, auditText, auditTarget := uc.resolveApprovalExecutionAudit(request, isApplicationEdit)
 
 	var execErr error
+	// applicationID é o valor gravado no evento de execução — normalmente request.ApplicationID,
+	// exceto pra uma criação de aplicação de verdade (não edição): a aplicação não existe no
+	// momento do PEDIDO, então request.ApplicationID é nil ali, mas já existe agora que a ação
+	// acabou de rodar — createdApplicationID captura esse ID novo pra não perder a chance de
+	// escopar este evento à Activity tab da própria aplicação recém-criada.
+	applicationID := request.ApplicationID
+	var createdApplicationID string
 
 	switch request.ActionType {
 	case entity.ApprovalActionToggleCreate:
@@ -703,7 +722,10 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 		if isApplicationEdit {
 			execErr = uc.executeApplicationUpdateAction(ctx, request)
 		} else {
-			execErr = uc.executeApplicationCreateAction(ctx, request)
+			createdApplicationID, execErr = uc.executeApplicationCreateAction(ctx, request)
+			if execErr == nil {
+				applicationID = &createdApplicationID
+			}
 		}
 	case entity.ApprovalActionApplicationDelete:
 		execErr = uc.executeApplicationDeleteAction(ctx, request)
@@ -728,7 +750,7 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	// protótipo real (executePendingAction sempre usa currentUser, nunca o requester original).
 	if eventType != "" {
 		teamID := request.TeamID
-		uc.recordAudit(eventType, auditText, auditTarget, &teamID, caller)
+		uc.recordAuditWithApplication(eventType, auditText, auditTarget, &teamID, applicationID, caller)
 	}
 
 	return nil
@@ -974,7 +996,12 @@ func (uc *ApprovalUseCase) executeToggleDeleteAction(ctx context.Context, reques
 	return nil
 }
 
-func (uc *ApprovalUseCase) executeApplicationCreateAction(ctx context.Context, request *entity.ApprovalRequest) error {
+// executeApplicationCreateAction cria a aplicação e devolve seu ID novo — request.ApplicationID
+// fica nil pra este action_type (a aplicação não existe no momento do PEDIDO), então é este valor
+// de retorno que ExecuteApprovedAction usa pra gravar application_id no evento de execução
+// (ver o comentário lá: sem isso, a Activity tab de uma aplicação criada via aprovação nunca
+// mostrava nem sua própria criação — bug real reportado em uso ao vivo).
+func (uc *ApprovalUseCase) executeApplicationCreateAction(ctx context.Context, request *entity.ApprovalRequest) (string, error) {
 	// Deserializar action data
 	var actionData struct {
 		Name   string `json:"name"`
@@ -982,21 +1009,21 @@ func (uc *ApprovalUseCase) executeApplicationCreateAction(ctx context.Context, r
 	}
 
 	if err := request.GetActionDataAs(&actionData); err != nil {
-		return fmt.Errorf("failed to deserialize action data: %w", err)
+		return "", fmt.Errorf("failed to deserialize action data: %w", err)
 	}
 
 	if actionData.Name == "" {
-		return errors.New("application name is required")
+		return "", errors.New("application name is required")
 	}
 
 	if actionData.TeamID == "" {
-		return errors.New("team ID is required")
+		return "", errors.New("team ID is required")
 	}
 
 	// Verificar se o team existe
 	_, err := uc.teamRepo.GetByID(actionData.TeamID)
 	if err != nil {
-		return fmt.Errorf("failed to get team: %w", err)
+		return "", fmt.Errorf("failed to get team: %w", err)
 	}
 
 	// Criar a aplicação
@@ -1005,16 +1032,16 @@ func (uc *ApprovalUseCase) executeApplicationCreateAction(ctx context.Context, r
 	app.UpdatedAt = time.Now()
 
 	if err := uc.applicationRepo.Create(app); err != nil {
-		return fmt.Errorf("failed to create application: %w", err)
+		return "", fmt.Errorf("failed to create application: %w", err)
 	}
 
 	// Associar aplicação ao team com permissão admin por padrão
 	// O usuário que criou a aplicação deve ter permissão total sobre ela
 	if err := uc.teamUseCase.AddApplicationToTeam(actionData.TeamID, app.ID, entity.PermissionAdmin); err != nil {
-		return fmt.Errorf("failed to associate application with team: %w", err)
+		return "", fmt.Errorf("failed to associate application with team: %w", err)
 	}
 
-	return nil
+	return app.ID, nil
 }
 
 // executeApplicationUpdateAction aplica uma edição de aplicação aprovada (PUT /applications/:id,

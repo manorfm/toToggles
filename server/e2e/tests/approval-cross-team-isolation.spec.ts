@@ -57,15 +57,19 @@ test("a team's approval requests are invisible and unreachable to another team's
   await confirmApprovalIntercept(adminBPage);
   await expect(adminBPage.getByText(/aguardando aprovação/i)).toBeVisible();
 
-  // History (GET /api/audit — the real audit trail, not GET /api/approval/requests: History was
-  // rebuilt onto a genuine audit log in a prior session, see server/CLAUDE.md's "History"
-  // section) must show admin A only their own team's request. domain/policy.AuditAccess enforces
-  // the same team-membership scoping as the approval workflow itself. Two entries legitimately
-  // mention the toggle path (the toggle's own creation + the "Requested: Disable toggle" entry
-  // from the pending approval above) — .first() is enough to prove team A's own event is there.
-  await adminAPage.goto("/history");
-  await expect(adminAPage.locator(".audit-item", { hasText: toggleAPath }).first()).toBeVisible();
-  await expect(adminAPage.locator(".audit-item", { hasText: toggleBPath })).toHaveCount(0);
+  // History (GET /api/audit) is root-only since v2.6 §7 — admin A, a non-root, must be refused
+  // outright, not merely scoped to their own team (that team-scoped visibility for non-root was
+  // removed at the user's explicit request; see server/CLAUDE.md's "History" section). Team
+  // isolation for a non-root is proven instead through the application's own Activity tab
+  // (application_id-scoped, not team-scoped): admin A sees only app A's own toggle creation
+  // there, never app B's.
+  const historyAsAdminA = await adminAContext.request.get("/api/audit");
+  expect(historyAsAdminA.status()).toBe(403);
+
+  await adminAPage.goto(`/applications/${appAId}`);
+  await adminAPage.getByRole("button", { name: /^activity$/i }).click();
+  await expect(adminAPage.locator("b", { hasText: toggleAPath })).toBeVisible();
+  await expect(adminAPage.getByText(toggleBPath)).toHaveCount(0);
 
   // Find team B's pending request id as root — admin A has no way to see it through the UI/API,
   // but the point of this test is authorization, not obscurity: even knowing the id, admin A

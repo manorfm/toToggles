@@ -7,7 +7,6 @@ import (
 	"github.com/manorfm/totoogle/internal/app/config"
 	"github.com/manorfm/totoogle/internal/app/domain/auth"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
-	"github.com/manorfm/totoogle/internal/app/domain/policy"
 	"github.com/manorfm/totoogle/internal/app/infrastructure/database"
 	"github.com/manorfm/totoogle/internal/app/middleware"
 	"github.com/manorfm/totoogle/internal/app/usecase"
@@ -57,8 +56,7 @@ func InitHandlers(db *gorm.DB) {
 	userUseCase := usecase.NewUserUseCase(userRepo, sessionRepo)
 	teamUseCase := usecase.NewTeamUseCase(teamRepo, userRepo, appRepo)
 	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)
-	auditAccess := policy.NewAuditAccess(teamRepo)
-	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, auditAccess, teamRepo)
+	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, teamRepo)
 	approvalUseCase := usecase.NewApprovalUseCase(
 		approvalRequestRepo,
 		approvalSettingsRepo,

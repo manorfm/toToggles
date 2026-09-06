@@ -22,7 +22,7 @@ func setupForgotPasswordTestRouter(t *testing.T) (router *gin.Engine, teamAdminU
 }
 
 func TestForgotPassword_ExistingUsername_AlwaysReturnsSuccessAndRecordsAnAuditEvent(t *testing.T) {
-	router, username, rootID := setupForgotPasswordTestRouter(t)
+	router, username, _ := setupForgotPasswordTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", strings.NewReader(`{"username":"`+username+`"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -43,7 +43,7 @@ func TestForgotPassword_ExistingUsername_AlwaysReturnsSuccessAndRecordsAnAuditEv
 	}
 
 	// Root vê o evento (evento global, team_id nil — mesma regra de approval_system_toggled).
-	text, target := latestAuditTextAndTarget(t, router, rootID, "password_reset_requested")
+	text, target := latestAuditTextAndTarget(t, router, "password_reset_requested")
 	if want := "Password reset requested for <b>@" + username + "</b>"; text != want {
 		t.Errorf("expected text %q, got %q", want, text)
 	}

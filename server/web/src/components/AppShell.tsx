@@ -36,6 +36,10 @@ import { UserMenu } from "./UserMenu";
 //   erro corrigido depois que o usuário sinalizou a barra lateral ainda diferente do protótipo */}
 // Applications/Teams mostram a contagem SEMPRE (mesmo "0"); só Approvals é condicional.
 // "Teams & people" some para quem não é root: a API por trás (/teams) exige RequireRoot().
+// "History" também some pra quem não é root: o texto confirmado da tela é "Root only — changes to
+// toggles live in each application's Activity tab" (GET /api/audit e /api/audit/actors agora
+// exigem RequireRoot() também — ver routes.go); mudanças específicas de uma aplicação continuam
+// visíveis pra qualquer role autenticado via a aba Activity dentro dela (ApplicationDetailScreen).
 //
 // "Approval Management" NÃO é um segundo item de nav — a própria ApprovalsView usa esse texto
 // como título de página (page-title/breadcrumb), mas o item da sidebar continua "Approvals";
@@ -62,7 +66,7 @@ const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean;
   { to: "/teams", label: "Teams & people", rootOnly: true, icon: "users", alwaysShowCount: true },
   { to: "/users", label: "Usuários", adminOrRoot: true, icon: "user", alwaysShowCount: true },
   { to: "/approvals", label: "Approvals", icon: "check" },
-  { to: "/history", label: "History", icon: "history" },
+  { to: "/history", label: "History", rootOnly: true, icon: "history" },
 ];
 
 // Breadcrumb no topo do conteúdo — confirmado no app.jsx real como uma trilha

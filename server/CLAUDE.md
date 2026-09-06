@@ -1758,29 +1758,43 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     mesmo padrão já usado por `toggles.deleted_by` — SQLite recusaria um INSERT referenciando uma
     aplicação já apagada, e `application_deleted` grava DEPOIS do delete de propósito) + índice em
     `actor_id` (faltava desde a criação da tabela, agora faz parte do WHERE de todo filtro por
-    ator). `AuditUseCase.Record` virou um núcleo privado (`record`) com 4 métodos públicos
+    ator). `AuditUseCase.Record` virou um núcleo privado (`record`) com 5 métodos públicos
     finos por cima — `Record` (sem app/before/after), `RecordSystem` (ator sintético, já existia),
     `RecordForApplication` (resolve team_id da aplicação E grava application_id — só seguro
     quando ela ainda existe no momento da chamada), `RecordRuleChange` (mesma resolução, mas
     também grava before/after — único evento que os popula, `toggle_rule_set`; `ToggleHandler`
-    busca o toggle ANTES de `UpdateToggleWithRule` rodar pra capturar o "before"). `List` ganhou
-    `AuditListOptions{Category, ActorID, CreatedAfter}` (era só `category`); `repository.
-    AuditLogFilter` substitui os 5 parâmetros posicionais antigos de `List` por uma struct só, com
-    dois modos de visibilidade mutuamente exclusivos documentados no próprio tipo — por time
-    (History) ou por `ApplicationID` (Activity, ignora TeamIDs/Unrestricted de propósito: qualquer
-    autenticado vê, mesma postura de `GET /applications/:id`). Novo `ListForApplication` (sem
-    `caller` nenhum — não passa por `AuditAccess`) e `ListActors` (mesma visibilidade de `List`,
-    de-dupe por `actor_id` mantendo o nome mais recente). Handler ganhou `GetAuditActors`
-    (`GET /audit/actors`) e `GetApplicationAudit` (`GET /applications/:id/audit`); `parseAuditPaging`/
-    `paginateAuditLogs` extraídos pra evitar duplicar a lógica de cursor+limit+lookahead entre os
-    dois endpoints de listagem.
-  - **Decisão deliberada, divergindo do texto confirmado do protótipo**: `HistoryView` real diz
-    "Root only — changes to toggles live in each application's Activity tab", mas `GET /api/audit`
-    **não** foi restrito a root — isso removeria a visibilidade por time pra roles não-root
-    (`domain/policy.AuditAccess`), uma funcionalidade real, já testada, já em uso (`admin`/`user`
-    veem o histórico dos próprios times hoje). Restringir exigiria quebrar/reescrever ~900 linhas
-    de teste de integração que dependem desse acesso. A Activity tab por aplicação foi construída
-    como um COMPLEMENTO focado (útil por já estar na tela da aplicação), não como substituição.
+    busca o toggle ANTES de `UpdateToggleWithRule` rodar pra capturar o "before") e
+    `RecordWithApplication` (teamID E applicationID já resolvidos pelo chamador, sem re-resolver
+    nenhum dos dois — único uso: `ApprovalUseCase.recordAuditWithApplication`, ver bug real
+    abaixo). `List` ganhou `AuditListOptions{Category, ActorID, CreatedAfter}` (era só
+    `category`); `repository.AuditLogFilter` substitui os parâmetros posicionais antigos de
+    `List` por uma struct só, com dois modos de escopo mutuamente exclusivos documentados no
+    próprio tipo — sem escopo nenhum (History, root-only) ou por `ApplicationID` (Activity,
+    qualquer autenticado vê, mesma postura de `GET /applications/:id`). `ListForApplication` e
+    `ListActors` não recebem `caller` (não fazem mais sentido receber: ver decisão abaixo).
+    Handler ganhou `GetAuditActors` (`GET /audit/actors`) e `GetApplicationAudit`
+    (`GET /applications/:id/audit`); `parseAuditPaging`/`paginateAuditLogs` extraídos pra evitar
+    duplicar a lógica de cursor+limit+lookahead entre os dois endpoints de listagem.
+  - **Decisão revertida a pedido explícito do usuário**: uma primeira versão desta feature
+    manteve `GET /api/audit` aberto a qualquer role autenticado, escopado por time pra quem não é
+    root (`domain/policy.AuditAccess`), como divergência deliberada do texto confirmado do
+    protótipo ("Root only — changes to toggles live in each application's Activity tab") — a
+    justificativa foi não remover uma visibilidade já testada/em uso. O usuário reportou
+    diretamente que isso estava errado ("history só é exibido para root, admin e user não veem
+    history") depois de ver admin/user enxergando o audit trail geral quando deveriam ver só a
+    Activity tab de cada aplicação. Revertido pra bater com o texto confirmado: `GET /api/audit` e
+    `GET /api/audit/actors` agora exigem `RequireRoot()` (routes.go); `AppShell.tsx` esconde o
+    item de nav "History" pra quem não é root (`rootOnly: true`, mesmo mecanismo de "Teams &
+    people"). `domain/policy.AuditAccess` foi apagado inteiro (ficou morto: só root chega em
+    `List`/`ListActors` agora, então não há mais visibilidade nenhuma pra calcular) — junto com
+    `AuditLogFilter.TeamIDs`/`Unrestricted` e a assinatura `ListActors(teamIDs, unrestricted)`,
+    todos igualmente mortos pelo mesmo motivo. A Activity tab por aplicação passou de COMPLEMENTO
+    a ÚNICA forma de admin/user verem mudanças — daí a pergunta do usuário também cobrir se ela já
+    mostra "criação de toggle, desligamento, etc": cobre (todo evento de toggle/aplicação/chave
+    grava `application_id` via `RecordForApplication`/`RecordRuleChange`/`RecordWithApplication`,
+    incluindo desde a correção anterior os eventos executados via workflow de aprovação — ver "Bug
+    real" abaixo); só os eventos do PRÓPRIO fluxo de aprovação (requested/approved/rejected/
+    withdrawn) ficam de fora de propósito, por não serem uma mudança de domínio ainda efetivada.
   - **Posicionamento da Activity tab decidido com o usuário, não confirmado pelo design-graph**:
     `ActivityView` só aparece ligado à árvore de `HistoryView` no grafo indexado (nunca a uma tela
     de detalhe de aplicação — nenhuma existe como "Screen" própria, mesmo buraco de cobertura da
@@ -1806,12 +1820,72 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     dentro de um `gin.H`, nunca omitido) quebrava `entries.length` — `AuditFeed` agora trata os
     dois com `?? []`/`?? ""`, mesmo cuidado já documentado noutros endpoints opcionais deste
     backend. `AuditRow.tsx` ganhou a linha "{before} → {after}", só quando os dois não são `null`.
+  - **Bug real reportado em uso ao vivo, encontrado DEPOIS do build inicial desta feature**: com o
+    workflow de aprovação ligado, a Activity tab de uma aplicação ficava sempre vazia, mesmo com
+    atividade de verdade acontecendo (naquele momento History ainda era team-scoped pra qualquer
+    role e continuava funcionando, por não depender de `application_id` — isso mudou depois, ver a
+    decisão de restringir History a root, acima). Causa raiz: `ApprovalUseCase.ExecuteApprovedAction` grava o
+    evento de domínio final de uma ação aprovada por um caminho próprio (`recordAudit`, separado
+    da execução DIRETA sem aprovação que vive nos handlers HTTP) — só esse segundo caminho tinha
+    sido migrado pra `RecordForApplication`/`RecordRuleChange` durante o build original desta
+    seção; o caminho de aprovação nunca tinha sido revisitado e continuava chamando `AuditUseCase.
+    Record` puro, sem `application_id`. Corrigido com `AuditUseCase.RecordWithApplication(eventType,
+    text, target, teamID, applicationID *string, actor)` — recebe teamID E applicationID já
+    resolvidos pelo chamador (ao contrário de `RecordForApplication`, não re-resolve team_id a
+    partir da aplicação: `ApprovalRequest` já carrega os dois valores corretos, uma segunda
+    resolução seria redundante e poderia divergir) — e um novo `recordAuditWithApplication` em
+    `approval_usecase.go`, usado nesta rodada só pelo call site de `ExecuteApprovedAction` (os
+    outros 5 call sites de `recordAudit`, os eventos do próprio ciclo de vida da aprovação —
+    requested/approved/rejected/withdrawn/system_toggled — continuavam sem `application_id` de
+    propósito nesta primeira correção; isso mudou no terceiro bug abaixo).
+  - **Segundo bug real, mesma causa raiz, achado ao comparar a jornada completa de História com a
+    Activity de uma aplicação criada via aprovação** ("está faltando toda uma jornada que deveria
+    estar sendo apresentado no activity"): mesmo depois da correção acima, uma aplicação CRIADA via
+    aprovação nunca mostrava nem seu PRÓPRIO evento de criação na própria Activity tab.
+    `request.ApplicationID` é nil pra `application_create` (a aplicação não existe no momento do
+    PEDIDO — só fica preenchido numa EDIÇÃO, ver `isApplicationEdit`), e `ExecuteApprovedAction`
+    usava esse nil direto, mesmo depois de `executeApplicationCreateAction` já ter criado a
+    aplicação e conhecer seu ID de verdade. Corrigido fazendo `executeApplicationCreateAction`
+    devolver `(string, error)` (o ID novo) e `ExecuteApprovedAction` usar esse retorno — não
+    `request.ApplicationID` — como `applicationID` do evento de execução, só pro branch de criação
+    de verdade (edição continua usando `request.ApplicationID`, que já vem preenchido). Os eventos
+    `approval_requested`/`approval_approved` de uma criação de aplicação continuam sem
+    `application_id` de propósito (aconteceram ANTES de ela existir, não têm como referenciá-la) —
+    só o evento de execução (`application_created`) se beneficia.
+  - **Terceiro bug real, mesma causa raiz, reportado em uso ao vivo depois das duas correções
+    acima**: comparando a jornada completa de um toggle criado via aprovação em History (3 linhas:
+    "Requested: Create toggle" → "Approved Create toggle request" → "Created toggle... (after
+    approval)") com a Activity da mesma aplicação (só 1 linha, a criação) — "deveria ter o pedido,
+    a aprovação e a criação, só tem a criação listada". Ao contrário de uma criação de aplicação
+    (2º bug acima), pra um toggle/regra/chave/edição/exclusão sobre uma aplicação QUE JÁ EXISTE,
+    `request.ApplicationID` já é conhecido desde o momento do PEDIDO — só nunca tinha sido
+    repassado aos eventos `approval_requested`/`approval_approved`/`approval_rejected`/
+    `approval_withdrawn` (que sempre chamavam `recordAudit`, sem `application_id`, por decisão
+    deliberada da 1ª correção: "são eventos do próprio ciclo de vida da aprovação, não a atividade
+    de uma aplicação" — decisão que o usuário reverteu explicitamente aqui). Corrigido trocando os
+    4 call sites de `recordAudit` por `recordAuditWithApplication(..., request.ApplicationID, ...)`
+    diretamente; `recordAudit` ficou com um único chamador (`approval_system_toggled`, que não tem
+    aplicação nem time nenhum envolvido) e foi removido, inlinado nesse chamador. Resultado: a
+    Activity de uma aplicação agora mostra a jornada completa de qualquer ação sobre ela que passou
+    por aprovação, não só o passo final — a única exceção continua sendo `application_create`
+    (2º bug), onde os dois primeiros passos genuinamente não têm uma aplicação pra referenciar
+    ainda.
   - Coberto por testes reais em toda camada (repositório real via SQLite, usecase com mocks,
-    handler via integração real end-to-end, componentes/telas via Testing Library) e 3 e2e novos
+    handler via integração real end-to-end — incluindo
+    `TestAuditIntegration_ApprovalFlow_ApplicationCreate_ExecutionEventCarriesNewApplicationID`
+    (2º bug: aprova+executa de ponta a ponta, confirma `application_id` na linha gravada e a
+    aplicação recém-criada vendo seu próprio evento em `GET .../audit`) e as novas asserções em
+    `TestAuditIntegration_ApprovalFlow_RecordsRequesterAndExecutionEvents` (3º bug: confirma
+    `application_id` em `approval_requested`/`approval_approved` e que a Activity da aplicação
+    lista os 3 event_types da jornada) — componentes/telas via Testing Library) e 5 e2e
     (`history-and-activity.spec.ts`): filtro por ator narrows corretamente entre dois atores
     reais, Export CSV baixa um arquivo de verdade com cabeçalho+linha esperada
-    (`page.waitForEvent("download")`), e a Activity tab de uma aplicação mostra só os eventos
-    daquela aplicação, acessível como admin (não só root).
+    (`page.waitForEvent("download")`), a Activity tab de uma aplicação
+    mostra só os eventos daquela aplicação (acessível como admin, não só root), — regressão do
+    2º bug — uma aplicação criada via workflow de aprovação completo mostra seu próprio evento de
+    criação na própria Activity tab, e — regressão do 1º e 3º bugs juntos — um toggle criado via
+    workflow de aprovação completo (intercept → pending → aprovado por root) mostra a jornada
+    completa requested→approved→created na Activity tab da aplicação, não só o passo final.
 - ✅ **User Management** (`/users`, `screens/UserManagementScreen.tsx`, root ou admin) —
   **reconstruído do zero** depois que o protótipo (`docs/toToggle v2.1.html`) ganhou uma tela
   real de usuários que não existia na versão anterior (`UsersView`/`UserModal`/

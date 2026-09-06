@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
-	"github.com/manorfm/totoogle/internal/app/domain/policy"
 	"github.com/manorfm/totoogle/internal/app/usecase"
 )
 
@@ -23,7 +22,7 @@ func setupTestRouter() *gin.Engine {
 // só precisam de uma instância que não seja nil (Record com actor nil, aliás, já é no-op).
 func newTestAuditUseCase() *usecase.AuditUseCase {
 	teamRepo := usecase.NewMockTeamRepository()
-	return usecase.NewAuditUseCase(usecase.NewMockAuditLogRepository(), policy.NewAuditAccess(teamRepo), teamRepo)
+	return usecase.NewAuditUseCase(usecase.NewMockAuditLogRepository(), teamRepo)
 }
 
 func TestApplicationHandler_CreateApplication(t *testing.T) {

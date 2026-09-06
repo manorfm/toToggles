@@ -809,13 +809,6 @@ type MockAuditLogRepository struct {
 	ActorsResult   []repository.AuditActor
 	ActorsError    error
 	LastListFilter *repository.AuditLogFilter
-	// LastActorsCall captura os argumentos da última chamada a ListActors, mesmo motivo de
-	// LastListFilter abaixo: testar que o usecase repassa teamIDs/unrestricted corretamente sem
-	// reimplementar a lógica de visibilidade aqui (já coberta pelos testes do repositório real).
-	LastActorsCall *struct {
-		TeamIDs      []string
-		Unrestricted bool
-	}
 }
 
 func NewMockAuditLogRepository() *MockAuditLogRepository {
@@ -831,9 +824,8 @@ func (m *MockAuditLogRepository) Create(ctx context.Context, log *entity.AuditLo
 }
 
 // List captura o filtro recebido (LastListFilter), pra testar que o usecase monta/repassa
-// TeamIDs/Unrestricted/Category/ActorID/CreatedAfter/ApplicationID/Cursor/Limit corretamente sem
-// reimplementar a lógica de paginação/filtro aqui (isso já é coberto pelos testes do repositório
-// real).
+// Category/ActorID/CreatedAfter/ApplicationID/Cursor/Limit corretamente sem reimplementar a
+// lógica de paginação/filtro aqui (isso já é coberto pelos testes do repositório real).
 func (m *MockAuditLogRepository) List(ctx context.Context, filter repository.AuditLogFilter) ([]*entity.AuditLog, error) {
 	f := filter
 	m.LastListFilter = &f
@@ -843,11 +835,7 @@ func (m *MockAuditLogRepository) List(ctx context.Context, filter repository.Aud
 	return m.ListResult, nil
 }
 
-func (m *MockAuditLogRepository) ListActors(ctx context.Context, teamIDs []string, unrestricted bool) ([]repository.AuditActor, error) {
-	m.LastActorsCall = &struct {
-		TeamIDs      []string
-		Unrestricted bool
-	}{teamIDs, unrestricted}
+func (m *MockAuditLogRepository) ListActors(ctx context.Context) ([]repository.AuditActor, error) {
 	if m.ActorsError != nil {
 		return nil, m.ActorsError
 	}

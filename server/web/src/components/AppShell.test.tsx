@@ -235,6 +235,28 @@ describe("AppShell", () => {
     expect(screen.queryByRole("link", { name: /teams/i })).not.toBeInTheDocument();
   });
 
+  // v2.6 §7: "Root only... changes to toggles live in each application's Activity tab" — GET
+  // /api/audit e /api/audit/actors agora exigem RequireRoot() também (ver server/CLAUDE.md),
+  // mesmo motivo de "Teams & people" acima. admin/user continuam vendo mudanças de uma aplicação
+  // específica pela aba Activity dentro dela, nunca por este item de nav.
+  it("hides 'History' for non-root users (GET /api/audit now requires RequireRoot())", async () => {
+    vi.stubGlobal("fetch", mockFetch({ id: "2", username: "alice", role: "admin", must_change_password: false }));
+
+    renderShell();
+
+    expect(await screen.findByText("Applications content")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /history/i })).not.toBeInTheDocument();
+  });
+
+  it("shows 'History' for root", async () => {
+    vi.stubGlobal("fetch", mockFetch({ id: "1", username: "root", role: "root", must_change_password: false }));
+
+    renderShell();
+
+    expect(await screen.findByText("Applications content")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /history/i })).toBeInTheDocument();
+  });
+
   // Confirmado no app.jsx real (v2.6 §2.7): `showApprovalsNav || !isRootUser` — mesmo um
   // usuário `user` comum (nunca aprovador) precisa ver o item, pra acompanhar a aba "Mine" das
   // próprias sugestões/solicitações. Diferente de "Teams & people"/"Usuários" acima, que são

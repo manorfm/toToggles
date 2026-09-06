@@ -28,11 +28,13 @@ const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
 // - Filtro por categoria/ator/intervalo é resolvido no SERVIDOR (qualquer mudança reinicia a
 //   paginação do zero), não filtrado em memória sobre um array já carregado como o protótipo faz.
 // - v2.6 §7 confirmou o texto real da tela como "Root only... changes to toggles live in each
-//   application's Activity tab". NÃO restringimos History a root aqui: isso removeria uma
-//   funcionalidade real já existente e testada (visibilidade por time pra qualquer role, ver
-//   domain/policy.AuditAccess), uma divergência deliberada demais pra fazer sem confirmar com o
-//   usuário primeiro. A Activity tab por aplicação foi construída como um complemento focado,
-//   não como substituição.
+//   application's Activity tab". Restrição aplicada: só root chega aqui (AppShell esconde o item
+//   de nav pra quem não é root; GET /api/audit e /api/audit/actors exigem RequireRoot() no
+//   backend — ver routes.go). Uma primeira versão desta tela manteve a visibilidade por time pra
+//   qualquer role como divergência deliberada, mas o usuário pediu explicitamente pra restringir
+//   depois de ver admin/user enxergando History quando só deveriam ver a Activity tab de cada
+//   aplicação. domain/policy.AuditAccess (escopo por time) foi removido nesse mesmo commit —
+//   ficou morto assim que só root passou a chamar List/ListActors.
 export function HistoryScreen() {
   const [category, setCategory] = useState<CategoryFilter>("");
   const [actorId, setActorId] = useState("");

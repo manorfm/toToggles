@@ -23,15 +23,9 @@ func (r *auditLogRepository) Create(ctx context.Context, log *entity.AuditLog) e
 func (r *auditLogRepository) List(ctx context.Context, filter repository.AuditLogFilter) ([]*entity.AuditLog, error) {
 	results := []*entity.AuditLog{}
 
-	if filter.ApplicationID == "" && !filter.Unrestricted && len(filter.TeamIDs) == 0 {
-		return results, nil
-	}
-
 	q := r.db.WithContext(ctx).Model(&entity.AuditLog{})
 	if filter.ApplicationID != "" {
 		q = q.Where("application_id = ?", filter.ApplicationID)
-	} else if !filter.Unrestricted {
-		q = q.Where("team_id IN ?", filter.TeamIDs)
 	}
 	if filter.Category != "" {
 		q = q.Where("category = ?", filter.Category)
@@ -50,23 +44,14 @@ func (r *auditLogRepository) List(ctx context.Context, filter repository.AuditLo
 	return results, err
 }
 
-func (r *auditLogRepository) ListActors(ctx context.Context, teamIDs []string, unrestricted bool) ([]repository.AuditActor, error) {
-	if !unrestricted && len(teamIDs) == 0 {
-		return []repository.AuditActor{}, nil
-	}
-
-	q := r.db.WithContext(ctx).Model(&entity.AuditLog{})
-	if !unrestricted {
-		q = q.Where("team_id IN ?", teamIDs)
-	}
-
+func (r *auditLogRepository) ListActors(ctx context.Context) ([]repository.AuditActor, error) {
 	var rows []struct {
 		ActorID   string
 		ActorName string
 	}
 	// Mais recente primeiro: quando o mesmo actor_id aparece com nomes diferentes (renomeado
 	// entre dois eventos), o de-dupe abaixo mantém a primeira ocorrência = o nome mais atual.
-	if err := q.Select("actor_id, actor_name").Order("created_at DESC").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&entity.AuditLog{}).Select("actor_id, actor_name").Order("created_at DESC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 

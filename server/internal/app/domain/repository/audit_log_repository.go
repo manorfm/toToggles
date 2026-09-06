@@ -17,19 +17,18 @@ type AuditLogCursor struct {
 
 // AuditLogFilter agrupa toda dimensão de filtro/paginação de List numa struct só, em vez de uma
 // lista de parâmetros posicionais que só cresceria a cada filtro novo (v2.6 §7 já adicionou 3 de
-// uma vez: ActorID, CreatedAfter, ApplicationID). Dois modos de visibilidade, mutuamente
-// exclusivos:
-//   - ApplicationID != "": escopo por UMA aplicação (Activity tab) — TeamIDs/Unrestricted são
-//     ignorados nesse modo; qualquer usuário autenticado pode ver a atividade de uma aplicação,
-//     mesma postura de acesso já usada por GET /applications/:id (sem checagem de time).
-//   - ApplicationID == "": escopo por time (History) — Unrestricted=true (root) ignora TeamIDs;
-//     caso contrário, só eventos com team_id em TeamIDs.
+// uma vez: ActorID, CreatedAfter, ApplicationID). Dois modos de escopo, mutuamente exclusivos:
+//   - ApplicationID != "": escopo por UMA aplicação (Activity tab) — qualquer usuário autenticado
+//     pode ver a atividade de uma aplicação, mesma postura de acesso já usada por
+//     GET /applications/:id (sem checagem de time nem de role).
+//   - ApplicationID == "": sem escopo nenhum — todo o audit trail (History). Só root chega aqui
+//     (GET /api/audit exige RequireRoot(), ver routes.go), então não há filtro por time: um não-
+//     root nunca teve acesso a este modo, e a antiga visibilidade por time (domain/policy.
+//     AuditAccess) foi removida por ter ficado morta quando essa restrição entrou em vigor.
 //
 // Category/ActorID/CreatedAfter se combinam com QUALQUER um dos dois modos acima (filtros
 // adicionais, sempre em AND).
 type AuditLogFilter struct {
-	TeamIDs       []string
-	Unrestricted  bool
 	ApplicationID string
 	Category      entity.AuditCategory
 	ActorID       string
@@ -38,8 +37,8 @@ type AuditLogFilter struct {
 	Limit         int
 }
 
-// AuditActor é uma entrada da lista de autores distintos visíveis pro caller — alimenta o
-// `<select>` de filtro por ator (AuditToolbar).
+// AuditActor é uma entrada da lista de autores distintos — alimenta o `<select>` de filtro por
+// ator (AuditToolbar, só usado em History, root-only).
 type AuditActor struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -49,13 +48,10 @@ type AuditActor struct {
 type AuditLogRepository interface {
 	Create(ctx context.Context, log *entity.AuditLog) error
 
-	// List devolve uma página, mais recente primeiro, conforme AuditLogFilter. TeamIDs vazio com
-	// Unrestricted=false (e ApplicationID vazio) devolve página vazia sempre — "nenhum time
-	// visível", não "sem filtro".
+	// List devolve uma página, mais recente primeiro, conforme AuditLogFilter.
 	List(ctx context.Context, filter AuditLogFilter) ([]*entity.AuditLog, error)
 
-	// ListActors devolve os autores distintos visíveis (mesma regra de visibilidade por time de
-	// List, sem ApplicationID — a lista de atores do filtro é sempre relativa a History, nunca a
-	// uma aplicação só), mais recente primeiro por nome atual conhecido.
-	ListActors(ctx context.Context, teamIDs []string, unrestricted bool) ([]AuditActor, error)
+	// ListActors devolve TODOS os autores distintos (root-only, ver AuditLogFilter), mais recente
+	// primeiro por nome atual conhecido.
+	ListActors(ctx context.Context) ([]AuditActor, error)
 }

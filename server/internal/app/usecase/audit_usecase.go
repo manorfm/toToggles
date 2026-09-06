@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
-	"github.com/manorfm/totoogle/internal/app/domain/policy"
 	"github.com/manorfm/totoogle/internal/app/domain/repository"
 )
 
@@ -31,12 +30,11 @@ type teamAudienceResolver interface {
 // AuditUseCase grava e lista o audit trail (entity.AuditLog).
 type AuditUseCase struct {
 	repo         repository.AuditLogRepository
-	access       *policy.AuditAccess
 	teamAudience teamAudienceResolver
 }
 
-func NewAuditUseCase(repo repository.AuditLogRepository, access *policy.AuditAccess, teamAudience teamAudienceResolver) *AuditUseCase {
-	return &AuditUseCase{repo: repo, access: access, teamAudience: teamAudience}
+func NewAuditUseCase(repo repository.AuditLogRepository, teamAudience teamAudienceResolver) *AuditUseCase {
+	return &AuditUseCase{repo: repo, teamAudience: teamAudience}
 }
 
 // record é o único caminho que de fato persiste uma entrada — todo método público Record*
@@ -70,6 +68,18 @@ func (uc *AuditUseCase) record(eventType entity.AuditEventType, text, target str
 // sempre usa currentUser, não quem pediu a ação).
 func (uc *AuditUseCase) Record(eventType entity.AuditEventType, text, target string, teamID *string, actor *entity.User) {
 	uc.record(eventType, text, target, teamID, nil, nil, nil, actor)
+}
+
+// RecordWithApplication grava um evento com teamID E applicationID já resolvidos por quem chama
+// — ao contrário de RecordForApplication, que sempre RE-resolve team_id a partir da aplicação
+// (uma consulta a mais, desnecessária quando o chamador já tem os dois valores prontos e
+// autoritativos). Único uso hoje: ApprovalUseCase.ExecuteApprovedAction, que grava o evento de
+// domínio final de uma ação aprovada e já tem `request.TeamID`/`request.ApplicationID` em mãos —
+// aqui é onde o gap real ficava: toda ação que passa pelo workflow de aprovação nunca carregava
+// application_id no seu evento final, só o caminho de execução DIRETA (RecordForApplication/
+// RecordRuleChange) tinha sido migrado antes.
+func (uc *AuditUseCase) RecordWithApplication(eventType entity.AuditEventType, text, target string, teamID, applicationID *string, actor *entity.User) {
+	uc.record(eventType, text, target, teamID, applicationID, nil, nil, actor)
 }
 
 // systemActorID/systemActorName identificam o ator sintético usado por RecordSystem — nenhum
@@ -145,26 +155,22 @@ func clampAuditLimit(limit int) int {
 }
 
 // AuditListOptions agrupa os filtros de List que vêm da requisição HTTP (v2.6 §7: category já
-// existia, ActorID/CreatedAfter são novos) — TeamIDs/Unrestricted continuam de fora de propósito,
-// são derivados de `caller` via domain/policy.AuditAccess, nunca escolhidos pelo chamador.
+// existia, ActorID/CreatedAfter são novos).
 type AuditListOptions struct {
 	Category     entity.AuditCategory
 	ActorID      string
 	CreatedAfter *time.Time
 }
 
-// List devolve uma página do audit trail (History) visível pra caller (domain/policy.AuditAccess),
-// filtrada por opts quando informados, a partir de cursor (nil = primeira página). limit é
-// ajustado pro intervalo [1, MaxAuditPageSize], usando DefaultAuditPageSize quando <= 0.
-func (uc *AuditUseCase) List(ctx context.Context, caller *entity.User, opts AuditListOptions, cursor *repository.AuditLogCursor, limit int) ([]*entity.AuditLog, error) {
-	teamIDs, unrestricted, err := uc.access.VisibleTeamIDs(ctx, caller)
-	if err != nil {
-		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error resolving audit visibility")
-	}
-
+// List devolve uma página de TODO o audit trail (History), filtrada por opts quando informados, a
+// partir de cursor (nil = primeira página). limit é ajustado pro intervalo [1, MaxAuditPageSize],
+// usando DefaultAuditPageSize quando <= 0. Sem checagem de visibilidade por time: só root chega
+// aqui (GET /api/audit exige RequireRoot(), ver routes.go) — a antiga visibilidade por time
+// (domain/policy.AuditAccess) foi removida quando essa restrição entrou em vigor, a pedido do
+// usuário, depois que admin/user viam o audit trail geral quando deveriam ver só a Activity tab
+// de cada aplicação.
+func (uc *AuditUseCase) List(ctx context.Context, opts AuditListOptions, cursor *repository.AuditLogCursor, limit int) ([]*entity.AuditLog, error) {
 	logs, err := uc.repo.List(ctx, repository.AuditLogFilter{
-		TeamIDs:      teamIDs,
-		Unrestricted: unrestricted,
 		Category:     opts.Category,
 		ActorID:      opts.ActorID,
 		CreatedAfter: opts.CreatedAfter,
@@ -193,15 +199,11 @@ func (uc *AuditUseCase) ListForApplication(ctx context.Context, applicationID st
 	return logs, nil
 }
 
-// ListActors devolve os autores distintos visíveis pra caller, mesma visibilidade por time de
-// List — alimenta o `<select>` de filtro por ator do AuditToolbar (sempre relativo a History,
-// nunca a uma aplicação só).
-func (uc *AuditUseCase) ListActors(ctx context.Context, caller *entity.User) ([]repository.AuditActor, error) {
-	teamIDs, unrestricted, err := uc.access.VisibleTeamIDs(ctx, caller)
-	if err != nil {
-		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error resolving audit visibility")
-	}
-	actors, err := uc.repo.ListActors(ctx, teamIDs, unrestricted)
+// ListActors devolve TODOS os autores distintos (root-only, mesmo motivo de List) — alimenta o
+// `<select>` de filtro por ator do AuditToolbar (sempre relativo a History, nunca a uma aplicação
+// só).
+func (uc *AuditUseCase) ListActors(ctx context.Context) ([]repository.AuditActor, error) {
+	actors, err := uc.repo.ListActors(ctx)
 	if err != nil {
 		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error fetching audit actors")
 	}
