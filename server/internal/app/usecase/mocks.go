@@ -842,6 +842,56 @@ func (m *MockAuditLogRepository) ListActors(ctx context.Context) ([]repository.A
 	return m.ActorsResult, nil
 }
 
+// MockUserFavoriteRepository represents a mock implementation of repository.UserFavoriteRepository
+type MockUserFavoriteRepository struct {
+	Favorites  map[string][]string // userID -> keys, na ordem de inserção
+	AddError   error
+	RemoveErr  error
+	ListError  error
+	LastUserID string
+	LastKey    string
+}
+
+func NewMockUserFavoriteRepository() *MockUserFavoriteRepository {
+	return &MockUserFavoriteRepository{Favorites: make(map[string][]string)}
+}
+
+func (m *MockUserFavoriteRepository) Add(ctx context.Context, userID, key string) error {
+	m.LastUserID, m.LastKey = userID, key
+	if m.AddError != nil {
+		return m.AddError
+	}
+	for _, k := range m.Favorites[userID] {
+		if k == key {
+			return nil // idempotente, mesma semântica do repositório real
+		}
+	}
+	m.Favorites[userID] = append(m.Favorites[userID], key)
+	return nil
+}
+
+func (m *MockUserFavoriteRepository) Remove(ctx context.Context, userID, key string) error {
+	m.LastUserID, m.LastKey = userID, key
+	if m.RemoveErr != nil {
+		return m.RemoveErr
+	}
+	kept := make([]string, 0, len(m.Favorites[userID]))
+	for _, k := range m.Favorites[userID] {
+		if k != key {
+			kept = append(kept, k)
+		}
+	}
+	m.Favorites[userID] = kept
+	return nil
+}
+
+func (m *MockUserFavoriteRepository) ListKeys(ctx context.Context, userID string) ([]string, error) {
+	if m.ListError != nil {
+		return nil, m.ListError
+	}
+	return m.Favorites[userID], nil
+}
+
 type MockSecretKeyRepository struct {
 	SecretKeys      map[string]*entity.SecretKey
 	CreateError     error

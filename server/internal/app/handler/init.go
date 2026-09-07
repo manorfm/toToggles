@@ -23,6 +23,7 @@ var (
 	secretKeyHandler      *SecretKeyHandler
 	approvalHandler       *ApprovalHandler
 	auditHandler          *AuditHandler
+	favoriteHandler       *FavoriteHandler
 	globalApprovalUseCase *usecase.ApprovalUseCase
 )
 
@@ -39,6 +40,7 @@ func InitHandlers(db *gorm.DB) {
 	teamApproverRepo := database.NewTeamApproverRepository(db)
 	sessionRepo := database.NewSessionRepository(db)
 	auditLogRepo := database.NewAuditLogRepository(db)
+	userFavoriteRepo := database.NewUserFavoriteRepository(db)
 
 	// Inicializa sistema de autenticação
 	authManager := auth.NewAuthManager()
@@ -57,6 +59,7 @@ func InitHandlers(db *gorm.DB) {
 	teamUseCase := usecase.NewTeamUseCase(teamRepo, userRepo, appRepo)
 	secretKeyUseCase := usecase.NewSecretKeyUseCase(secretKeyRepo)
 	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, teamRepo)
+	favoriteUseCase := usecase.NewFavoriteUseCase(userFavoriteRepo)
 	approvalUseCase := usecase.NewApprovalUseCase(
 		approvalRequestRepo,
 		approvalSettingsRepo,
@@ -86,6 +89,7 @@ func InitHandlers(db *gorm.DB) {
 	secretKeyHandler = NewSecretKeyHandler(secretKeyUseCase, toggleUseCase, appUseCase, auditUseCase)
 	approvalHandler = NewApprovalHandler(approvalUseCase)
 	auditHandler = NewAuditHandler(auditUseCase)
+	favoriteHandler = NewFavoriteHandler(favoriteUseCase)
 }
 
 // Funções globais para as rotas
@@ -405,6 +409,18 @@ func GetAuditActors(c *gin.Context) {
 
 func GetApplicationAudit(c *gin.Context) {
 	auditHandler.GetApplicationAudit(c)
+}
+
+func ListFavorites(c *gin.Context) {
+	favoriteHandler.ListFavorites(c)
+}
+
+func AddFavorite(c *gin.Context) {
+	favoriteHandler.AddFavorite(c)
+}
+
+func RemoveFavorite(c *gin.Context) {
+	favoriteHandler.RemoveFavorite(c)
 }
 
 // RequireApprovalAware cria um middleware que verifica aprovação antes de aplicar restrições de role

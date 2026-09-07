@@ -132,6 +132,12 @@ func Init(router *gin.Engine) {
 				profile.GET("", handler.GetCurrentUser)
 				profile.POST("/change-password", handler.ChangePassword)
 				profile.GET("/teams", handler.GetUserTeams)
+
+				// Favoritos (v2.6 §6.4) — persistidos por usuário no servidor (antes só
+				// localStorage), sempre escopados ao próprio usuário logado (nunca um :id de rota).
+				profile.GET("/favorites", handler.ListFavorites)
+				profile.POST("/favorites", handler.AddFavorite)
+				profile.DELETE("/favorites", handler.RemoveFavorite)
 			}
 
 			// Rotas de gestão de times (apenas root pode acessar)

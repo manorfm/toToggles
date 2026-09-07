@@ -437,25 +437,24 @@ describe("AppShell", () => {
   });
 
   // v2.6 §6.4: seção "Favorited" na sidebar — um item por app favoritada, um item por toggle
-  // favoritado (mostrando o path pontilhado), com um divisor abaixo. `useFavorites` guarda seu
-  // estado numa store módulo-level lida do localStorage só uma vez, no import (ver
-  // hooks/useFavorites.ts) — testes que pré-semeiam localStorage precisam de
-  // vi.resetModules() + reimport pra essa leitura acontecer de novo, diferente dos outros testes
-  // deste arquivo, que nunca tocam favoritos.
+  // favoritado (mostrando o path pontilhado), com um divisor abaixo. Favoritos agora persistem no
+  // servidor (GET /api/profile/favorites, ver hooks/useFavorites.ts) — `useFavorites` guarda seu
+  // estado numa store módulo-level que só carrega uma vez por instância de módulo, daí ainda
+  // precisar de vi.resetModules() + reimport pra cada teste começar de uma store limpa, igual à
+  // era localStorage, só que agora "semear" é mockar a resposta do GET em vez de escrever no
+  // localStorage.
   describe("Favorited section (v2.6 §6.4)", () => {
-    function fetchMockWithApps(apps: { id: string; name: string }[]) {
+    function fetchMockWithApps(apps: { id: string; name: string }[], favorites: string[] = []) {
       return vi.fn().mockImplementation((path: string) => {
         if (path === "/api/applications") return Promise.resolve(jsonResponse(200, apps));
+        if (path === "/api/profile/favorites") return Promise.resolve(jsonResponse(200, { success: true, favorites }));
         return Promise.resolve(
           jsonResponse(200, { success: true, user: { id: "1", username: "root", role: "root", must_change_password: false } })
         );
       });
     }
 
-    async function renderShellWithFreshFavorites(seedFavorites: string[]) {
-      if (seedFavorites.length > 0) {
-        window.localStorage.setItem("totoggle_v2_favs", JSON.stringify(seedFavorites));
-      }
+    async function renderShellWithFreshFavorites() {
       vi.resetModules();
       const { AppShell: FreshAppShell } = await import("./AppShell");
       return render(
@@ -474,19 +473,20 @@ describe("AppShell", () => {
     }
 
     it("does not show the Favorited section when nothing is favorited", async () => {
-      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }], []));
 
-      await renderShellWithFreshFavorites([]);
+      await renderShellWithFreshFavorites();
       await screen.findByText("Applications content");
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(screen.queryByText("Favorited")).not.toBeInTheDocument();
     });
 
     it("shows a favorited application and navigates to it on click", async () => {
-      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }], ["app:1"]));
       const user = userEvent.setup();
 
-      await renderShellWithFreshFavorites(["app:1"]);
+      await renderShellWithFreshFavorites();
       await screen.findByText("Applications content");
       await screen.findByText("Favorited");
 
@@ -496,10 +496,10 @@ describe("AppShell", () => {
     });
 
     it("shows a favorited toggle by its dotted path and navigates with ?search= on click", async () => {
-      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }], ["tg:1:payments.card"]));
       const user = userEvent.setup();
 
-      await renderShellWithFreshFavorites(["tg:1:payments.card"]);
+      await renderShellWithFreshFavorites();
       await screen.findByText("Applications content");
 
       await user.click(await screen.findByText("payments.card"));
@@ -508,10 +508,13 @@ describe("AppShell", () => {
     });
 
     it("silently drops a favorite pointing at an application that no longer exists", async () => {
-      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }]));
+      vi.stubGlobal("fetch", fetchMockWithApps([{ id: "1", name: "Checkout Web" }], ["app:gone", "tg:gone:x.y"]));
 
-      await renderShellWithFreshFavorites(["app:gone", "tg:gone:x.y"]);
+      await renderShellWithFreshFavorites();
       await screen.findByText("Applications content");
+      // Dá um tick pro fetch de favoritos (agora assíncrono, via API — não mais leitura síncrona
+      // de localStorage) resolver e re-renderizar antes de afirmar a ausência da seção.
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(screen.queryByText("Favorited")).not.toBeInTheDocument();
     });

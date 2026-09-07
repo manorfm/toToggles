@@ -213,9 +213,12 @@ describe("ApplicationDetailScreen", () => {
     await vi.waitFor(() => expect(bulkBody).toEqual({ toggle_ids: ["1", "2"], enabled: true }));
   });
 
-  // v2.6 §6.4: favoritar um toggle persiste em localStorage e reflete no botão imediatamente.
-  it("favorites a toggle, persisting the key to localStorage", async () => {
-    vi.stubGlobal("fetch", fetchMockFor([{ id: "1", value: "user", enabled: true }]));
+  // v2.6 §6.4: favoritar um toggle persiste no servidor (POST /api/profile/favorites, revertido
+  // de localStorage a pedido do usuário — ver hooks/useFavorites.ts) e reflete no botão
+  // imediatamente (otimista).
+  it("favorites a toggle, persisting the key to the server", async () => {
+    const fetchMock = fetchMockFor([{ id: "1", value: "user", enabled: true }]);
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
     renderScreen();
@@ -224,7 +227,10 @@ describe("ApplicationDetailScreen", () => {
     await user.click(screen.getByRole("button", { name: /^favorite$/i }));
 
     expect(screen.getByRole("button", { name: /^unfavorite$/i })).toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem("totoggle_v2_favs") ?? "[]")).toContain("tg:app1:user");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/profile/favorites",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ key: "tg:app1:user" }) })
+    );
   });
 
   // v2.6 §6.4: clicar num toggle favoritado na sidebar (AppShell, fora do escopo deste teste)

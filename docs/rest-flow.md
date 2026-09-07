@@ -217,9 +217,12 @@ POST   /api/users/:id/reset-password
 PUT    /api/users/:id/status
 
 # Current user profile (session required, any role)
-GET  /api/profile
-POST /api/profile/change-password
-GET  /api/profile/teams
+GET    /api/profile
+POST   /api/profile/change-password
+GET    /api/profile/teams
+GET    /api/profile/favorites
+POST   /api/profile/favorites
+DELETE /api/profile/favorites
 
 # Team management (session required, root only)
 POST   /api/teams
@@ -524,6 +527,21 @@ GET /api/profile/teams
 ```
 
 Returns the caller's own team memberships: `{"success": true, "teams": [...]}` (`entity.Team[]`).
+
+```http
+GET    /api/profile/favorites
+POST   /api/profile/favorites   { "key": "app:<applicationId>" }
+DELETE /api/profile/favorites   { "key": "tg:<applicationId>:<togglePath>" }
+```
+
+Favorites (v2.6 §6.4 — applications and toggles a user has starred). Persisted server-side per
+account, scoped to the caller's own token — there is no way to read or change another user's
+favorites. `key` is an opaque string owned by the frontend (`"app:{id}"` or
+`"tg:{appId}:{path}"`); the server never interprets it, only stores/returns it (max 300 chars).
+`POST`/`DELETE` are both idempotent — favoriting an already-favorited key, or removing an
+already-absent one, is a no-op, never an error. `GET` returns `{"success": true, "favorites":
+[...]}"`, insertion order. This diverges from the original prototype (localStorage only, lost on
+logout or on a different browser/device) by explicit user request.
 
 ## 5. Team Management (Root Only)
 

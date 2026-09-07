@@ -39,13 +39,18 @@ describe("ApplicationsScreen", () => {
   });
 
   it("renders every application returned by the API", async () => {
+    // mockImplementation (não mockResolvedValue) — a tela agora concorre com o GET
+    // /profile/favorites de useFavorites; um Response compartilhado só pode ter o corpo lido
+    // (.json()) uma vez, então cada chamada precisa da sua própria instância.
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(200, [
-          { id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 12, toggles_enabled: 9, toggles_disabled: 3 },
-          { id: "2", name: "Mobile App", created_at: "", updated_at: "", toggles_total: 4, toggles_enabled: 1, toggles_disabled: 3 },
-        ])
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          jsonResponse(200, [
+            { id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 12, toggles_enabled: 9, toggles_disabled: 3 },
+            { id: "2", name: "Mobile App", created_at: "", updated_at: "", toggles_total: 4, toggles_enabled: 1, toggles_disabled: 3 },
+          ])
+        )
       )
     );
 
@@ -56,7 +61,7 @@ describe("ApplicationsScreen", () => {
   });
 
   it("shows an empty state when there are no applications", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, [])));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(200, []))));
 
     renderScreen();
 
@@ -67,7 +72,7 @@ describe("ApplicationsScreen", () => {
   });
 
   it("shows the API's error message when the request fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(500, { code: "T0005", message: "internal error" })));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(500, { code: "T0005", message: "internal error" }))));
 
     renderScreen();
 
@@ -183,8 +188,10 @@ describe("ApplicationsScreen", () => {
   it("does not show a delete option in the edit modal for a non-root admin", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+        )
       )
     );
     const user = userEvent.setup();
@@ -197,15 +204,20 @@ describe("ApplicationsScreen", () => {
     expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
   });
 
-  // v2.6 §6.4: favoritar uma aplicação no grid persiste em localStorage sob a chave confirmada
-  // ("app:{id}") — só existe pra quem pode editar (canCreate), mesma condição do botão Edit.
-  it("favorites an application from the grid, persisting the key to localStorage", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
+  // v2.6 §6.4: favoritar uma aplicação no grid persiste no servidor (POST /api/profile/favorites,
+  // revertido de localStorage a pedido do usuário — ver hooks/useFavorites.ts) sob a chave
+  // confirmada ("app:{id}") — só existe pra quem pode editar (canCreate), mesma condição do botão
+  // Edit.
+  it("favorites an application from the grid, persisting the key to the server", async () => {
+    // mockImplementation (não mockResolvedValue) — cada chamada precisa de um Response NOVO,
+    // já que agora esta tela concorre com o GET /profile/favorites de useFavorites; um Response
+    // compartilhado só pode ter o corpo lido (.json()) uma vez.
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
         jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
       )
     );
+    vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
     renderScreen();
@@ -214,14 +226,19 @@ describe("ApplicationsScreen", () => {
     await user.click(screen.getByRole("button", { name: /^favorite$/i }));
 
     expect(screen.getByRole("button", { name: /^unfavorite$/i })).toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem("totoggle_v2_favs") ?? "[]")).toContain("app:1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/profile/favorites",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ key: "app:1" }) })
+    );
   });
 
   it("does not show a favorite button for a non-root, non-admin (read-only) user", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          jsonResponse(200, [{ id: "1", name: "Checkout Web", created_at: "", updated_at: "", toggles_total: 0, toggles_enabled: 0, toggles_disabled: 0 }])
+        )
       )
     );
 

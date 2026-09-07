@@ -1198,6 +1198,49 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       já existente pro clique em "Manage" na faixa de chave do `AppCard`). Uma entrada de
       favorito cujo app já foi apagado é descartada em silêncio (`.filter(Boolean)`/`.filter(f =>
       f.app)`, mesma resiliência do protótipo real) — nunca quebra a sidebar.
+    - **§6.4 revisado — favoritos passaram a persistir no servidor** (fase posterior, a pedido
+      explícito do usuário: "quando adiciona como favorito não está persistindo no perfil do
+      usuário, quando desloga se perde, deve persistir"). O design original acima (localStorage
+      only) era uma escolha deliberada, fiel ao protótipo real — mas o usuário quer o oposto: o
+      favorito precisa sobreviver a logout/login e não ficar preso a um navegador/dispositivo
+      específico, mesmo que isso divirja do protótipo. Backend novo: `entity.UserFavorite`
+      (`user_id`, `favorite_key` opaco, uniqueIndex nos dois — migration
+      `20260907000000_add_user_favorites_table.sql`), `UserFavoriteRepository`/`FavoriteUseCase`/
+      `FavoriteHandler` sob `GET/POST/DELETE /api/profile/favorites` (ver docs/rest-flow.md §4) —
+      sempre escopado ao usuário do próprio token de sessão, nunca um `:id` de rota. `Add`/`Remove`
+      são idempotentes (favoritar 2x a mesma chave, ou remover uma já ausente, nunca é erro —
+      `Add` usa `clause.OnConflict{DoNothing: true}` sobre a uniqueIndex). O usecase nunca
+      interpreta o conteúdo da chave (formato opaco definido pelo frontend), só valida
+      não-vazio/tamanho (`MaxFavoriteKeyLength = 300`, sanidade, não regra de negócio real).
+      **Frontend**: `lib/favorites.ts` ficou só com as funções puras de chave (sem I/O);
+      `loadFavorites`/`saveFavorites` (localStorage) foram REMOVIDAS, substituídas por
+      `api/favorites.ts` (`listFavorites`/`addFavorite`/`removeFavorite`). `hooks/useFavorites.ts`
+      manteve a mesma store módulo-level compartilhada via `useSyncExternalStore` (continua
+      necessária pelo mesmo motivo de sempre — múltiplos componentes montados ao mesmo tempo), mas
+      agora carrega uma vez por sessão de página via um `fetchPromise` cacheado (não refaz o GET a
+      cada novo componente montado) e persiste cada toggle de forma **otimista**: atualiza o
+      estado local synchronamente, dispara `add`/`removeFavorite` em background, e reverte a
+      mudança local se a chamada falhar (favoritos nunca tiveram um caminho de erro visível, nem
+      na era localStorage — o próprio estado voltando ao que era é o único sinal). **Achado de
+      teste real, não só um detalhe de mock**: várias suítes (`ApplicationsScreen.test.tsx`,
+      principalmente) usavam `vi.fn().mockResolvedValue(response)` — a MESMA instância de
+      `Response` devolvida pra toda chamada de fetch — o que já funcionava enquanto a tela fazia
+      só 1 fetch; com `useFavorites` agora sempre disparando um 2º fetch (`GET
+      /profile/favorites`) no mesmo mount, o corpo da resposta (só pode ser lido uma vez via
+      `.json()`) era consumido pela primeira chamada e a segunda lançava "body already used",
+      quebrando a tela inteira. Corrigido trocando esses mocks pra `mockImplementation(() =>
+      Promise.resolve(freshResponse()))`, uma instância nova por chamada. **Achado de e2e mais
+      sério, pego só rodando a suíte INTEIRA (não arquivos isolados)**: um teste novo de
+      regressão tentou prová persistência fazendo um "Sign out" de verdade sobre o contexto de
+      `ROOT_STATE` — mas `ROOT_STATE` é a MESMA sessão (arquivo de storageState) que TODO outro
+      spec do suite reusa via `global-setup.ts` (criada uma única vez pro run inteiro); esse
+      "Sign out" apaga de verdade a sessão no servidor (`AuthUseCase.Logout` — ver seção de
+      autenticação acima), quebrando cada spec que rodasse DEPOIS na mesma execução (cascata de
+      ~24 falhas não relacionadas, reproduzida e diagnosticada nesta sessão). Corrigido reescrevendo
+      o teste pra nunca deslogar a sessão compartilhada: a "sessão nova" é aberta num
+      `browser.newContext()` totalmente à parte, autenticado via formulário de login de verdade —
+      prova o mesmo ponto (favorito não vive em localStorage/memória de uma sessão específica) sem
+      destruir o estado global do suite.
     - ✅ **§6.6 — "Suggest a change" (rocket icon)**: completo. `ToggleCard`/`TogglePaths` já
       tinham o prop `onSuggest` (botão foguete ao lado do switch somente-leitura, só quando
       `!canEdit`) da mesma passada de §6.4/§6.5. Backend: `POST
