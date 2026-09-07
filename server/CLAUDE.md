@@ -2239,11 +2239,27 @@ desde §6.7-6.9 — e um bug real de tradução, o nav item "Users" que tinha fi
    essa aba) em `ApprovalsScreen.test.tsx`; e2e (`approval-reject.spec.ts`) estendido pra provar
    que root vê o item rejeitado em "History" (não em "Mine", que nem existe pra root) e que
    admin nunca vê "History".
-2. **`TeamsScreen`'s "No teams yet" é texto solto**, não a estrutura `.empty` (ícone + título +
-   descrição) já aplicada em Applications/Approvals.
-3. **Badge "⚠ no approver" no `TeamsScreen`** (planejado no §2.10 original) nunca foi construído
-   — precisaria de um campo novo em `GET /teams` (hoje não expõe se o time tem aprovador
-   designado).
+2. ✅ **INVALIDADO (2026-09-07)** — não era um gap real. `get_full_jsx("TeamsView")` (fetch fresco
+   nesta rodada) confirma que o real `TeamsView` **não tem nenhum estado vazio pra "zero times"**
+   — é só `teams.map(...)` puro, sem checagem de `.length === 0` em lugar nenhum antes disso. A
+   suposição anterior (de que devia existir uma estrutura `.empty` com ícone+título+descrição, só
+   porque Applications/Approvals têm) nunca tinha sido checada contra a fonte real. O texto solto
+   "No teams yet." que já existia é, na prática, MAIS fiel ao confirmado do que a estrutura
+   elaborada teria sido — nenhuma mudança de código feita.
+3. ✅ **RESOLVIDO (2026-09-07)** — badge "⚠ no approver" no `TeamsScreen`/`TeamMembersSection`.
+   A suposição de que precisaria de um campo novo em `GET /teams` também estava errada:
+   `get_full_jsx("TeamsView")` confirma que `approverCount` é computado no CLIENTE a partir da
+   própria lista de membros já carregada (`rows.filter(r => r.m.isApprover).length`) — dado que
+   `TeamMembersSection` já busca via `GET /teams/:id/approvers` desde sempre. Badge adicionado ao
+   header de `TeamMembersSection` (não ao de `TeamRow`, que é um componente irmão sem acesso a essa
+   lista — a estrutura já dividida em dois componentes, pré-existente, foi respeitada em vez de
+   fundida). Mesmo fetch que já corrigiu isso revelou mais um gap real, também corrigido: a
+   page-desc de `TeamsScreen` estava faltando a segunda frase confirmada, só pra root (`{isRoot &&
+   <span style={{color:"var(--accent)"}}> Only root can assign per-team approvers.</span>}`). TDD:
+   5 testes novos (`TeamMembersSection.test.tsx` ×3, `TeamsScreen.test.tsx` ×2); e2e
+   (`teams-and-users.spec.ts`) estendido pra provar o badge aparecendo num time recém-criado sem
+   membros, continuando visível com um membro não-aprovador, e sumindo assim que o 1º aprovador é
+   designado.
 4. **`EditToggleDrawer`/`CreateToggleModal`/`StatusRing` nunca foram auditados contra o
    design-graph** (JSX real nunca comparado lado a lado, diferente de todo o resto da tela de
    detalhe de aplicação, já confirmado). Candidatos naturais a uma próxima varredura.

@@ -60,10 +60,25 @@ export function TeamMembersSection({ teamId, teamName }: TeamMembersSectionProps
     }
   }
 
+  // v2.6 §2.10 — confirmado contra get_full_jsx("TeamsView"): `{isRoot && approverCount === 0 &&
+  // <span className="badge">...no approver</span>}`, approverCount vindo do MESMO GET
+  // /teams/:id/approvers já carregado acima — sem endpoint novo. isRoot omitido de propósito:
+  // TeamsScreen inteiro é root-only (mesma justificativa já usada nas checagens acima).
+  const approverCount = state.status === "loaded" ? state.members.filter((m) => m.is_approver).length : 0;
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <div className="field-hint">Members</div>
+        {state.status === "loaded" && approverCount === 0 && (
+          <span
+            className="badge"
+            style={{ background: "var(--warn-soft)", color: "var(--warn)", borderColor: "transparent", display: "flex", alignItems: "center", gap: 4 }}
+          >
+            <Icon name="warn" size={11} /> no approver
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
         <button className="btn btn-soft btn-sm" onClick={() => setAdding(true)}>
           <Icon name="plus" size={14} /> Add member
         </button>

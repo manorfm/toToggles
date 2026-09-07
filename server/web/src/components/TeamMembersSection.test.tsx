@@ -21,6 +21,52 @@ describe("TeamMembersSection", () => {
     expect(await screen.findByText(/no members yet/i)).toBeInTheDocument();
   });
 
+  // v2.6 §2.10 — badge "no approver" confirmado contra get_full_jsx("TeamsView"):
+  // `{isRoot && approverCount === 0 && <span className="badge" ...><Icon name="warn"/> no
+  // approver</span>}`, onde approverCount vem de `rows.filter(r => r.m.isApprover).length` — dado
+  // já carregado por este componente (GET /teams/:id/approvers), sem endpoint novo nenhum. isRoot
+  // é sempre true aqui (TeamsScreen inteiro é root-only), mesma omissão já aplicada nas demais
+  // checagens deste arquivo.
+  it("shows a 'no approver' badge when no member is an approver", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { message: "ok", data: [{ team_id: "team1", user_id: "1", is_approver: false, username: "alice", role: "admin" }] })
+      )
+    );
+
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
+
+    expect(await screen.findByText("alice")).toBeInTheDocument();
+    expect(screen.getByText(/no approver/i)).toBeInTheDocument();
+  });
+
+  it("hides the 'no approver' badge once at least one member is an approver", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(200, { message: "ok", data: [{ team_id: "team1", user_id: "1", is_approver: true, username: "alice", role: "admin" }] })
+      )
+    );
+
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
+
+    expect(await screen.findByText("alice")).toBeInTheDocument();
+    expect(screen.queryByText(/no approver/i)).not.toBeInTheDocument();
+  });
+
+  // Comportamento exato do confirmado: approverCount é 0 também quando não há membro nenhum
+  // (filter de uma lista vazia), então o badge aparece mesmo lado a lado com "No members yet." —
+  // não gated por rows.length > 0 no protótipo real.
+  it("shows the 'no approver' badge even when the team has no members at all", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { message: "ok", data: [] })));
+
+    render(<TeamMembersSection teamId="team1" teamName="Payments Squad" />, { wrapper: ToastProvider });
+
+    expect(await screen.findByText(/no members yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no approver/i)).toBeInTheDocument();
+  });
+
   it("lists members and adds a new one via the modal", async () => {
     let added = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {

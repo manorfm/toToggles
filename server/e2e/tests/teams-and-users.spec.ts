@@ -19,6 +19,19 @@ test("root creates a team, creates a user, and manages team membership/approver 
   await rootPage.getByRole("button", { name: "Create team" }).click();
   await expect(rootPage.getByText("E2E Second Team")).toBeVisible();
 
+  // TeamsScreen envolve cada time num <div> sem classe própria (TeamRow + TeamMembersSection
+  // como irmãos) — escopa pelo <div> mais interno que contém tanto o nome do time quanto o botão
+  // "Add member" daquele bloco (.last() pega o ancestral mais específico, não a página inteira).
+  // Reusado do começo ao fim: um time recém-criado, sem nenhum membro, já é candidato ao badge
+  // "no approver" (v2.6 §2.10, confirmado contra get_full_jsx("TeamsView") — approverCount é 0
+  // tanto com zero membros quanto com membros nenhum aprovador).
+  const newTeamSection = rootPage
+    .locator("div")
+    .filter({ hasText: "E2E Second Team" })
+    .filter({ has: rootPage.getByRole("button", { name: "Add member" }) })
+    .last();
+  await expect(newTeamSection.getByText(/no approver/i)).toBeVisible();
+
   // 2. Criar usuário — admin, aprovador, no time "E2E Team" (o time da fixture compartilhada,
   // não o recém-criado).
   await rootPage.goto("/users");
@@ -37,15 +50,7 @@ test("root creates a team, creates a user, and manages team membership/approver 
 
   // 3. Adicionar esse mesmo usuário ao time novo, e designá-lo aprovador AQUI também (é um
   // team_users independente do primeiro — is_approver não é global no usuário).
-  // TeamsScreen envolve cada time num <div> sem classe própria (TeamRow + TeamMembersSection
-  // como irmãos) — escopa pelo <div> mais interno que contém tanto o nome do time quanto o botão
-  // "Add member" daquele bloco (.last() pega o ancestral mais específico, não a página inteira).
   await rootPage.goto("/teams");
-  const newTeamSection = rootPage
-    .locator("div")
-    .filter({ hasText: "E2E Second Team" })
-    .filter({ has: rootPage.getByRole("button", { name: "Add member" }) })
-    .last();
   await newTeamSection.getByRole("button", { name: "Add member" }).click();
   await rootPage.locator("#member-user").selectOption({ label: "e2e-teams-user" });
   await modalButton(rootPage, "Add to team").click();
@@ -54,10 +59,12 @@ test("root creates a team, creates a user, and manages team membership/approver 
   // — sem escopo, ".member" bateria nas duas seções da página.
   const memberRow = newTeamSection.locator(".member", { hasText: "e2e-teams-user" });
   await expect(memberRow).toBeVisible();
+  await expect(newTeamSection.getByText(/no approver/i)).toBeVisible(); // membro ainda não é aprovador
   const approverSwitch = memberRow.getByRole("switch", { name: "Approver" });
   await expect(approverSwitch).toHaveAttribute("aria-checked", "false"); // novo team_users, começa false
   await approverSwitch.click();
   await expect(approverSwitch).toHaveAttribute("aria-checked", "true");
+  await expect(newTeamSection.getByText(/no approver/i)).not.toBeVisible(); // badge some com o 1º aprovador
 
   await rootContext.close();
 });

@@ -63,6 +63,29 @@ describe("TeamsScreen", () => {
     expect(await screen.findByText(/no teams yet/i)).toBeInTheDocument();
   });
 
+  // Confirmado contra get_full_jsx("TeamsView"): a page-desc real acrescenta uma segunda frase,
+  // só pra root — `{isRoot && <span style={{color:"var(--accent)"}}> Only root can assign
+  // per-team approvers.</span>}`. Achado numa auditoria de status geral (a frase nunca tinha sido
+  // portada). Sem gate de rota client-side em /teams (só o item de nav é escondido), então
+  // "isRoot" aqui precisa continuar checando o papel de verdade — diferente de
+  // TeamMembersSection, que só renderiza depois de um GET /teams bem-sucedido (root-only no
+  // servidor).
+  it("only shows 'Only root can assign per-team approvers.' for root", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [] })));
+
+    renderScreen(root);
+    await screen.findByText(/no teams yet/i);
+    expect(screen.getByText(/only root can assign per-team approvers/i)).toBeInTheDocument();
+  });
+
+  it("does not show 'Only root can assign per-team approvers.' for a non-root role", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(403, { code: "T0001", message: "Root privileges required" })));
+
+    renderScreen(admin);
+    await screen.findByText(/root privileges required/i);
+    expect(screen.queryByText(/only root can assign per-team approvers/i)).not.toBeInTheDocument();
+  });
+
   it("shows 'New team' only for root, and opens the creation modal", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [] })));
     const user = userEvent.setup();

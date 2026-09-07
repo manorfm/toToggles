@@ -65,7 +65,10 @@ export function TeamsScreen() {
       <div className="page-head">
         <div className="h">
           <div className="page-title">Teams & people</div>
-          <div className="page-desc">Teams own applications. Members inherit access to every toggle in the apps their team manages.</div>
+          <div className="page-desc">
+            Teams own applications. Members inherit access to every toggle in the apps their team manages.
+            {user.role === "root" && <span style={{ color: "var(--accent)" }}> Only root can assign per-team approvers.</span>}
+          </div>
         </div>
         {user.role === "root" && (
           <button className="btn btn-primary" onClick={() => setCreating(true)}>
