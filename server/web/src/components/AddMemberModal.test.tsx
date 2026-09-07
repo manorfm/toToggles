@@ -31,8 +31,8 @@ describe("AddMemberModal", () => {
 
     render(<AddMemberModal teamId="team1" teamName="Payments Squad" existingMemberIds={["1", "2"]} onClose={vi.fn()} onAdded={vi.fn()} />);
 
-    expect(await screen.findByText(/já são membros/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add member/i })).toBeDisabled();
+    expect(await screen.findByText(/no other accounts to add/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add to team/i })).toBeDisabled();
   });
 
   it("hides the 'create new user' button when onCreateNew isn't passed", async () => {
@@ -72,7 +72,7 @@ describe("AddMemberModal", () => {
     render(<AddMemberModal teamId="team1" teamName="Payments Squad" existingMemberIds={["1"]} onClose={onClose} onAdded={onAdded} />);
     await screen.findByRole("option", { name: "bob" });
 
-    await user.click(screen.getByRole("button", { name: /add member/i }));
+    await user.click(screen.getByRole("button", { name: /add to team/i }));
 
     expect(fetchMock).toHaveBeenCalledWith("/api/teams/team1/users", expect.objectContaining({ method: "POST", body: JSON.stringify({ user_id: "2" }) }));
     await vi.waitFor(() => expect(onAdded).toHaveBeenCalledWith(users[1]));

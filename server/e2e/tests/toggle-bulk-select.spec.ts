@@ -14,7 +14,7 @@ test.describe("toggle bulk select", () => {
     await createToggle(rootContext.request, fixtures.appId, "e2e.bulk.one");
     await createToggle(rootContext.request, fixtures.appId, "e2e.bulk.two");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -49,7 +49,7 @@ test.describe("toggle bulk select", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.bulk.cancel");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();

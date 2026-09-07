@@ -15,6 +15,12 @@ interface MemberRowProps {
 // (screens/UserManagementScreen.tsx); duplicar a mesma ação aqui criaria duas fontes de
 // verdade pro mesmo estado. O switch de aprovador (POST /teams/:id/approvers/:user_id,
 // docs/rest-flow.md §9.3), esse sim é exclusivo desta tela — só existe por time.
+//
+// Fase 6 (fidelity pass): "Aprovador"/"Remover como aprovador"/"Designar como aprovador" tinham
+// ficado em português por engano — get_full_jsx("MemberRow") confirma "Approver"/"Remove as
+// approver"/"Make approver". Divergência real que PERMANECE (limitação de dado, não de texto): o
+// protótipo mostra `user.name`, mas `TeamApprover` (GET /teams/:id/approvers) só devolve
+// `username` — a rota nunca fez join com o nome completo do usuário.
 export function MemberRow({ member, onRemove, onToggleApprover }: MemberRowProps) {
   const canBeApprover = member.role === "admin";
 
@@ -30,7 +36,7 @@ export function MemberRow({ member, onRemove, onToggleApprover }: MemberRowProps
               className="badge"
               style={{ background: "var(--accent-soft)", color: "var(--accent)", borderColor: "transparent", fontSize: 10.5, height: 18 }}
             >
-              Aprovador
+              Approver
             </span>
           )}
         </div>
@@ -38,14 +44,14 @@ export function MemberRow({ member, onRemove, onToggleApprover }: MemberRowProps
 
       {onToggleApprover && canBeApprover && (
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: "var(--ink-4)" }}>Aprovador</span>
+          <span style={{ fontSize: 12, color: "var(--ink-4)" }}>Approver</span>
           <button
             role="switch"
             aria-checked={member.is_approver}
-            aria-label="Aprovador"
+            aria-label="Approver"
             className={"switch" + (member.is_approver ? " on" : "")}
             onClick={onToggleApprover}
-            title={member.is_approver ? "Remover como aprovador" : "Designar como aprovador"}
+            title={member.is_approver ? "Remove as approver" : "Make approver"}
           />
         </div>
       )}

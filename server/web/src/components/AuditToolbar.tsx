@@ -16,9 +16,13 @@ const RANGE_CHIPS: { key: "all" | AuditRange; label: string }[] = [
 ];
 
 interface AuditToolbarProps {
-  actors: AuditActor[];
-  actorId: string;
-  onActorChange: (actorId: string) => void;
+  // Omitido inteiro (junto com actorId/actors) na Activity tab de uma aplicação — a ActivityView
+  // real confirmada (design-graph, depois que passou a extrair o componente de verdade — ver
+  // docs/investigation/design-graph-unreachable-components.md) nunca teve um <select> de ator,
+  // só History tem. onActorChange é o sinal de presença: só renderiza o <select> quando fornecido.
+  actors?: AuditActor[];
+  actorId?: string;
+  onActorChange?: (actorId: string) => void;
   range: "all" | AuditRange;
   onRangeChange: (range: "all" | AuditRange) => void;
   exportDisabled: boolean;
@@ -28,14 +32,16 @@ interface AuditToolbarProps {
 export function AuditToolbar({ actors, actorId, onActorChange, range, onRangeChange, exportDisabled, onExport }: AuditToolbarProps) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-      <select className="select" style={{ width: 170 }} value={actorId} onChange={(e) => onActorChange(e.target.value)}>
-        <option value="">All actors</option>
-        {actors.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.name}
-          </option>
-        ))}
-      </select>
+      {onActorChange && (
+        <select className="select" style={{ width: 170 }} value={actorId ?? ""} onChange={(e) => onActorChange(e.target.value)}>
+          <option value="">All actors</option>
+          {(actors ?? []).map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      )}
       <div className="audit-filter" style={{ margin: 0 }}>
         {RANGE_CHIPS.map((chip) => (
           <button key={chip.key} className={"chip" + (range === chip.key ? " on" : "")} onClick={() => onRangeChange(chip.key)}>

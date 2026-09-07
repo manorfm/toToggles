@@ -32,16 +32,16 @@ describe("MemberRow", () => {
     expect(screen.queryByRole("button", { name: /remove member/i })).not.toBeInTheDocument();
   });
 
-  it("shows an 'Aprovador' badge when the member is already an approver", () => {
+  it("shows an 'Approver' badge when the member is already an approver", () => {
     render(<MemberRow member={{ ...admin, is_approver: true }} />);
 
-    expect(screen.getByText("Aprovador")).toBeInTheDocument();
+    expect(screen.getByText("Approver")).toBeInTheDocument();
   });
 
   it("does not show the badge when the member isn't an approver", () => {
     render(<MemberRow member={admin} />);
 
-    expect(screen.queryByText("Aprovador")).not.toBeInTheDocument();
+    expect(screen.queryByText("Approver")).not.toBeInTheDocument();
   });
 
   it("offers the approver switch for an admin member when onToggleApprover is given", async () => {

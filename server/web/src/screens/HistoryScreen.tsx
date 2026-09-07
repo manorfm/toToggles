@@ -1,22 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { AuditChips, CATEGORY_TABS, type CategoryFilter } from "../components/AuditChips";
 import { AuditFeed } from "../components/AuditFeed";
 import { AuditToolbar } from "../components/AuditToolbar";
+import { Icon } from "../components/Icon";
 import { listAuditActors, listAuditLog } from "../api/audit";
 import { downloadCSV } from "../lib/csvExport";
-import type { AuditActor, AuditCategory, AuditLogEntry, AuditRange } from "../types/audit";
+import type { AuditActor, AuditLogEntry, AuditRange } from "../types/audit";
 
-// "" = aba "All", sem filtro de categoria no request.
-type CategoryFilter = "" | AuditCategory;
 // "all" = chip "All time" do AuditToolbar, sem filtro de intervalo no request (ver AuditToolbar).
 type RangeFilter = "all" | AuditRange;
-
-const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
-  { key: "", label: "All" },
-  { key: "toggles", label: "Toggles" },
-  { key: "keys", label: "Keys" },
-  { key: "access", label: "Access" },
-  { key: "approvals", label: "Approvals" },
-];
 
 // Audit trail real — reconstruído do HistoryView real (get_screen_full("HistoryView") via
 // design-graph, que confirmou a estrutura AuditChips/AuditToolbar/AuditFeed usada abaixo — a
@@ -35,6 +27,12 @@ const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
 //   depois de ver admin/user enxergando History quando só deveriam ver a Activity tab de cada
 //   aplicação. domain/policy.AuditAccess (escopo por time) foi removido nesse mesmo commit —
 //   ficou morto assim que só root passou a chamar List/ListActors.
+// - page-desc/`.scope-note` (ícone shield + "Root only...") só puderam ser confirmados de verdade
+//   depois que o design-graph passou a conseguir extrair HistoryView por inteiro (antes um
+//   "buraco" conhecido da ferramenta — ver
+//   docs/investigation/design-graph-unreachable-components.md); o texto usado antes
+//   ("An append-only audit trail...") era uma aproximação razoável, mas nunca tinha sido
+//   confirmado contra a fonte real.
 export function HistoryScreen() {
   const [category, setCategory] = useState<CategoryFilter>("");
   const [actorId, setActorId] = useState("");
@@ -61,17 +59,16 @@ export function HistoryScreen() {
       <div className="page-head">
         <div className="h">
           <div className="page-title">History</div>
-          <div className="page-desc">An append-only audit trail of every change — who did what, and when.</div>
+          <div className="page-desc">
+            Administrative audit trail — accounts, teams, applications, service keys and the approval system.
+          </div>
+          <div className="scope-note">
+            <Icon name="shield" size={13} /> Root only. Changes to toggles live in each application's Activity tab.
+          </div>
         </div>
       </div>
 
-      <div className="audit-filter">
-        {CATEGORY_TABS.map((tab) => (
-          <button key={tab.key} className={"chip" + (category === tab.key ? " on" : "")} onClick={() => setCategory(tab.key)}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <AuditChips tabs={CATEGORY_TABS} active={category} onPick={setCategory} />
 
       <AuditToolbar
         actors={actors}

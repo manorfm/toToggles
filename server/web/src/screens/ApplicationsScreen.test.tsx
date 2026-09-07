@@ -61,6 +61,9 @@ describe("ApplicationsScreen", () => {
     renderScreen();
 
     expect(await screen.findByText(/no applications yet/i)).toBeInTheDocument();
+    // Confirmado via design-graph (get_full_jsx("AppList")): "Create one to start managing its
+    // toggles." — Phase 6 fidelity pass encontrou este texto divergindo do confirmado.
+    expect(screen.getByText("Create one to start managing its toggles.")).toBeInTheDocument();
   });
 
   it("shows the API's error message when the request fails", async () => {

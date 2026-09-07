@@ -26,13 +26,18 @@ interface UserRowProps {
 // fechado nesta rodada: entity.User não tinha campo Name até então (server/CLAUDE.md), então essa
 // era a única divergência forçada aqui; agora reflete o protótipo 1:1.
 //
-// Uma divergência real (não de modelo) permanece: o protótipo tem um botão "Ver senha" pra reler
-// a senha já mostrada enquanto o usuário está pending_first_login — isso só é possível lá porque
-// é tudo estado em memória. Com bcrypt, uma senha já mostrada nunca pode ser lida de novo, então
-// aqui só existe "Resetar senha" (gera uma nova, invalida a anterior), sempre, independente do
-// status.
+// Uma divergência real (não de modelo) permanece: o protótipo tem um botão "View password" pra
+// reler a senha já mostrada enquanto o usuário está pending_first_login — isso só é possível lá
+// porque é tudo estado em memória. Com bcrypt, uma senha já mostrada nunca pode ser lida de novo,
+// então aqui só existe "Reset password" (gera uma nova, invalida a anterior), sempre,
+// independente do status.
+//
+// Fase 6 (fidelity pass): esta rodada corrigiu os rótulos de ação que tinham ficado em
+// português por engano num decode anterior — get_full_jsx("UserRow") confirma "you"/"Reset
+// password"/"Reactivate"/"Disable"/"Delete user", e o separador/fallback de times ("Unassigned",
+// " · "), nenhum desses em português no protótipo real.
 export function UserRow({ user, isSelf, manageable, canDelete, onResetPassword, onToggleStatus, onDelete }: UserRowProps) {
-  const teamNames = user.teams && user.teams.length > 0 ? user.teams.map((t) => t.name).join(", ") : "—";
+  const teamNames = user.teams && user.teams.length > 0 ? user.teams.map((t) => t.name).join(" · ") : "Unassigned";
 
   return (
     <div className="member">
@@ -45,7 +50,7 @@ export function UserRow({ user, isSelf, manageable, canDelete, onResetPassword, 
           </span>
           {isSelf && (
             <span className="badge" style={{ fontSize: 10.5, height: 18 }}>
-              você
+              you
             </span>
           )}
         </div>
@@ -58,21 +63,21 @@ export function UserRow({ user, isSelf, manageable, canDelete, onResetPassword, 
 
       {manageable && (
         <button className="btn btn-soft btn-sm" onClick={onResetPassword}>
-          <Icon name="lock" size={14} /> Resetar senha
+          <Icon name="lock" size={14} /> Reset password
         </button>
       )}
       {manageable && (
         <button
           className="icon-btn"
-          title={user.status === "disabled" ? "Reativar" : "Desativar"}
-          aria-label={user.status === "disabled" ? "Reativar" : "Desativar"}
+          title={user.status === "disabled" ? "Reactivate" : "Disable"}
+          aria-label={user.status === "disabled" ? "Reactivate" : "Disable"}
           onClick={onToggleStatus}
         >
           <Icon name={user.status === "disabled" ? "check" : "logout"} size={15} />
         </button>
       )}
       {canDelete && (
-        <button className="icon-btn" title="Excluir usuário" aria-label="Excluir usuário" onClick={onDelete}>
+        <button className="icon-btn" title="Delete user" aria-label="Delete user" onClick={onDelete}>
           <Icon name="trash" size={15} />
         </button>
       )}

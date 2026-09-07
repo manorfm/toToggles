@@ -78,7 +78,7 @@ export function TeamsScreen() {
 
       {state.status === "loading" && <div className="empty">Carregando times…</div>}
       {state.status === "error" && <div className="empty">{state.message}</div>}
-      {state.status === "loaded" && state.teams.length === 0 && <div className="empty">Nenhum time ainda.</div>}
+      {state.status === "loaded" && state.teams.length === 0 && <div className="empty">No teams yet.</div>}
       {state.status === "loaded" &&
         state.teams.map((team) => (
           <div key={team.id} style={{ marginBottom: 26 }}>

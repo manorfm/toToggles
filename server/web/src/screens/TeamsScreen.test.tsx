@@ -60,7 +60,7 @@ describe("TeamsScreen", () => {
 
     renderScreen(root);
 
-    expect(await screen.findByText(/nenhum time/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no teams yet/i)).toBeInTheDocument();
   });
 
   it("shows 'New team' only for root, and opens the creation modal", async () => {
@@ -68,7 +68,7 @@ describe("TeamsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen(root);
-    await screen.findByText(/nenhum time/i);
+    await screen.findByText(/no teams yet/i);
 
     await user.click(screen.getByRole("button", { name: /new team/i }));
 
@@ -80,7 +80,7 @@ describe("TeamsScreen", () => {
 
     renderScreen(admin);
 
-    await screen.findByText(/nenhum time/i);
+    await screen.findByText(/no teams yet/i);
     expect(screen.queryByRole("button", { name: /new team/i })).not.toBeInTheDocument();
   });
 
@@ -97,7 +97,7 @@ describe("TeamsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen(root);
-    await screen.findByText(/nenhum time/i);
+    await screen.findByText(/no teams yet/i);
 
     await user.click(screen.getByRole("button", { name: /new team/i }));
     await user.type(screen.getByLabelText(/team name/i), "Data Platform");
@@ -132,7 +132,7 @@ describe("TeamsScreen", () => {
     await screen.findByText(/delete team/i, { selector: ".modal-title" });
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
-    await screen.findByText(/nenhum time/i);
+    await screen.findByText(/no teams yet/i);
     expect(deleted).toBe(true);
   });
 

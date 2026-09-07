@@ -15,7 +15,9 @@ import { listApplicationAudit } from "../api/audit";
 import { ApiError } from "../api/client";
 import { ArchivedModal } from "../components/ArchivedModal";
 import { ApprovalInterceptModal } from "../components/ApprovalInterceptModal";
+import { AuditChips, CATEGORY_TABS, type CategoryFilter } from "../components/AuditChips";
 import { AuditFeed } from "../components/AuditFeed";
+import { AuditToolbar } from "../components/AuditToolbar";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { CreateToggleModal } from "../components/CreateToggleModal";
 import { EditToggleDrawer, type ToggleRuleSnapshot } from "../components/EditToggleDrawer";
@@ -30,6 +32,7 @@ import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { useFavorites } from "../hooks/useFavorites";
 import { useSetOpenApp } from "../hooks/useSetOpenApp";
 import { toggleFavoriteKey } from "../lib/favorites";
+import { downloadCSV } from "../lib/csvExport";
 import {
   activeLeavesUnder,
   ancestorsEnabledFor,
@@ -40,6 +43,7 @@ import {
   flattenToLeaves,
 } from "../lib/toggleLeaves";
 import type { ArchivedToggle, ToggleLeaf, ToggleNode } from "../types/toggle";
+import type { AuditLogEntry, AuditRange } from "../types/audit";
 
 type LoadState =
   | {
@@ -336,8 +340,23 @@ export function ApplicationDetailScreen() {
 
   // v2.6 §7 — Activity tab: audit trail escopado a ESTA aplicação (GET .../audit), visível pra
   // qualquer usuário autenticado (nenhuma checagem de time, diferente de History) — ver
-  // AuditUseCase.ListForApplication no backend.
-  const fetchActivityPage = useCallback((cursor?: string) => listApplicationAudit(applicationId, { cursor }), [applicationId]);
+  // AuditUseCase.ListForApplication no backend. Categoria (AuditChips) + intervalo
+  // (AuditToolbar, sem ator) só puderam ser confirmados de verdade depois que o design-graph
+  // passou a conseguir extrair ActivityView por inteiro (antes um "buraco" conhecido da
+  // ferramenta — ver docs/investigation/design-graph-unreachable-components.md); a primeira
+  // versão desta aba era só um AuditFeed puro, sem filtro nenhum.
+  const [activityCategory, setActivityCategory] = useState<CategoryFilter>("");
+  const [activityRange, setActivityRange] = useState<"all" | AuditRange>("all");
+  const [activityEntries, setActivityEntries] = useState<AuditLogEntry[]>([]);
+  const fetchActivityPage = useCallback(
+    (cursor?: string) =>
+      listApplicationAudit(applicationId, {
+        category: activityCategory || undefined,
+        range: activityRange === "all" ? undefined : activityRange,
+        cursor,
+      }),
+    [applicationId, activityCategory, activityRange]
+  );
 
   return (
     <div className="page">
@@ -353,6 +372,8 @@ export function ApplicationDetailScreen() {
                 Each path is a chain of toggles — <span className="mono" style={{ color: "var(--ink-2)" }}>service.feature.flag</span>. A
                 path is active only when every segment is on.
               </>
+            ) : tab === "activity" ? (
+              "Everything that happened in this application — toggles created and removed, switches, activation rules and approvals."
             ) : (
               "One secret service key per application. Shown once on generation — store it in a secrets manager."
             )}
@@ -446,7 +467,18 @@ export function ApplicationDetailScreen() {
 
       {state.status === "loaded" && (
         <div hidden={tab !== "activity"}>
-          <AuditFeed fetchPage={fetchActivityPage} emptyDescription="No changes recorded for this application yet." />
+          <AuditChips tabs={CATEGORY_TABS} active={activityCategory} onPick={setActivityCategory} />
+          <AuditToolbar
+            range={activityRange}
+            onRangeChange={setActivityRange}
+            exportDisabled={activityEntries.length === 0}
+            onExport={() => downloadCSV(activityEntries, `totoggle-${state.applicationName}-activity.csv`)}
+          />
+          <AuditFeed
+            fetchPage={fetchActivityPage}
+            emptyDescription="No changes recorded for this application yet."
+            onEntriesChange={setActivityEntries}
+          />
         </div>
       )}
 

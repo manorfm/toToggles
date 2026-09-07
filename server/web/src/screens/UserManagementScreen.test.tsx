@@ -69,7 +69,7 @@ describe("UserManagementScreen", () => {
 
     renderScreen();
 
-    expect(await screen.findByText(/nenhum usuário encontrado/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no users found/i)).toBeInTheDocument();
   });
 
   it("filters the list by username in the search box", async () => {
@@ -79,14 +79,16 @@ describe("UserManagementScreen", () => {
     renderScreen();
     await screen.findByText("@bob");
 
-    await user.type(screen.getByPlaceholderText(/buscar por nome ou username/i), "bob");
+    await user.type(screen.getByPlaceholderText(/search by name or username/i), "bob");
 
     expect(screen.getByText("@bob")).toBeInTheDocument();
     expect(screen.queryByText("@root")).not.toBeInTheDocument();
   });
 
-  // Confirmado no protótipo real (get_screen_full("UsersView")): o placeholder diz "Buscar por
-  // nome ou username", mas o filtro só olhava username — gap real, não só de texto.
+  // Confirmado no protótipo real (get_screen_full("UsersView")): o placeholder diz "Search by
+  // name or username", mas o filtro só olhava username — gap real, não só de texto. (Fase 6: a
+  // versão anterior deste comentário citava o placeholder errado, em português — nunca tinha
+  // sido de fato conferido contra o design-graph até esta rodada.)
   it("also filters the list by display name in the search box", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, users: [rootFixture(), bobFixture()] })));
     const user = userEvent.setup();
@@ -94,7 +96,7 @@ describe("UserManagementScreen", () => {
     renderScreen();
     await screen.findByText("@bob");
 
-    await user.type(screen.getByPlaceholderText(/buscar por nome ou username/i), bobFixture().name);
+    await user.type(screen.getByPlaceholderText(/search by name or username/i), bobFixture().name);
 
     expect(screen.getByText("@bob")).toBeInTheDocument();
     expect(screen.queryByText("@root")).not.toBeInTheDocument();
@@ -108,7 +110,7 @@ describe("UserManagementScreen", () => {
 
     renderScreen();
 
-    expect(await screen.findByText("1 aguardando 1º acesso")).toBeInTheDocument();
+    expect(await screen.findByText("1 awaiting first login")).toBeInTheDocument();
   });
 
   it("creates a user, shows the one-time password modal, and adds them to the list", async () => {
@@ -128,16 +130,16 @@ describe("UserManagementScreen", () => {
     renderScreen();
     await screen.findByText("@root");
 
-    await user.click(screen.getByRole("button", { name: /criar usuário/i }));
+    await user.click(screen.getByRole("button", { name: /create user/i }));
     await screen.findByRole("option", { name: "Payments Squad" });
-    await user.type(screen.getByLabelText(/nome completo/i), "Bob Test");
+    await user.type(screen.getByLabelText(/full name/i), "Bob Test");
     await user.clear(screen.getByLabelText(/^username$/i));
     await user.type(screen.getByLabelText(/^username$/i), "bob");
-    await user.click(screen.getAllByRole("button", { name: /^criar usuário$/i })[1]);
+    await user.click(screen.getAllByRole("button", { name: /^create user$/i })[1]);
 
     expect(await screen.findByText("Xk9$mQ2pLw#T")).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: /entendi/i }));
+    await user.click(screen.getByRole("button", { name: /got it, i saved it/i }));
 
     expect(screen.getByText("@bob")).toBeInTheDocument();
   });
@@ -155,9 +157,9 @@ describe("UserManagementScreen", () => {
     renderScreen();
     await screen.findByText("@bob");
 
-    await user.click(screen.getByRole("button", { name: /resetar senha/i }));
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
 
-    expect(await screen.findByText("Senha provisória redefinida")).toBeInTheDocument();
+    expect(await screen.findByText("Temporary password reset")).toBeInTheDocument();
     expect(screen.getByText("Nq7!vRxK2pLm")).toBeInTheDocument();
   });
 
@@ -176,7 +178,7 @@ describe("UserManagementScreen", () => {
     renderScreen();
     await screen.findByText("@bob");
 
-    await user.click(screen.getByRole("button", { name: /desativar/i }));
+    await user.click(screen.getByRole("button", { name: /disable/i }));
 
     await vi.waitFor(() => expect(screen.getByText("Desativado")).toBeInTheDocument());
   });
@@ -196,7 +198,7 @@ describe("UserManagementScreen", () => {
     renderScreen();
     await screen.findByText("@bob");
 
-    await user.click(screen.getByRole("button", { name: /excluir usuário/i }));
+    await user.click(screen.getByRole("button", { name: /delete user/i }));
     await screen.findByText(/delete user/i, { selector: ".modal-title" });
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
 
@@ -213,6 +215,6 @@ describe("UserManagementScreen", () => {
     const rows = screen.getAllByText(/^@/);
     expect(rows).toHaveLength(2);
     // Only bob's row should offer manage actions — root's own row shows none.
-    expect(screen.getAllByRole("button", { name: /resetar senha/i })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /reset password/i })).toHaveLength(1);
   });
 });

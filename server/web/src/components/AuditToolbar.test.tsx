@@ -83,4 +83,18 @@ describe("AuditToolbar", () => {
 
     expect(onExport).toHaveBeenCalledTimes(1);
   });
+
+  // v2.6 §7 — a Activity tab de uma aplicação reusa este mesmo toolbar (range + export), mas sem
+  // o <select> de ator — confirmado quando o design-graph passou a extrair ActivityView de
+  // verdade (antes um "buraco" conhecido da ferramenta): a ActivityView real nunca teve um filtro
+  // de ator, só History tem.
+  it("omits the actor select entirely when onActorChange is not provided", () => {
+    render(<AuditToolbar range="all" onRangeChange={vi.fn()} exportDisabled={false} onExport={vi.fn()} />);
+
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    for (const label of ["All time", "24h", "7 days", "30 days"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: /export csv/i })).toBeInTheDocument();
+  });
 });

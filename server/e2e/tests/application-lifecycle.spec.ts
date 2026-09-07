@@ -7,7 +7,7 @@ test.describe("application lifecycle — create", () => {
     const rootContext = await browser.newContext({ storageState: ROOT_STATE });
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -26,7 +26,7 @@ test.describe("application lifecycle — create", () => {
     const rootContext = await browser.newContext({ storageState: ROOT_STATE });
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Create or update application" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -44,7 +44,7 @@ test.describe("application lifecycle — create", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Create application" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -65,7 +65,7 @@ test.describe("application lifecycle — edit name", () => {
     });
     expect(createRes.ok()).toBeTruthy();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -92,7 +92,7 @@ test.describe("application lifecycle — edit name", () => {
     });
     expect(createRes.ok()).toBeTruthy();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Create or update application" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -115,7 +115,7 @@ test.describe("application lifecycle — edit name", () => {
     // application" mesmo sendo uma edição.
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Create application" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -136,7 +136,7 @@ test.describe("application lifecycle — delete", () => {
     });
     expect(createRes.ok()).toBeTruthy();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     // A UI nunca mostra "Delete application" pra quem não é root (canDeleteApp/canDelete =
     // role === "root") — só root consegue chegar nesta jornada clicando.

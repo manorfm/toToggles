@@ -15,7 +15,7 @@ test.describe("toggle lifecycle — create", () => {
     const rootContext = await browser.newContext({ storageState: ROOT_STATE });
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     await adminPage.goto(`/applications/${fixtures.appId}`);
     await adminPage.getByRole("button", { name: "New toggle" }).click();
@@ -33,7 +33,7 @@ test.describe("toggle lifecycle — create", () => {
     const rootContext = await browser.newContext({ storageState: ROOT_STATE });
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Create toggle" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -51,7 +51,7 @@ test.describe("toggle lifecycle — create", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Create toggle" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -69,7 +69,7 @@ test.describe("toggle lifecycle — disable (recursive)", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.disable.direct");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -89,7 +89,7 @@ test.describe("toggle lifecycle — disable (recursive)", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.disable.approved");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Disable toggle (recursive, whole subtree)" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -106,7 +106,7 @@ test.describe("toggle lifecycle — disable (recursive)", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.disable.approved" });
     await expect(pendingRow).toContainText("Disable toggle");
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -124,7 +124,7 @@ test.describe("toggle lifecycle — configure activation rule", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.rule.direct");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -149,7 +149,7 @@ test.describe("toggle lifecycle — configure activation rule", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.rule.approved");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Change activation rule" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -169,7 +169,7 @@ test.describe("toggle lifecycle — configure activation rule", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.rule.approved" });
     await expect(pendingRow).toContainText("Change activation rule");
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();
@@ -187,7 +187,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.delete.direct");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -210,7 +210,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.delete.undo");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     await rootPage.goto(`/applications/${fixtures.appId}`);
     await rootPage.getByRole("switch", { name: "e2e.delete.undo" }).waitFor();
@@ -231,7 +231,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     const rootPage = await rootContext.newPage();
     await createToggle(rootContext.request, fixtures.appId, "e2e.delete.approved");
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Delete toggle" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -249,7 +249,7 @@ test.describe("toggle lifecycle — delete a leaf", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.delete.approved" });
     await expect(pendingRow).toContainText("Delete toggle");
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     await adminPage.reload();

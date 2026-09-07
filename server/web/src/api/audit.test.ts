@@ -113,4 +113,18 @@ describe("listApplicationAudit", () => {
     expect(calledUrl).toContain("cursor=abc");
     expect(calledUrl).toContain("limit=10");
   });
+
+  // v2.6 §7 — a Activity tab ganhou os mesmos filtros de categoria/intervalo da History (achado
+  // real depois que o design-graph passou a extrair ActivityView de verdade), nunca ator (a
+  // Activity real nunca teve um <select> de ator).
+  it("encodes category and range as query params", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: [], next_cursor: "" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listApplicationAudit("app-1", { category: "keys", range: "7d" });
+
+    const calledUrl = fetchMock.mock.calls[0][0] as string;
+    expect(calledUrl).toContain("category=keys");
+    expect(calledUrl).toContain("range=7d");
+  });
 });

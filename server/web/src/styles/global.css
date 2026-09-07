@@ -476,6 +476,18 @@ input[type="checkbox"] {
   margin-top: 5px;
   max-width: 56ch;
 }
+/* v2.6 §7 — HistoryView real: ícone shield + "Root only..." abaixo do page-desc. O `d` exato do
+   glifo não é exposto pela extração do design-graph (só o USO `<Icon name="shield"/>`), mas esta
+   classe em si também não tem estilo indexado — dimensionada aqui pra bater com o padrão visual
+   já estabelecido de legenda pequena e discreta (mesmo tom/tamanho de `.field-hint`). */
+.scope-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
 .grid {
   display: grid;
   gap: var(--gap);
@@ -2783,5 +2795,29 @@ input[type="checkbox"] {
   .toast {
     width: 100%;
     justify-content: center;
+  }
+
+  /* v2.6 §6.5/§8.4: a barra de seleção múltipla nunca tinha um breakpoint — "{N} selected" +
+     2 botões numa única linha sem wrap transbordava (overflow horizontal) em telas estreitas.
+     Mesmo padrão de `.tree-toolbar .search` acima: o item que precisa de mais espaço vira
+     `flex: 1 1 100%` pra empurrar o resto pra uma segunda linha. */
+  .bulk-bar {
+    flex-wrap: wrap;
+  }
+  .bulk-bar > span {
+    flex: 1 1 100%;
+  }
+  .bulk-bar .btn {
+    flex: 1;
+  }
+
+  /* v2.6 §6.1/§6.2/§8.4: command palette (⌘K) — `min(560px, 92vw)` já cabe na largura, mas
+     `padding-top: 12vh` fixo desperdiça espaço vertical demais numa tela pequena (ou em paisagem,
+     onde 12vh some quase todo o viewport); reduzido só neste breakpoint. */
+  .cmdk-scrim {
+    padding-top: max(6vh, env(safe-area-inset-top));
+  }
+  .cmdk-box {
+    max-height: 76vh;
   }
 }

@@ -31,7 +31,7 @@ test("a team's approval requests are invisible and unreachable to another team's
   await createToggle(rootContext.request, appBId, toggleBPath);
 
   await goToApprovalSettings(rootPage);
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Disable toggle (recursive, whole subtree)" }));
 
   // Admin A is a plain member of team A (not an approver) — their request sits pending for

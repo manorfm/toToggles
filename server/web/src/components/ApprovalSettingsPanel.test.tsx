@@ -50,9 +50,9 @@ describe("ApprovalSettingsPanel", () => {
   it("shows the disabled-system copy and notice when approval_enabled is false", () => {
     renderPanel();
 
-    expect(screen.getByText(/sistema de aprovação/i)).toBeInTheDocument();
-    expect(screen.getByText(/todas as ações executam imediatamente/i)).toBeInTheDocument();
-    expect(screen.getByText(/todas as ações executam diretamente/i)).toBeInTheDocument();
+    expect(screen.getByText(/approval system/i)).toBeInTheDocument();
+    expect(screen.getByText(/every action runs immediately/i)).toBeInTheDocument();
+    expect(screen.getByText(/every action runs directly/i)).toBeInTheDocument();
     expect(screen.queryByText("Delete toggle")).not.toBeInTheDocument();
   });
 
@@ -60,7 +60,7 @@ describe("ApprovalSettingsPanel", () => {
     renderPanel({ settings: settings({ approval_enabled: true }) });
 
     expect(screen.getByText("Delete toggle")).toBeInTheDocument();
-    expect(screen.getByText((_, el) => el?.className === "badge on" && el.textContent === "6 ativas")).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.className === "badge on" && el.textContent === "6 active")).toBeInTheDocument();
   });
 
   it("calls onToggleSystem when the master switch is clicked", async () => {
@@ -68,7 +68,7 @@ describe("ApprovalSettingsPanel", () => {
     const user = userEvent.setup();
     renderPanel({ onToggleSystem });
 
-    await user.click(screen.getByRole("button", { name: /sistema de aprovação/i }));
+    await user.click(screen.getByRole("button", { name: /approval system/i }));
 
     expect(onToggleSystem).toHaveBeenCalledTimes(1);
   });

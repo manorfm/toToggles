@@ -362,6 +362,15 @@ export function AppShell() {
           </div>
         </div>
 
+        {/* v2.6 §6.1/§6.2 — confirmado agora que "App" ficou alcançável no design-graph
+            (get_section(screen="App", section="sidebar")): um item de nav clicável pro command
+            palette, além do atalho de teclado (⌘K/Ctrl+K, já existente) — descoberto só agora
+            porque a árvore autenticada de App era um buraco conhecido da ferramenta antes desta
+            atualização (ver docs/investigation/design-graph-findings.md). */}
+        <button className="nav-item" onClick={() => setPaletteOpen(true)}>
+          <Icon name="search" size={17} /> Search <span className="count">⌘K</span>
+        </button>
+
         <nav style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {(favApps.length > 0 || favToggles.length > 0) && (
             <>

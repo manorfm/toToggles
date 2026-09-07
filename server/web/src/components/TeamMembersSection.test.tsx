@@ -74,16 +74,16 @@ describe("TeamMembersSection", () => {
     await user.click(screen.getByRole("button", { name: /create a new user for this team/i }));
 
     // O time já vem travado — sem seletor de time nenhum pra escolher aqui.
-    const select = screen.getByLabelText(/^time$/i) as HTMLSelectElement;
+    const select = screen.getByLabelText(/^team$/i) as HTMLSelectElement;
     expect(select).toBeDisabled();
     expect(select).toHaveValue("team1");
 
-    await user.type(screen.getByLabelText(/nome completo/i), "Ana Ribeiro");
-    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+    await user.type(screen.getByLabelText(/full name/i), "Ana Ribeiro");
+    await user.click(screen.getByRole("button", { name: /^create user$/i }));
 
     expect(await screen.findByText("abc123")).toBeInTheDocument(); // TempPasswordModal, reveal-once
     await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: /entendi/i }));
+    await user.click(screen.getByRole("button", { name: /got it, i saved it/i }));
 
     expect(await screen.findByText("ana.ribeiro")).toBeInTheDocument(); // lista recarregada
   });

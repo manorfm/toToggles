@@ -41,20 +41,20 @@ export function ApprovalSettingsPanel({
 
       <div className="appr-system-row">
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 16 }}>Sistema de aprovação</div>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>Approval system</div>
           <div style={{ fontSize: 13.5, color: "var(--ink-3)", marginTop: 6, lineHeight: 1.55, maxWidth: "48ch" }}>
             {settings.approval_enabled ? (
               <>
-                Sistema <b style={{ color: "var(--accent)" }}>ativo</b> — ações configuradas passam por revisão antes de executar.
-                Root nunca é bloqueado.
+                System <b style={{ color: "var(--accent)" }}>active</b> — configured actions go through review before
+                running. Root is never blocked.
               </>
             ) : (
-              <>Sistema <b>desativado</b> — todas as ações executam imediatamente, sem nenhuma etapa de revisão.</>
+              <>System <b>disabled</b> — every action runs immediately, with no review step.</>
             )}
           </div>
         </div>
         <button
-          aria-label="Sistema de aprovação"
+          aria-label="Approval system"
           className={"switch lg" + (settings.approval_enabled ? " on" : "")}
           style={{ flexShrink: 0 }}
           disabled={busy}
@@ -65,10 +65,8 @@ export function ApprovalSettingsPanel({
       {settings.approval_enabled && (
         <div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
-            <div className="section-h" style={{ margin: 0 }}>Ações que exigem aprovação</div>
-            <span className="badge on">
-              {totalOn} ativa{totalOn !== 1 ? "s" : ""}
-            </span>
+            <div className="section-h" style={{ margin: 0 }}>Actions that require approval</div>
+            <span className="badge on">{totalOn} active</span>
           </div>
           {APPROVAL_ACTION_GROUPS.map((group) => {
             const actions = APPROVAL_ACTIONS.filter((a) => a.group === group);
@@ -109,8 +107,8 @@ export function ApprovalSettingsPanel({
         <div className="notice" style={{ maxWidth: 560 }}>
           <Icon name="warn" size={16} />
           <span>
-            Com o sistema desativado, <b>todas as ações executam diretamente</b>, sem revisão, para todos os usuários
-            (exceto root, que nunca precisa de aprovação mesmo com o sistema ativo).
+            With the system disabled, <b>every action runs directly</b>, with no review, for all users (except root,
+            who never needs approval even when the system is active).
           </span>
         </div>
       )}

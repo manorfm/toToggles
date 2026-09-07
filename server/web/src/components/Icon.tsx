@@ -29,7 +29,10 @@ export type IconName =
   | "rocket"
   | "menu"
   | "refresh"
-  | "star";
+  | "star"
+  | "shield"
+  | "chevright"
+  | "code";
 
 interface IconProps {
   name: IconName;
@@ -227,6 +230,22 @@ const paths: Record<IconName, JSX.Element> = {
   // v2.6 §6.4 (favoritos) — confirmado no icons.jsx real, mesmo bundle já usado pro resto deste
   // arquivo.
   star: <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 6.91-1.01z" />,
+  // v2.6 §7 — usado pelo "scope-note" do History real ("Root only..."). Confirmado
+  // literalmente via get_component_data("Icon") depois que o design-graph ganhou essa tool —
+  // antes só o USO `<Icon name="shield"/>` era visível, nunca o mapa ICONS em si; o path
+  // aproximado usado até então (Feather/Lucide "shield" padrão) já batia exatamente com o real.
+  shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+  // Confirmados via get_component_data("Icon") — antes duas substituições deliberadas por falta
+  // de dado (ver o comentário no topo de OnboardingSteps.tsx, agora desatualizado): o card
+  // "Integration" do onboarding usava "settings" no lugar de "code", e toda seta "→" usava
+  // "chevron-down" rotacionado -90° no lugar de "chevright" — ambos corrigidos pros glifos reais.
+  chevright: <path d="M9 18l6-6-6-6" />,
+  code: (
+    <>
+      <path d="M16 18l6-6-6-6" />
+      <path d="M8 6l-6 6 6 6" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 16, strokeWidth = 2, fill = false, className, style }: IconProps) {

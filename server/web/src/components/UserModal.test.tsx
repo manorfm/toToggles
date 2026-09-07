@@ -26,8 +26,8 @@ describe("UserModal", () => {
     render(<UserModal isRoot onClose={vi.fn()} onCreated={onCreated} />);
 
     expect(await screen.findByRole("option", { name: "Payments Squad" })).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/nome completo/i), "Ana Ribeiro");
-    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+    await user.type(screen.getByLabelText(/full name/i), "Ana Ribeiro");
+    await user.click(screen.getByRole("button", { name: /^create user$/i }));
 
     await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ password: "abc123" })));
     expect(fetchMock).toHaveBeenCalledWith(
@@ -45,14 +45,14 @@ describe("UserModal", () => {
     render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
 
-    await user.type(screen.getByLabelText(/nome completo/i), "José Ávila");
+    await user.type(screen.getByLabelText(/full name/i), "José Ávila");
     expect(screen.getByLabelText(/^username$/i)).toHaveValue("jose.avila");
 
     // Editar o username manualmente destrava a sugestão automática — digitar mais no nome não
     // sobrescreve o que o usuário já escolheu.
     await user.clear(screen.getByLabelText(/^username$/i));
     await user.type(screen.getByLabelText(/^username$/i), "custom.handle");
-    await user.type(screen.getByLabelText(/nome completo/i), " Filho");
+    await user.type(screen.getByLabelText(/full name/i), " Filho");
 
     expect(screen.getByLabelText(/^username$/i)).toHaveValue("custom.handle");
   });
@@ -67,40 +67,40 @@ describe("UserModal", () => {
 
     await user.clear(screen.getByLabelText(/^username$/i));
     await user.type(screen.getByLabelText(/^username$/i), "ana.ribeiro");
-    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+    await user.click(screen.getByRole("button", { name: /^create user$/i }));
 
     expect(await screen.findByText("Informe o nome completo.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith("/api/users", expect.anything());
   });
 
-  it("keeps the 'Aprovador do time' field mounted (animated reveal) but hidden until root selects role Admin", async () => {
+  it("keeps the 'Team approver' field mounted (animated reveal) but hidden until root selects role Admin", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] })));
     const user = userEvent.setup();
 
     render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
 
-    const wrapper = screen.getByText("Aprovador do time").closest(".toggle-field-wrap");
+    const wrapper = screen.getByText("Team approver").closest(".toggle-field-wrap");
     expect(wrapper).toHaveAttribute("aria-hidden", "true");
     // { hidden: true }: getByRole por padrão respeita a árvore de acessibilidade, que exclui
     // tudo dentro de aria-hidden="true" — precisa incluir explicitamente pra inspecionar o
     // switch enquanto escondido (o próprio ponto do teste).
-    expect(screen.getByRole("switch", { name: /aprovador do time/i, hidden: true })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("switch", { name: /team approver/i, hidden: true })).toHaveAttribute("tabindex", "-1");
 
-    await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
+    await user.selectOptions(screen.getByLabelText(/role/i), "admin");
     expect(wrapper).toHaveAttribute("aria-hidden", "false");
-    expect(screen.getByRole("switch", { name: /aprovador do time/i })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("switch", { name: /team approver/i })).toHaveAttribute("tabindex", "0");
   });
 
-  it("names the selected team in the 'Aprovador do time' hint", async () => {
+  it("names the selected team in the 'Team approver' hint", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [{ id: "t1", name: "Payments Squad" }] })));
     const user = userEvent.setup();
 
     render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
-    await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
+    await user.selectOptions(screen.getByLabelText(/role/i), "admin");
 
-    expect(screen.getByText(/do time Payments Squad/i)).toBeInTheDocument();
+    expect(screen.getByText(/of Payments Squad/i)).toBeInTheDocument();
   });
 
   it("never shows the approver switch for a non-root (admin) creator, even with role Admin selected", async () => {
@@ -110,8 +110,8 @@ describe("UserModal", () => {
     render(<UserModal isRoot={false} onClose={vi.fn()} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
 
-    await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
-    expect(screen.queryByText("Aprovador do time")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(/role/i), "admin");
+    expect(screen.queryByText("Team approver")).not.toBeInTheDocument();
   });
 
   it("sends is_approver true when the switch is toggled on", async () => {
@@ -124,10 +124,10 @@ describe("UserModal", () => {
 
     render(<UserModal isRoot onClose={vi.fn()} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
-    await user.selectOptions(screen.getByLabelText(/papel/i), "admin");
-    await user.click(screen.getByRole("switch", { name: /aprovador do time/i }));
-    await user.type(screen.getByLabelText(/nome completo/i), "X");
-    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+    await user.selectOptions(screen.getByLabelText(/role/i), "admin");
+    await user.click(screen.getByRole("switch", { name: /team approver/i }));
+    await user.type(screen.getByLabelText(/full name/i), "X");
+    await user.click(screen.getByRole("button", { name: /^create user$/i }));
 
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -142,8 +142,8 @@ describe("UserModal", () => {
 
     render(<UserModal isRoot={false} onClose={vi.fn()} onCreated={vi.fn()} />);
 
-    expect(await screen.findByText(/precisa estar em um time/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^criar usuário$/i })).toBeDisabled();
+    expect(await screen.findByText(/need to belong to a team/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^create user$/i })).toBeDisabled();
   });
 
   it("locks the team to presetTeamId without fetching team options, and names it in the hint", async () => {
@@ -156,15 +156,15 @@ describe("UserModal", () => {
 
     render(<UserModal isRoot presetTeamId="t1" presetTeamName="Payments Squad" onClose={vi.fn()} onCreated={vi.fn()} />);
 
-    const select = screen.getByLabelText(/^time$/i) as HTMLSelectElement;
+    const select = screen.getByLabelText(/^team$/i) as HTMLSelectElement;
     expect(select).toBeDisabled();
     expect(select).toHaveValue("t1");
-    expect(screen.getByText(/adicionando direto em payments squad/i)).toBeInTheDocument();
+    expect(screen.getByText(/adding directly to payments squad/i)).toBeInTheDocument();
     // GET /teams (ou /profile/teams) nunca deveria ter sido chamado — o time já é conhecido.
     expect(fetchMock).not.toHaveBeenCalledWith("/api/teams", expect.anything());
 
-    await user.type(screen.getByLabelText(/nome completo/i), "X");
-    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+    await user.type(screen.getByLabelText(/full name/i), "X");
+    await user.click(screen.getByRole("button", { name: /^create user$/i }));
 
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -186,8 +186,8 @@ describe("UserModal", () => {
 
     render(<UserModal isRoot onClose={onClose} onCreated={vi.fn()} />);
     await screen.findByRole("option", { name: "Payments Squad" });
-    await user.type(screen.getByLabelText(/nome completo/i), "Bob Test");
-    await user.click(screen.getByRole("button", { name: /^criar usuário$/i }));
+    await user.type(screen.getByLabelText(/full name/i), "Bob Test");
+    await user.click(screen.getByRole("button", { name: /^create user$/i }));
 
     expect(await screen.findByText(/username already exists/i)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

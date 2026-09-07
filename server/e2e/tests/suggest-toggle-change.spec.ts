@@ -53,7 +53,7 @@ test("a read-only user suggests a change and root approves it, applying the togg
   await rootPage.getByRole("button", { name: "Pending" }).click();
   const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.suggest.target" });
   await expect(pendingRow).toContainText("Disable toggle");
-  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   await userPage.reload();

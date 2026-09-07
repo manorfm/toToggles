@@ -31,6 +31,9 @@ describe("RejectApprovalModal", () => {
   it("shows the request's action, requester and target", () => {
     render(<RejectApprovalModal request={request} onClose={vi.fn()} onRejected={vi.fn()} />);
 
+    // v2.6 §7 (fidelity pass, 2ª rodada) — "Action" tinha ficado de fora inteira; confirmado via
+    // get_full_jsx("RejectModal") que o resumo tem 3 linhas (Action/Requested by/Target), não 2.
+    expect(screen.getByText("Delete toggle")).toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
     expect(screen.getByText("payments.card")).toBeInTheDocument();
   });
@@ -43,8 +46,8 @@ describe("RejectApprovalModal", () => {
     const user = userEvent.setup();
 
     render(<RejectApprovalModal request={request} onClose={onClose} onRejected={onRejected} />);
-    await user.type(screen.getByLabelText(/motivo/i), "Toggle still in use");
-    await user.click(screen.getByRole("button", { name: /confirmar rejeição/i }));
+    await user.type(screen.getByLabelText(/rejection reason/i), "Toggle still in use");
+    await user.click(screen.getByRole("button", { name: /confirm rejection/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/approval/requests/1/reject",
@@ -60,7 +63,7 @@ describe("RejectApprovalModal", () => {
     const user = userEvent.setup();
 
     render(<RejectApprovalModal request={request} onClose={vi.fn()} onRejected={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /confirmar rejeição/i }));
+    await user.click(screen.getByRole("button", { name: /confirm rejection/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/approval/requests/1/reject",

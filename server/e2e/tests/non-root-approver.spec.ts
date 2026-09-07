@@ -12,7 +12,7 @@ test("a designated team approver (not root) can see and approve someone else's r
   const rootPage = await rootContext.newPage();
   await createToggle(rootContext.request, fixtures.appId, "e2e.nonrootapprove.target");
   await goToApprovalSettings(rootPage);
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Disable toggle (recursive, whole subtree)" }));
 
   // Cria o aprovador direto por API — role admin (só admin/root podem ser aprovadores,
@@ -52,7 +52,7 @@ test("a designated team approver (not root) can see and approve someone else's r
   await approverPage.getByRole("button", { name: "Approvable" }).click();
   const pendingRow = approverPage.locator(".appr-row", { hasText: "e2e.nonrootapprove.target" });
   await expect(pendingRow).toContainText("Disable toggle");
-  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   await adminPage.reload();

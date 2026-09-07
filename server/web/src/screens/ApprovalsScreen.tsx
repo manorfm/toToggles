@@ -35,10 +35,15 @@ type SettingsState =
   | { status: "error"; message: string };
 
 // Adaptado de get_screen_full("ApprovalsView") — uma ÚNICA tela com abas (Pending/Mine/Settings),
-// não três rotas separadas como numa fase anterior desta reescrita: "Configurar" no banner de
+// não três rotas separadas como numa fase anterior desta reescrita: "Configure" no banner de
 // status (root only) só troca de aba, nunca navega. ApprovalSettingsView é literalmente uma aba
 // desta tela no protótipo, não um destino de navegação próprio — settings/get_full_jsx confirma
 // o componente sendo renderizado inline quando tab === "settings".
+//
+// Fase 6 (fidelity pass): page-desc e o botão do banner de status ("Configurar") tinham ficado em
+// português por engano num decode anterior — get_full_jsx("ApprovalsView") confirma o texto real
+// (inglês): "Manage the approval system..."/"Review your team's requests..."/"System active/
+// disabled · N configured actions"/"Configure".
 export function ApprovalsScreen() {
   const user = useAppUser();
   const toast = useToast();
@@ -243,8 +248,8 @@ export function ApprovalsScreen() {
           <div className="page-title">Approval Management</div>
           <div className="page-desc">
             {isRoot
-              ? "Gerencie o sistema de aprovação, configure ações e decida solicitações pendentes."
-              : "Revise solicitações do seu time e acompanhe as suas próprias requisições."}
+              ? "Manage the approval system, configure actions and decide pending requests."
+              : "Review your team's requests and track your own."}
           </div>
         </div>
       </div>
@@ -254,12 +259,12 @@ export function ApprovalsScreen() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
             <Icon name={settingsState.settings.approval_enabled ? "check" : "warn"} size={16} />
             <span>
-              Sistema <b>{settingsState.settings.approval_enabled ? "ativo" : "desativado"}</b>
-              {settingsState.settings.approval_enabled && ` · ${totalActionsOn} ações configuradas`}
+              System <b>{settingsState.settings.approval_enabled ? "active" : "disabled"}</b>
+              {settingsState.settings.approval_enabled && ` · ${totalActionsOn} configured actions`}
             </span>
           </div>
           <button className="btn btn-soft btn-sm" onClick={() => setTab("settings")}>
-            <Icon name="settings" size={14} /> Configurar
+            <Icon name="settings" size={14} /> Configure
           </button>
         </div>
       )}
@@ -315,8 +320,8 @@ export function ApprovalsScreen() {
           {requestsState.status === "loaded" && requestsState.requests.length === 0 && (
             <div className="empty">
               <Icon name={tab === "pending" ? "check" : "user"} size={40} />
-              <div className="et">{tab === "pending" ? "Tudo limpo" : "Nenhum registro"}</div>
-              <div className="ed">{tab === "pending" ? "Nenhuma solicitação pendente." : "Nenhuma entrada aqui ainda."}</div>
+              <div className="et">{tab === "pending" ? "All clear" : "No records"}</div>
+              <div className="ed">{tab === "pending" ? "No pending requests." : "Nothing here yet."}</div>
             </div>
           )}
 

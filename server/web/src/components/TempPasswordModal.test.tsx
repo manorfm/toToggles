@@ -4,15 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import { TempPasswordModal } from "./TempPasswordModal";
 
 describe("TempPasswordModal", () => {
-  it("titles itself 'Usuário criado' by default", () => {
+  it("titles itself 'User created' by default", () => {
     render(<TempPasswordModal username="ana" password="abc123" onClose={vi.fn()} />);
-    expect(screen.getByText("Usuário criado")).toBeInTheDocument();
+    expect(screen.getByText("User created")).toBeInTheDocument();
     expect(screen.getByText("abc123")).toBeInTheDocument();
   });
 
-  it("titles itself 'Senha provisória redefinida' when reset is true", () => {
+  it("titles itself 'Temporary password reset' when reset is true", () => {
     render(<TempPasswordModal username="ana" password="abc123" reset onClose={vi.fn()} />);
-    expect(screen.getByText("Senha provisória redefinida")).toBeInTheDocument();
+    expect(screen.getByText("Temporary password reset")).toBeInTheDocument();
   });
 
   it("only allows closing after acknowledging", async () => {
@@ -20,7 +20,7 @@ describe("TempPasswordModal", () => {
     const user = userEvent.setup();
     render(<TempPasswordModal username="ana" password="abc123" onClose={onClose} />);
 
-    const doneButton = screen.getByRole("button", { name: /entendi/i });
+    const doneButton = screen.getByRole("button", { name: /got it, i saved it/i });
     expect(doneButton).toBeDisabled();
 
     await user.click(screen.getByRole("checkbox"));

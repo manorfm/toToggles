@@ -1501,12 +1501,13 @@ same `actor_id` ever logged under a different name.
 ```
 
 ```http
-GET /api/applications/:id/audit?cursor=<opaque>&limit=30
+GET /api/applications/:id/audit?category=toggles&range=7d&cursor=<opaque>&limit=30
 ```
 
 The per-application **Activity tab** (v2.6 §7) — every authenticated role, **no team-membership check
 at all**, matching `GET /api/applications/:id`'s own (lack of) access control. Returns exactly the
 events with `application_id` equal to `:id` (see above for when that's set), same shape/pagination as
-`GET /api/audit`, but never scoped by category/actor/range — an application's own activity is always
-homogeneous enough (toggle + application lifecycle events for that one app) that those filters weren't
-worth adding here too.
+`GET /api/audit`, and the same `category`/`range` filters (the confirmed `ActivityView` renders its own
+`AuditChips` + a range-only `AuditToolbar` — no actor `<select>`, since a single application's own
+activity has no notion of "which team member" the way the global History does). `actor_id` is **not**
+accepted here — pass it to `GET /api/audit` instead.

@@ -1267,4 +1267,92 @@ func TestAuditIntegration_GetApplicationAudit_VisibleToAnyAuthenticatedUser(t *t
 	}
 }
 
+// v2.6 §7 — fidelity gap real, achado depois que o design-graph passou a conseguir extrair
+// ActivityView de verdade (antes um "buraco" conhecido da ferramenta, ver
+// docs/investigation/design-graph-unreachable-components.md): a Activity tab tem filtro de
+// categoria (AuditChips) e de intervalo (o mesmo AuditToolbar da History, só sem o <select> de
+// ator) — nunca implementado porque a fonte real nunca tinha sido vista antes.
+func TestAuditIntegration_GetApplicationAudit_FiltersByCategoryAndRange(t *testing.T) {
+	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
+
+	app := &entity.Application{ID: "app-1", Name: "Checkout Web"}
+	if err := db.Create(app).Error; err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	if err := db.Create(&entity.TeamApplication{TeamID: "team-1", ApplicationID: app.ID, Permission: entity.PermissionAdmin}).Error; err != nil {
+		t.Fatalf("failed to associate application to team: %v", err)
+	}
+
+	// Semeados direto no banco (mais simples que passar pelas rotas reais aqui — o que este
+	// teste exercita é o filtro de GET .../audit, não a gravação em si, já coberta por outros
+	// testes deste arquivo): um toggle_created recente (category=toggles) e um key_generated de
+	// 48h atrás (category=keys).
+	recentToggleEvent := entity.NewAuditLog(entity.AuditEventToggleCreated, "Created toggle <b>payments.new-feature</b>", "Checkout Web", stringPtr("team-1"), teamAdmin.ID, teamAdmin.Name)
+	recentToggleEvent.ApplicationID = &app.ID
+	if err := db.Create(recentToggleEvent).Error; err != nil {
+		t.Fatalf("failed to seed toggle_created entry: %v", err)
+	}
+
+	oldKeyEvent := entity.NewAuditLog(entity.AuditEventKeyGenerated, "Generated service key", "Checkout Web", stringPtr("team-1"), teamAdmin.ID, teamAdmin.Name)
+	oldKeyEvent.ApplicationID = &app.ID
+	if err := db.Create(oldKeyEvent).Error; err != nil {
+		t.Fatalf("failed to seed key_generated entry: %v", err)
+	}
+	if err := db.Model(&entity.AuditLog{}).Where("id = ?", oldKeyEvent.ID).Update("created_at", time.Now().Add(-48*time.Hour)).Error; err != nil {
+		t.Fatalf("failed to force created_at: %v", err)
+	}
+
+	fetchEventTypes := func(query string) []string {
+		req := httptest.NewRequest(http.MethodGet, "/applications/app-1/audit"+query, nil)
+		req.Header.Set("X-Test-User", teamAdmin.ID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 from GET .../audit%s, got %d: %s", query, w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data []struct {
+				EventType string `json:"event_type"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid JSON response: %v", err)
+		}
+		types := make([]string, len(resp.Data))
+		for i, e := range resp.Data {
+			types[i] = e.EventType
+		}
+		return types
+	}
+
+	t.Run("category=keys narrows to the key_generated entry only", func(t *testing.T) {
+		types := fetchEventTypes("?category=keys")
+		if len(types) != 1 || types[0] != "key_generated" {
+			t.Errorf("expected only key_generated, got %v", types)
+		}
+	})
+
+	t.Run("range=24h excludes the 48h-old key_generated entry", func(t *testing.T) {
+		types := fetchEventTypes("?range=24h")
+		for _, ty := range types {
+			if ty == "key_generated" {
+				t.Errorf("expected the 48h-old entry to be excluded by range=24h, got %v", types)
+			}
+		}
+		if len(types) != 1 || types[0] != "toggle_created" {
+			t.Errorf("expected only the recent toggle_created entry, got %v", types)
+		}
+	})
+
+	t.Run("invalid category is rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/applications/app-1/audit?category=bogus", nil)
+		req.Header.Set("X-Test-User", teamAdmin.ID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for an invalid category, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
 func stringPtr(s string) *string { return &s }

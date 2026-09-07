@@ -186,10 +186,15 @@ func (uc *AuditUseCase) List(ctx context.Context, opts AuditListOptions, cursor 
 // ListForApplication devolve uma página do audit trail de UMA aplicação (a Activity tab, v2.6
 // §7) — sem `caller` nenhum e sem passar por AuditAccess de propósito: qualquer usuário
 // autenticado pode ver a atividade de uma aplicação, a mesma postura de acesso já usada por GET
-// /applications/:id (nenhuma checagem de time por trás dela hoje).
-func (uc *AuditUseCase) ListForApplication(ctx context.Context, applicationID string, cursor *repository.AuditLogCursor, limit int) ([]*entity.AuditLog, error) {
+// /applications/:id (nenhuma checagem de time por trás dela hoje). Aceita o mesmo
+// AuditListOptions de List (categoria + intervalo, confirmados também na ActivityView real depois
+// que o design-graph passou a extrair esse componente) — só `opts.ActorID` nunca é usado aqui de
+// propósito: a Activity nunca ofereceu um filtro de ator na UI confirmada.
+func (uc *AuditUseCase) ListForApplication(ctx context.Context, applicationID string, opts AuditListOptions, cursor *repository.AuditLogCursor, limit int) ([]*entity.AuditLog, error) {
 	logs, err := uc.repo.List(ctx, repository.AuditLogFilter{
 		ApplicationID: applicationID,
+		Category:      opts.Category,
+		CreatedAfter:  opts.CreatedAfter,
 		Cursor:        cursor,
 		Limit:         clampAuditLimit(limit),
 	})

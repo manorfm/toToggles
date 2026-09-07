@@ -89,7 +89,7 @@ export function ToggleCard({
               aria-label={leaf.segs.join(".")}
               className={"switch" + (leafOn ? " on" : "") + " dis"}
               disabled
-              title="Somente leitura"
+              title="Read-only"
             />
             {onSuggest && (
               <button className="icon-btn" title="Suggest a change" aria-label="Suggest a change" onClick={() => onSuggest(leaf)}>

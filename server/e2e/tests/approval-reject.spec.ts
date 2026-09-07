@@ -8,7 +8,7 @@ test("root rejects a pending request: nothing is applied, admin sees it as Rejec
   const rootPage = await rootContext.newPage();
   await createToggle(rootContext.request, fixtures.appId, "e2e.reject.target");
   await goToApprovalSettings(rootPage);
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Disable toggle (recursive, whole subtree)" }));
 
   const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -23,21 +23,24 @@ test("root rejects a pending request: nothing is applied, admin sees it as Rejec
   await rootPage.getByRole("button", { name: "Pending" }).click();
   const pendingRow = rootPage.locator(".appr-row", { hasText: "e2e.reject.target" });
   await expect(pendingRow).toContainText("Disable toggle");
-  await pendingRow.getByRole("button", { name: "Rejeitar" }).click();
+  await pendingRow.getByRole("button", { name: "Reject" }).click();
 
-  await rootPage.locator("#reject-reason").fill("Ainda em uso pelo app mobile.");
-  await rootPage.getByRole("button", { name: "Confirmar rejeição" }).click();
+  await rootPage.locator("#reject-reason").fill("Still in use by the mobile app.");
+  await rootPage.getByRole("button", { name: "Confirm rejection" }).click();
   await expect(pendingRow).toHaveCount(0); // some da lista de pendentes
 
   // Nada foi aplicado: o toggle continua ligado.
   await adminPage.reload();
   await expect(sw).toHaveAttribute("aria-checked", "true");
 
-  // Admin vê a própria solicitação como "Rejeitado" (StatusChip é PT-BR) na aba "Mine".
+  // Admin vê a própria solicitação como "Rejected" na aba "Mine" — confirmado via
+  // get_full_jsx("ApprovalStatusChip") (o comentário anterior aqui dizia, erradamente, que era
+  // PT-BR; nunca tinha sido cruzado contra a fonte real — mesmo tipo de erro corrigido em
+  // ApprovalRow.tsx, ver server/CLAUDE.md).
   await adminPage.goto("/approvals");
   await adminPage.getByRole("button", { name: "Mine" }).click();
   const mineRow = adminPage.locator(".appr-row", { hasText: "e2e.reject.target" });
-  await expect(mineRow).toContainText("Rejeitado");
+  await expect(mineRow).toContainText("Rejected");
 
   await rootContext.close();
   await adminContext.close();

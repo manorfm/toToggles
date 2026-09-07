@@ -13,7 +13,18 @@ listadas.
 
 ## Achado 1 (o mais impactante): componentes com múltiplos `return` só expõem UM branch
 
-**Sintoma**: `get_full_jsx("App")` e `get_component_spec("App")` sempre devolvem só
+> **RESOLVIDO** (2026-09-06): depois de uma atualização/reindexação do design-graph pedida pelo
+> usuário, `get_full_jsx("App")` e `get_component_spec("App")` agora devolvem **todos** os
+> branches, cada um rotulado explicitamente: `{[return_branch:1]}` (o `FirstLoginScreen`),
+> `{[return_branch:2]}` (o `LoginScreen`), `{[return_branch:default]}` (a shell autenticada
+> inteira — sidebar, topbar, roteamento de view). Exatamente a melhoria sugerida na opção (a)
+> abaixo. Reproduzido e confirmado nesta sessão; ver também
+> `docs/investigation/design-graph-unreachable-components.md`, que documenta um problema
+> relacionado (6 componentes específicos que falhavam com "JSX completo não disponível") corrigido
+> pela mesma atualização.
+
+**Sintoma (histórico, como estava antes do conserto)**: `get_full_jsx("App")` e
+`get_component_spec("App")` sempre devolviam só
 
 ```jsx
 <FirstLoginScreen user={firstLogin} onComplete={completeFirstLogin} onCancel={() => setFirstLogin(null)} />
@@ -49,9 +60,26 @@ parece uma resposta completa.
 
 ## Achado 2: listas de textos/estilos truncam sem paginação nem flag pra ver tudo
 
-**Sintoma**: `get_component_spec("App")` devolve só 8 textos com `> ... +7 mais` no final — sem
-nenhum parâmetro pra pedir os +7 restantes. O mesmo vale pra "Estilos — default" (`+13 mais` /
-`+24 mais` dependendo da chamada).
+> **RESOLVIDO** (2026-09-07): uma nova atualização do design-graph trouxe duas tools novas,
+> exatamente a sugestão de melhoria pedida abaixo — `get_full_texts(name)` (o `get_full_styles`
+> equivalente pra textos, sem corte) e `get_component_data(name)` (devolve o conteúdo COMPLETO e
+> sem corte de qualquer constante em nível de módulo que o corpo do componente referencia por
+> nome — ex.: o mapa `ICONS[name] -> path SVG`, ou uma tabela `role -> badge`). Testado e
+> confirmado: `get_full_texts(name="ApprovalRow")` devolve os 5 textos sem nenhum "+N mais";
+> `get_component_data(name="Icon")` devolveu o mapa `ICONS` inteiro do `icons.jsx` real — 30+
+> glifos com o `d` (path SVG) exato de cada um, nunca antes visível pelo design-graph (só o USO
+> `<Icon name="X"/>` aparecia, nunca o path em si). Isso fechou de vez o workaround do Achado 4
+> especificamente pra dados referenciados (ICONS e afins) — não precisa mais decodificar o bundle
+> pra confirmar um path de ícone.
+>
+> **Ressalva — ver Achado 6**: `get_full_texts`/`get_component_data` erram a resolução de nome
+> quando o nome pedido é PREFIXO de outros nomes de componente (ex.: `name="App"` resolve pro
+> componente errado, `AppStep`, em vez do componente raiz `App`) — funcionam perfeitamente pra
+> nomes sem essa ambiguidade (`ApprovalRow`, `Icon`, `MemberRow` testados e corretos).
+
+**Sintoma histórico (como estava antes do conserto)**: `get_component_spec("App")` devolvia só 8
+textos com `> ... +7 mais` no final — sem nenhum parâmetro pra pedir os +7 restantes. O mesmo
+valia pra "Estilos — default" (`+13 mais` / `+24 mais` dependendo da chamada).
 
 **Achado colateral útil**: `validate_component_implementation` internamente parece comparar
 contra a lista COMPLETA de textos do componente (ela reportou textos como `"Each path is a chain
@@ -67,14 +95,30 @@ validate_component_implementation(name="App", jsx_source="<div></div>")
                                                # textos ausentes: 10 mostrados, "+5 mais"
 ```
 
-**Sugestão de melhoria**: um parâmetro `full=true` (ou `limit`/`offset`) em `get_component_spec`/
-`get_screen_full` pra listar textos e estilos sem corte, ou uma tool dedicada
-(`get_component_texts(name, full=true)`) — hoje a única forma de ver a lista completa é fora do
-design-graph.
+**Sugestão de melhoria (implementada)**: uma tool dedicada pra listar textos sem corte — é
+exatamente o que `get_full_texts` faz hoje (ver nota de resolução no topo deste achado).
 
 ---
 
 ## Achado 3: `get_section` não existe pra componentes fora da lista de "telas"
+
+> **RESOLVIDO** (2026-09-07): numa terceira atualização do design-graph nesta mesma sessão, `App`
+> passou a aparecer em `list_screens()` (24 componentes, 7 seções: Sidebar, Topbar, Page, Confirm
+> app row, Skey warn ×2, Toast) e `get_section(screen="App", section="sidebar")`/`section="Page"`
+> agora devolvem dados reais em vez do erro "Seção não encontrada". Usado ao vivo nesta sessão pra
+> confirmar e corrigir dois gaps reais na reescrita: o botão de nav "Search ⌘K" que faltava em
+> `AppShell.tsx` e o branch de page-desc da aba Activity que faltava em
+> `ApplicationDetailScreen.tsx` (ver `server/CLAUDE.md`, bullet "v2.6 §8", pra detalhe). A
+> observação abaixo (duplicação de protótipo sob dois nomes) não foi reverificada nesta rodada —
+> segue como possível pendência à parte.
+>
+> **Observação (ainda não reverificada)**: numa rodada anterior, `list_screens()` chegou a listar
+> o mesmo conjunto de telas duas vezes, sob dois nomes de protótipo diferentes — `toToggle` e
+> `toToggle v2.6` — com conteúdo idêntico. `set_prototype(name="toToggle")` respondia `"Active
+> prototype set to 'toToggle v2.6'"` (parece resolver/redirecionar pro nome novo). Não ficou claro
+> se isso era intencional (versionamento) ou um resíduo da reindexação — vale reconferir numa
+> próxima sessão, já que duplicar todo o grafo por versão pode mascarar buscas futuras (ex.:
+> `search()` pode devolver o mesmo componente duas vezes, uma por doc).
 
 **Sintoma**: `get_section(screen="App", section="sidebar")` devolve `Seção 'sidebar' não
 encontrada em 'App'` — porque `App` nunca aparece em `list_screens()` (só telas menores como
@@ -118,6 +162,14 @@ já está disponível no export, o design-graph poderia usá-lo diretamente como
 indexação (em vez de re-extrair de uma renderização/AST que perde branches condicionais) — isso
 resolveria os Achados 1–3 de uma vez, sem exigir o workaround manual.
 
+> **Status** (atualizado em 2026-09-07): os Achados 1 e 2 foram resolvidos por duas atualizações
+> sucessivas do design-graph (não confirmamos os detalhes internos — não temos acesso ao código da
+> ferramenta). O Achado 3 (`App`/telas-raiz fora de `list_screens`) continua aberto — o workaround
+> manual (decodificar o bundle) ainda seria necessário só pra esse caso específico, mas lembre da
+> diretriz atual do projeto (`CLAUDE.md`): só decodificar o HTML manualmente quando o design-graph
+> genuinamente não tiver a informação (tentando `get_full_jsx`/`get_component_data` primeiro),
+> nunca como primeira opção.
+
 ---
 
 ## Achado 5: seleção de protótipo (`set_prototype`) não sobrevive a reconexões do MCP
@@ -133,13 +185,51 @@ não por-sessão-de-tarefa, já que a skill (`design-graph-ui-context`) recomend
 
 ---
 
-## Resumo prático (o que fazer da próxima vez)
+## Achado 6 (novo, 2026-09-07): `get_full_texts`/`get_component_data` resolvem o nome errado quando ele é prefixo de outro componente
 
-1. Pra qualquer componente-raiz com guard clauses (`if (x) return <Y/>` antes do `return`
-   principal) — não confiar em `get_full_jsx`/`get_component_spec` sozinhos. Testar
-   `validate_component_implementation(name, jsx_source="<div></div>")` primeiro — os textos
-   "ausentes" relatados são um sinal rápido de que tem mais conteúdo do que o JSX mostrado.
-2. Se ainda faltar detalhe, decodificar o bundle comprimido do HTML do protótipo (Achado 4) — é
-   mais confiável que inferir de screenshots.
-3. Sempre chamar `set_prototype` no início de CADA sequência de chamadas depois de qualquer
-   reconexão do MCP, não só uma vez por tarefa.
+**Sintoma**: `get_full_texts(name="App")` (e o mesmo com `doc="toToggle v2.6"` explícito) devolve
+`"# Textos completos: AppStep"` — o componente `AppStep` (uma tela do onboarding wizard), não o
+componente raiz `App` que foi pedido. `App` é prefixo de vários outros nomes reais no mesmo
+protótipo (`AppStep`, `AppList`, `AppModal`, `AppCard`), e o resolver parece escolher um desses em
+vez de priorizar o match EXATO quando ele existe.
+
+**Confirmado que não é geral**: `get_full_texts(name="MemberRow")` e
+`get_full_texts(name="ApprovalRow")` resolvem corretamente pros componentes exatos — nenhum dos
+dois tem outro nome de componente como prefixo/sufixo no mesmo protótipo. O problema é específico
+de nomes ambíguos por prefixo.
+
+**Comando pra reproduzir**:
+```
+set_prototype(name="toToggle")
+get_full_texts(name="App")
+→ "# Textos completos: AppStep" (errado — devia ser "App")
+get_full_texts(name="MemberRow")
+→ "# Textos completos: MemberRow" (correto, sem ambiguidade de nome)
+```
+
+**Sugestão de melhoria**: priorizar SEMPRE um match exato de nome sobre qualquer match
+parcial/prefixo, nas tools que aceitam nome de componente — mesmo problema pode existir em outras
+tools além de `get_full_texts`/`get_component_data` (não testamos exaustivamente todas). Um efeito
+colateral chato: como o resultado vem com um cabeçalho dizendo qual componente foi de fato
+resolvido (`"# Textos completos: AppStep"`), dá pra perceber o erro — mas só se quem chamou
+prestar atenção nesse cabeçalho em vez de assumir que o `name` pedido foi respeitado.
+
+---
+
+## Resumo prático (o que fazer da próxima vez, atualizado em 2026-09-07)
+
+1. `get_full_jsx(name)` já devolve TODOS os branches de retorno de um componente com múltiplos
+   `return` (rotulados `{[return_branch:N]}`/`{[return_branch:default]}`) — não precisa mais do
+   workaround de `validate_component_implementation` pra detectar isso (Achado 1, resolvido).
+2. Pra texto sem corte, use `get_full_texts(name)`; pra qualquer constante em nível de módulo que
+   o componente referencia (mapas de ícone, badge, etc.), use `get_component_data(name)` — ambos
+   sem "+N mais" (Achado 2, resolvido). **Cuidado com nomes que são prefixo de outros
+   componentes** (Achado 6, ainda aberto) — confira o cabeçalho da resposta pra ter certeza de que
+   resolveu o componente certo antes de confiar no resultado.
+3. `App` (e telas-raiz equivalentes) agora aparece em `list_screens()`, com `get_section`
+   funcionando pra suas seções internas (Achado 3, resolvido) — mas `get_full_jsx`/
+   `get_component_spec` direto pelo nome do componente continuam válidos como alternativa.
+4. Se AINDA faltar detalhe depois de tentar tudo acima, decodificar o bundle comprimido do HTML do
+   protótipo (Achado 4) continua sendo o último recurso — mas cada vez menos necessário.
+5. Sempre chamar `set_prototype` no início de CADA sequência de chamadas depois de qualquer
+   reconexão do MCP, não só uma vez por tarefa (Achado 5, não retestado nesta rodada).

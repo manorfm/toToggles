@@ -19,7 +19,9 @@ interface ApprovalRowProps {
   onWithdraw?: () => void;
 }
 
-const ACTION_LABELS: Record<ApprovalActionType, string> = {
+// Exportado pra ser reusado por RejectApprovalModal (linha "Action" do resumo, confirmada via
+// get_full_jsx("RejectModal") — a mesma tradução action_type → rótulo, sem duplicar o mapa.
+export const ACTION_LABELS: Record<ApprovalActionType, string> = {
   toggle_create: "Create toggle",
   toggle_update: "Update toggle",
   toggle_delete: "Delete toggle",
@@ -49,19 +51,19 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
         </div>
         {request.toggle_path && <div className="appr-path">{request.toggle_path}</div>}
         <div className="appr-meta">
-          por {request.requester_name} · {when}
+          by {request.requester_name} · {when}
         </div>
         {request.status === "rejected" && request.rejection_reason && (
           <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 6, display: "flex", gap: 6, alignItems: "flex-start" }}>
             <Icon name="close" size={12} style={{ marginTop: 2, flexShrink: 0 }} />
             <span>
-              <b>Motivo:</b> {request.rejection_reason}
+              <b>Reason:</b> {request.rejection_reason}
             </span>
           </div>
         )}
         {request.status === "pending" && isOwn && (
           <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 5, display: "flex", alignItems: "center", gap: 5 }}>
-            <Icon name="clock" size={12} /> Aguardando revisão de um aprovador
+            <Icon name="clock" size={12} /> Awaiting review by an approver
           </div>
         )}
       </div>
@@ -69,10 +71,10 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
       {!readOnly && request.status === "pending" ? (
         <div className="appr-btns">
           <button className="btn btn-soft btn-sm" onClick={onReject} disabled={busy}>
-            <Icon name="close" size={14} /> Rejeitar
+            <Icon name="close" size={14} /> Reject
           </button>
           <button className="btn btn-primary btn-sm" onClick={onApprove} disabled={busy}>
-            <Icon name="check" size={14} /> Aprovar
+            <Icon name="check" size={14} /> Approve
           </button>
         </div>
       ) : canWithdraw ? (
@@ -88,37 +90,41 @@ export function ApprovalRow({ request, onApprove, onReject, busy = false, readOn
   );
 }
 
-// Labels confirmados no protótipo real (get_screen_full("ApprovalsView") →
-// ApprovalStatusChip): "Aprovado"/"Rejeitado"/"Expirado". O branch "pending" não existe lá (o
-// componente real devolve null pra esse status — quem chama já garante que só renderiza o chip
-// quando NÃO está pending, mostrando os botões de ação no lugar); mantido aqui como um extra
-// deliberado, não do protótipo, pros usos read-only desta tela (ex.: aba "Mine", History) que
-// precisam mostrar ALGUMA coisa pra uma solicitação pendente sem botão de ação.
+// Labels confirmados no protótipo real (get_full_jsx("ApprovalRow")/get_full_jsx
+// ("ApprovalStatusChip"), depois que ficaram alcançáveis de verdade): "Approved"/"Rejected"/
+// "Expired" — em inglês; uma versão anterior deste arquivo tinha uma afirmação FALSA de que
+// "Aprovado"/"Rejeitado"/"Expirado" (português) eram os textos confirmados, nunca cruzada com a
+// fonte real antes de ser escrita (mesmo tipo de erro corrigido em MemberRow.tsx, ver
+// server/CLAUDE.md). O branch "pending" não existe lá (o componente real devolve null pra esse
+// status — quem chama já garante que só renderiza o chip quando NÃO está pending, mostrando os
+// botões de ação no lugar); "Pending" mantido aqui como um extra deliberado, não do protótipo,
+// pros usos read-only desta tela (ex.: aba "Mine", History) que precisam mostrar ALGUMA coisa
+// pra uma solicitação pendente sem botão de ação — traduzido pro mesmo tom em inglês do resto.
 function StatusChip({ status }: { status: ApprovalRequest["status"] }) {
   if (status === "approved") {
     return (
       <div className="appr-done ok">
-        <Icon name="check" size={14} /> Aprovado
+        <Icon name="check" size={14} /> Approved
       </div>
     );
   }
   if (status === "rejected") {
     return (
       <div className="appr-done no">
-        <Icon name="close" size={14} /> Rejeitado
+        <Icon name="close" size={14} /> Rejected
       </div>
     );
   }
   if (status === "pending") {
     return (
       <div className="appr-done" style={{ color: "var(--warn)" }}>
-        <Icon name="clock" size={14} /> Pendente
+        <Icon name="clock" size={14} /> Pending
       </div>
     );
   }
   return (
     <div className="appr-done" style={{ color: "var(--ink-4)" }}>
-      <Icon name="clock" size={14} /> Expirado
+      <Icon name="clock" size={14} /> Expired
     </div>
   );
 }

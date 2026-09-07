@@ -562,6 +562,24 @@ describe("AppShell", () => {
       expect(screen.queryByPlaceholderText(/search applications/i)).not.toBeInTheDocument();
     });
 
+    // v2.6 §6.1/§6.2 — item de nav "Search ⌘K" clicável, além do atalho de teclado. Confirmado
+    // só depois que "App" ficou alcançável no design-graph (get_section(screen="App",
+    // section="sidebar")) — antes um buraco conhecido da ferramenta, ver
+    // docs/investigation/design-graph-findings.md.
+    it("also opens via the 'Search' nav item, not just the ⌘K shortcut", async () => {
+      const { fetchMock } = fetchMockForPalette({ role: "root", apps: [], hierarchies: {} });
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
+
+      renderShell();
+      await screen.findByText("Applications content");
+      expect(screen.queryByPlaceholderText(/search applications/i)).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /^search/i }));
+
+      expect(await screen.findByPlaceholderText(/search applications/i)).toBeInTheDocument();
+    });
+
     it("closes on Escape (via the palette's own input)", async () => {
       const { fetchMock } = fetchMockForPalette({ role: "root", apps: [], hierarchies: {} });
       vi.stubGlobal("fetch", fetchMock);

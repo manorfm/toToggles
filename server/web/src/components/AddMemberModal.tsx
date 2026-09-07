@@ -73,7 +73,7 @@ export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, o
     <Modal
       icon="user"
       title="Add member"
-      sub={`Invite someone to ${teamName}`}
+      sub={`Team members must have an account — pick one (people can belong to more than one team) or create a new one for ${teamName}`}
       onClose={onClose}
       closeable={!submitting}
       footer={
@@ -82,7 +82,7 @@ export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, o
             Cancel
           </button>
           <button className="btn btn-primary" onClick={submit} disabled={submitting || noCandidates}>
-            <Icon name="plus" size={16} /> {submitting ? "Adicionando…" : "Add member"}
+            <Icon name="plus" size={16} /> {submitting ? "Adicionando…" : "Add to team"}
           </button>
         </>
       }
@@ -104,7 +104,7 @@ export function AddMemberModal({ teamId, teamName, existingMemberIds, onClose, o
             </option>
           ))}
         </select>
-        {noCandidates && <div className="field-hint">Todos os usuários já são membros deste time.</div>}
+        {noCandidates && <div className="field-hint">No other accounts to add right now.</div>}
       </div>
 
       {error && (

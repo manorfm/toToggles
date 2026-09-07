@@ -19,7 +19,7 @@ test("secret_key_delete is intercepted, shown to the approver, and applied after
 
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Settings" }).click();
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Delete secret key" }));
 
   // Admin tenta apagar a chave — deve ser interceptado, não aplicado.
@@ -50,7 +50,7 @@ test("secret_key_delete is intercepted, shown to the approver, and applied after
 
   const pendingRow = rootPage.locator(".appr-row", { hasText: "Delete secret key" });
   await expect(pendingRow).toBeVisible();
-  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   // Admin recarrega e vê a chave realmente apagada (volta ao empty state — "No service key",

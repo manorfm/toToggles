@@ -22,17 +22,17 @@ test("root creates a team, creates a user, and manages team membership/approver 
   // 2. Criar usuário — admin, aprovador, no time "E2E Team" (o time da fixture compartilhada,
   // não o recém-criado).
   await rootPage.goto("/users");
-  await rootPage.getByRole("button", { name: "Criar usuário" }).click();
+  await rootPage.getByRole("button", { name: "Create user" }).click();
   await rootPage.locator("#new-user-name").fill("E2E Teams User");
   await rootPage.locator("#new-user-username").fill("e2e-teams-user");
   await rootPage.locator("#new-user-team").selectOption({ label: "E2E Team" });
   await rootPage.locator("#new-user-role").selectOption("admin");
-  await rootPage.getByRole("switch", { name: "Aprovador do time" }).click();
-  await modalButton(rootPage, "Criar usuário").click();
+  await rootPage.getByRole("switch", { name: "Team approver" }).click();
+  await modalButton(rootPage, "Create user").click();
 
-  await expect(rootPage.getByText("Usuário criado")).toBeVisible();
+  await expect(rootPage.getByText("User created")).toBeVisible();
   await rootPage.locator(".skey-ack input[type=checkbox]").check();
-  await rootPage.getByRole("button", { name: /entendi, já anotei/i }).click();
+  await rootPage.getByRole("button", { name: /got it, i saved it/i }).click();
   await expect(rootPage.getByText("e2e-teams-user")).toBeVisible();
 
   // 3. Adicionar esse mesmo usuário ao time novo, e designá-lo aprovador AQUI também (é um
@@ -48,13 +48,13 @@ test("root creates a team, creates a user, and manages team membership/approver 
     .last();
   await newTeamSection.getByRole("button", { name: "Add member" }).click();
   await rootPage.locator("#member-user").selectOption({ label: "e2e-teams-user" });
-  await modalButton(rootPage, "Add member").click();
+  await modalButton(rootPage, "Add to team").click();
 
   // Escopado a newTeamSection: esse usuário já é membro (e aprovador) do time "E2E Team" também
   // — sem escopo, ".member" bateria nas duas seções da página.
   const memberRow = newTeamSection.locator(".member", { hasText: "e2e-teams-user" });
   await expect(memberRow).toBeVisible();
-  const approverSwitch = memberRow.getByRole("switch", { name: "Aprovador" });
+  const approverSwitch = memberRow.getByRole("switch", { name: "Approver" });
   await expect(approverSwitch).toHaveAttribute("aria-checked", "false"); // novo team_users, começa false
   await approverSwitch.click();
   await expect(approverSwitch).toHaveAttribute("aria-checked", "true");

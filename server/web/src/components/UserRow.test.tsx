@@ -40,16 +40,16 @@ describe("UserRow", () => {
     expect(screen.getByText("AR")).toBeInTheDocument();
   });
 
-  it("shows a 'você' badge only for the current user's own row", () => {
+  it("shows a 'you' badge only for the current user's own row", () => {
     const { rerender } = render(
       <UserRow user={baseUser} isSelf={false} manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
-    expect(screen.queryByText("você")).not.toBeInTheDocument();
+    expect(screen.queryByText("you")).not.toBeInTheDocument();
 
     rerender(
       <UserRow user={baseUser} isSelf manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
-    expect(screen.getByText("você")).toBeInTheDocument();
+    expect(screen.getByText("you")).toBeInTheDocument();
   });
 
   it("hides reset-password/toggle-status/delete actions when not manageable/deletable", () => {
@@ -57,9 +57,9 @@ describe("UserRow", () => {
       <UserRow user={baseUser} isSelf={false} manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
 
-    expect(screen.queryByRole("button", { name: /resetar senha/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /desativar|reativar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /excluir/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reset password/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /disable|reactivate/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
   });
 
   it("wires reset-password and toggle-status when manageable", async () => {
@@ -70,15 +70,15 @@ describe("UserRow", () => {
       <UserRow user={baseUser} isSelf={false} manageable canDelete={false} onResetPassword={onResetPassword} onToggleStatus={onToggleStatus} onDelete={vi.fn()} />
     );
 
-    await user.click(screen.getByRole("button", { name: /resetar senha/i }));
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
     expect(onResetPassword).toHaveBeenCalled();
 
-    const toggleBtn = screen.getByRole("button", { name: /desativar/i });
+    const toggleBtn = screen.getByRole("button", { name: /disable/i });
     await user.click(toggleBtn);
     expect(onToggleStatus).toHaveBeenCalled();
   });
 
-  it("labels the toggle-status button 'Reativar' for a disabled user", () => {
+  it("labels the toggle-status button 'Reactivate' for a disabled user", () => {
     render(
       <UserRow
         user={{ ...baseUser, status: "disabled", active: false }}
@@ -91,26 +91,26 @@ describe("UserRow", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: /reativar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reactivate/i })).toBeInTheDocument();
   });
 
   it("shows delete only when canDelete, independent of manageable", () => {
     const { rerender } = render(
       <UserRow user={baseUser} isSelf={false} manageable canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
-    expect(screen.queryByRole("button", { name: /excluir/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
 
     rerender(
       <UserRow user={baseUser} isSelf={false} manageable={false} canDelete onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
-    expect(screen.getByRole("button", { name: /excluir/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
   });
 
-  it("shows '—' when the user has no teams", () => {
+  it("shows 'Unassigned' when the user has no teams", () => {
     render(
       <UserRow user={{ ...baseUser, teams: [] }} isSelf={false} manageable={false} canDelete={false} onResetPassword={vi.fn()} onToggleStatus={vi.fn()} onDelete={vi.fn()} />
     );
 
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("Unassigned")).toBeInTheDocument();
   });
 });

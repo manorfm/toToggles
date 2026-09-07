@@ -29,12 +29,17 @@ export async function listAuditActors(): Promise<AuditActor[]> {
 }
 
 // GET /api/applications/:id/audit — Activity tab de UMA aplicação (v2.6 §7), visível pra
-// qualquer usuário autenticado (sem escopo por time, diferente de listAuditLog).
+// qualquer usuário autenticado (sem escopo por time, diferente de listAuditLog). category/range
+// (sem actorId: a ActivityView real nunca teve um <select> de ator) confirmados quando o
+// design-graph passou a conseguir extrair o componente de verdade — ver
+// docs/investigation/design-graph-unreachable-components.md.
 export async function listApplicationAudit(
   applicationId: string,
-  options?: { cursor?: string; limit?: number }
+  options?: { category?: AuditCategory; range?: AuditRange; cursor?: string; limit?: number }
 ): Promise<AuditLogPage> {
   const params = new URLSearchParams();
+  if (options?.category) params.set("category", options.category);
+  if (options?.range) params.set("range", options.range);
   if (options?.cursor) params.set("cursor", options.cursor);
   if (options?.limit) params.set("limit", String(options.limit));
   const query = params.toString();

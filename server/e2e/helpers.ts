@@ -31,7 +31,7 @@ export async function goToApprovalSettings(page: Page): Promise<void> {
 
 // Padroniza a desambiguação "botão que abre um modal" vs. "botão de confirmar dentro do modal" —
 // vários fluxos reusam o mesmo texto pros dois (ex.: header "Criar usuário" + submit "Criar
-// usuário" em UserModal; "Add member" + "Add member" em AddMemberModal), o que já causou
+// usuário" em UserModal), o que já causou
 // violações de strict mode escritas ad hoc, cada spec inventando sua própria forma de escopar
 // (`.modal`, filtros de div, etc.). `data-testid="modal-scrim"` (components/Modal.tsx) é o único
 // data-testid do app — usado aqui de propósito como o único ponto de escopo pra "dentro do modal

@@ -45,6 +45,15 @@ type TeamOptionsState = { status: "loading" } | { status: "loaded"; options: Tea
 // - Erro de submissão virou um banner `.notice.danger` (ícone + texto) no topo do corpo do
 //   modal, não mais um `field-hint` solto no rodapé — reusa a mesma classe `.notice` que
 //   EditToggleDrawer já usa pro aviso de cascata (aqui com a variante `.danger`, nova).
+//
+// Fase 6 (fidelity pass): título/sub/labels/hints/botões deste modal tinham ficado em português
+// por engano num decode anterior — get_full_jsx("UserModal") confirma o texto real (inglês).
+// Corrigido em toda a tela, exceto: (1) mensagens de validação/erro (aqui e no catch de submit),
+// que seguem a convenção já estabelecida no resto do app de ficarem em português (estado
+// transitório, não cópia confirmada do protótipo — ver CreateToggleModal/AppModal etc.); (2) o
+// hint de "sem time disponível" (`noTeamsAvailable`), que não existe no protótipo (dado de demo
+// sempre tem time) — traduzido pro inglês só por consistência de tom com o resto do modal, não
+// por ser texto confirmado.
 export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeamName }: UserModalProps) {
   const [teamOptionsState, setTeamOptionsState] = useState<TeamOptionsState>({ status: "loading" });
   const [name, setName] = useState("");
@@ -118,17 +127,17 @@ export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeam
   return (
     <Modal
       icon="user"
-      title="Criar usuário"
-      sub="A conta nasce com senha provisória e troca obrigatória no primeiro acesso"
+      title="Create user"
+      sub="The account starts with a temporary password and a mandatory change on first login"
       onClose={onClose}
       closeable={!submitting}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
-            Cancelar
+            Cancel
           </button>
           <button className="btn btn-primary" onClick={submit} disabled={submitting || noTeamsAvailable}>
-            <Icon name="plus" size={16} /> {submitting ? "Criando…" : "Criar usuário"}
+            <Icon name="plus" size={16} /> {submitting ? "Criando…" : "Create user"}
           </button>
         </>
       }
@@ -142,12 +151,12 @@ export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeam
 
       <div className="field">
         <label className="field-label" htmlFor="new-user-name">
-          Nome completo
+          Full name
         </label>
         <input
           className="input"
           id="new-user-name"
-          placeholder="ex: Ana Ribeiro"
+          placeholder="e.g. Ana Ribeiro"
           autoFocus
           value={name}
           onChange={(e) => {
@@ -175,12 +184,12 @@ export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeam
           }}
           onKeyDown={(e) => e.key === "Enter" && submit()}
         />
-        <div className="field-hint">O login é feito por username. Nesta fase não usamos e-mail.</div>
+        <div className="field-hint">Sign-in uses the username. Email is not used at this stage.</div>
       </div>
 
       <div className="field">
         <label className="field-label" htmlFor="new-user-team">
-          Time
+          Team
         </label>
         <select
           className="select"
@@ -197,20 +206,20 @@ export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeam
         </select>
         <div className="field-hint">
           {presetTeamId
-            ? `Adicionando direto em ${selectedTeamName ?? presetTeamName ?? "este time"}.`
+            ? `Adding directly to ${selectedTeamName ?? presetTeamName ?? "this team"}.`
             : noTeamsAvailable
               ? isRoot
-                ? "Nenhum time cadastrado ainda — crie um time primeiro."
-                : "Você precisa estar em um time para criar um usuário."
+                ? "No teams yet — create a team first."
+                : "You need to belong to a team to create a user."
               : isRoot
-                ? "Root pode criar em qualquer time."
-                : "Admin só cria usuários nos times em que participa."}
+                ? "Root can create users in any team."
+                : "Admin can only create users in teams they belong to."}
         </div>
       </div>
 
       <div className="field">
         <label className="field-label" htmlFor="new-user-role">
-          Papel
+          Role
         </label>
         <select
           className="select"
@@ -226,7 +235,7 @@ export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeam
           <option value="admin">Admin</option>
         </select>
         <div className="field-hint">
-          {role === "admin" ? "Admin gerencia applications, chaves e pessoas do time." : "User tem acesso somente leitura."}
+          {role === "admin" ? "Admin manages applications, keys and team members." : "User has read-only access."}
         </div>
       </div>
 
@@ -234,20 +243,20 @@ export function UserModal({ isRoot, onClose, onCreated, presetTeamId, presetTeam
         <div className={"toggle-field-wrap" + (role === "admin" ? " show" : "")} aria-hidden={role !== "admin"}>
           <div className="toggle-field">
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="toggle-field-title">Aprovador do time</div>
+              <div className="toggle-field-title">Team approver</div>
               <div className="field-hint" style={{ marginTop: 3 }}>
-                Pode aprovar solicitações abertas por outros membros{selectedTeamName ? ` do time ${selectedTeamName}` : ""}.
+                Can approve requests opened by other members of {selectedTeamName || "this team"}.
               </div>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={isApprover}
-              aria-label="Aprovador do time"
+              aria-label="Team approver"
               className={"switch" + (isApprover ? " on" : "")}
               onClick={() => setIsApprover((v) => !v)}
               tabIndex={role === "admin" ? 0 : -1}
-              title={isApprover ? "Remover como aprovador" : "Designar como aprovador"}
+              title={isApprover ? "Remove as approver" : "Make approver"}
             />
           </div>
         </div>

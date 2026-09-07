@@ -87,7 +87,7 @@ describe("ApprovalsScreen", () => {
 
     renderScreen(root);
 
-    await screen.findByText(/tudo limpo/i);
+    await screen.findByText(/all clear/i);
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/pending", expect.anything());
   });
 
@@ -101,9 +101,9 @@ describe("ApprovalsScreen", () => {
 
     renderScreen(admin);
 
-    await screen.findByText(/tudo limpo/i);
+    await screen.findByText(/all clear/i);
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/approvable", expect.anything());
-    expect(screen.queryByRole("button", { name: /configurar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /configure/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^settings$/i })).not.toBeInTheDocument();
   });
 
@@ -154,7 +154,7 @@ describe("ApprovalsScreen", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     renderScreen(admin);
-    await screen.findByText(/tudo limpo/i);
+    await screen.findByText(/all clear/i);
 
     expect(screen.queryByText(/not an approver on any of your teams/i)).not.toBeInTheDocument();
   });
@@ -171,7 +171,7 @@ describe("ApprovalsScreen", () => {
 
     renderScreen(root);
 
-    await screen.findByText(/tudo limpo/i);
+    await screen.findByText(/all clear/i);
     expect(screen.queryByText(/not an approver on any of your teams/i)).not.toBeInTheDocument();
   });
 
@@ -185,12 +185,12 @@ describe("ApprovalsScreen", () => {
 
     renderScreen(root);
 
-    expect(await screen.findByText(/sistema/i)).toBeInTheDocument();
-    expect(screen.getByText(/ativo/i)).toBeInTheDocument();
-    expect(screen.getByText(/6 ações configuradas/i)).toBeInTheDocument();
+    expect(await screen.findByText(/system/i)).toBeInTheDocument();
+    expect(screen.getByText(/active/i)).toBeInTheDocument();
+    expect(screen.getByText(/6 configured actions/i)).toBeInTheDocument();
   });
 
-  it("switches to the Settings tab when 'Configurar' is clicked on the banner", async () => {
+  it("switches to the Settings tab when 'Configure' is clicked on the banner", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
       if (path === "/api/approval/settings")
         return Promise.resolve(jsonResponse(200, { message: "ok", data: settings({ approval_enabled: true }) }));
@@ -200,9 +200,9 @@ describe("ApprovalsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen(root);
-    await screen.findByRole("button", { name: /configurar/i });
+    await screen.findByRole("button", { name: /configure/i });
 
-    await user.click(screen.getByRole("button", { name: /configurar/i }));
+    await user.click(screen.getByRole("button", { name: /configure/i }));
 
     expect(await screen.findByText("Delete toggle")).toBeInTheDocument();
   });
@@ -224,9 +224,9 @@ describe("ApprovalsScreen", () => {
     renderScreen(root);
     await screen.findByText(/delete toggle/i);
 
-    await user.click(screen.getByRole("button", { name: /aprovar/i }));
+    await user.click(screen.getByRole("button", { name: /approve/i }));
 
-    expect(await screen.findByText(/tudo limpo/i)).toBeInTheDocument();
+    expect(await screen.findByText(/all clear/i)).toBeInTheDocument();
   });
 
   it("switches to the Mine tab, fetches /approval/requests/my, and shows the awaiting-review hint (never action buttons)", async () => {
@@ -239,12 +239,12 @@ describe("ApprovalsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen(root);
-    await screen.findByText(/tudo limpo/i);
+    await screen.findByText(/all clear/i);
 
     await user.click(screen.getByRole("button", { name: /^mine$/i }));
 
     expect(await screen.findByText(/delete toggle/i)).toBeInTheDocument();
-    expect(screen.getByText(/aguardando revisão de um aprovador/i)).toBeInTheDocument();
+    expect(screen.getByText(/awaiting review by an approver/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /withdraw/i })).toBeInTheDocument();
   });
@@ -264,14 +264,14 @@ describe("ApprovalsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen(root);
-    await screen.findByText(/tudo limpo/i);
+    await screen.findByText(/all clear/i);
     await user.click(screen.getByRole("button", { name: /^mine$/i }));
     await screen.findByText(/delete toggle/i);
 
     await user.click(screen.getByRole("button", { name: /withdraw/i }));
 
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/1/withdraw", expect.objectContaining({ method: "POST" }));
-    expect(await screen.findByText(/nenhum registro/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no records/i)).toBeInTheDocument();
   });
 
   it("saves an approval-settings change from the Settings tab", async () => {
@@ -286,11 +286,11 @@ describe("ApprovalsScreen", () => {
     const user = userEvent.setup();
 
     renderScreen(root);
-    await screen.findByRole("button", { name: /configurar/i });
-    await user.click(screen.getByRole("button", { name: /configurar/i }));
-    await screen.findByText(/sistema.*desativado/i);
+    await screen.findByRole("button", { name: /configure/i });
+    await user.click(screen.getByRole("button", { name: /configure/i }));
+    await screen.findByText(/system.*disabled/i);
 
-    await user.click(screen.getByRole("button", { name: /sistema de aprovação/i }));
+    await user.click(screen.getByRole("button", { name: /approval system/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/approval/settings",
@@ -312,7 +312,7 @@ describe("ApprovalsScreen", () => {
     renderScreen(root);
     await screen.findByText(/delete toggle/i);
 
-    await user.click(screen.getByRole("button", { name: /aprovar/i }));
+    await user.click(screen.getByRole("button", { name: /approve/i }));
 
     expect(await screen.findByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
@@ -334,10 +334,10 @@ describe("ApprovalsScreen", () => {
     renderScreen(root);
     await screen.findByText(/delete toggle/i);
 
-    await user.click(screen.getByRole("button", { name: /rejeitar/i }));
-    await screen.findByRole("button", { name: /confirmar rejeição/i });
-    await user.click(screen.getByRole("button", { name: /confirmar rejeição/i }));
+    await user.click(screen.getByRole("button", { name: /reject/i }));
+    await screen.findByRole("button", { name: /confirm rejection/i });
+    await user.click(screen.getByRole("button", { name: /confirm rejection/i }));
 
-    expect(await screen.findByText(/tudo limpo/i)).toBeInTheDocument();
+    expect(await screen.findByText(/all clear/i)).toBeInTheDocument();
   });
 });

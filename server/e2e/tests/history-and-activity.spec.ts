@@ -79,6 +79,41 @@ test("an application's Activity tab shows only that application's own audit trai
   await context.close();
 });
 
+// Regressão de um gap real: a Activity tab confirmada tem os mesmos filtros de categoria
+// (AuditChips) e intervalo (AuditToolbar, sem ator) da History — só descoberto depois que o
+// design-graph passou a conseguir extrair ActivityView de verdade (antes um "buraco" conhecido
+// da ferramenta, ver docs/investigation/design-graph-unreachable-components.md). A primeira
+// versão desta aba era só uma lista sem filtro nenhum.
+test("an application's Activity tab filters by category/range and exports an app-scoped CSV", async ({ browser }) => {
+  const fixtures = readFixtures();
+  const context = await browser.newContext({ storageState: ADMIN_STATE });
+  const page = await context.newPage();
+
+  const togglePath = `e2e.activity.filters.${Date.now()}`;
+  await createToggle(context.request, fixtures.appId, togglePath);
+
+  await page.goto(`/applications/${fixtures.appId}`);
+  await page.getByRole("button", { name: /^activity$/i }).click();
+  await expect(page.locator("b", { hasText: togglePath })).toBeVisible();
+
+  // Nenhum <select> de ator nesta aba — só History tem um.
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Keys" }).click();
+  await expect(page.locator("b", { hasText: togglePath })).not.toBeVisible();
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page.locator("b", { hasText: togglePath })).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: /export csv/i }).click(),
+  ]);
+  // "E2E App" — nome fixo da aplicação compartilhada criada em global-setup.ts.
+  expect(download.suggestedFilename()).toBe("totoggle-E2E App-activity.csv");
+
+  await context.close();
+});
+
 // Regressão de dois bugs reais, mesma causa raiz, reportados em uso ao vivo: com o workflow de
 // aprovação ligado, (1) o evento de domínio final de uma ação aprovada nunca carregava
 // application_id (só o caminho de execução DIRETA, sem aprovação, tinha sido migrado durante a
@@ -95,7 +130,7 @@ test("a toggle created through the approval workflow shows the full requested→
 
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Settings" }).click();
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Create toggle" }));
 
   const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -112,7 +147,7 @@ test("a toggle created through the approval workflow shows the full requested→
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Pending" }).click();
   const pendingRow = rootPage.locator(".appr-row", { hasText: "Create toggle" });
-  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   await adminPage.goto(`/applications/${fixtures.appId}`);
@@ -141,7 +176,7 @@ test("an application created through the approval workflow shows its own creatio
 
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Settings" }).click();
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Create or update application" }));
 
   const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -158,7 +193,7 @@ test("an application created through the approval workflow shows its own creatio
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Pending" }).click();
   const pendingRow = rootPage.locator(".appr-row", { hasText: "Create application" });
-  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   await adminPage.goto("/");

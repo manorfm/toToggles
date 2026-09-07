@@ -341,7 +341,7 @@ func TestAuditUseCase_ListForApplication(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
 
-		if _, err := uc.ListForApplication(context.Background(), "app-1", nil, 0); err != nil {
+		if _, err := uc.ListForApplication(context.Background(), "app-1", AuditListOptions{}, nil, 0); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if auditRepo.LastListFilter.ApplicationID != "app-1" {
@@ -349,11 +349,33 @@ func TestAuditUseCase_ListForApplication(t *testing.T) {
 		}
 	})
 
+	// v2.6 §7 — fidelity gap real, achado depois que o design-graph passou a conseguir extrair
+	// ActivityView de verdade (antes um "buraco" conhecido da ferramenta): a Activity tab tem
+	// filtro de categoria (AuditChips) e de intervalo (AuditToolbar sem o <select> de ator),
+	// exatamente como History — só o ator nunca é escopado por aplicação, por isso
+	// AuditListOptions.ActorID nunca é lido aqui de propósito (a Activity nunca oferece esse
+	// filtro na UI).
+	t.Run("passes category and created-after through to the repository", func(t *testing.T) {
+		auditRepo := NewMockAuditLogRepository()
+		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
+		cutoff := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+		if _, err := uc.ListForApplication(context.Background(), "app-1", AuditListOptions{Category: entity.AuditCategoryKeys, CreatedAfter: &cutoff}, nil, 0); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if auditRepo.LastListFilter.Category != entity.AuditCategoryKeys {
+			t.Errorf("expected category to be passed through, got %q", auditRepo.LastListFilter.Category)
+		}
+		if auditRepo.LastListFilter.CreatedAfter == nil || !auditRepo.LastListFilter.CreatedAfter.Equal(cutoff) {
+			t.Errorf("expected created_after to be passed through, got %+v", auditRepo.LastListFilter.CreatedAfter)
+		}
+	})
+
 	t.Run("clamps limit like List does", func(t *testing.T) {
 		auditRepo := NewMockAuditLogRepository()
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
 
-		if _, err := uc.ListForApplication(context.Background(), "app-1", nil, 0); err != nil {
+		if _, err := uc.ListForApplication(context.Background(), "app-1", AuditListOptions{}, nil, 0); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if auditRepo.LastListFilter.Limit != DefaultAuditPageSize {
@@ -366,7 +388,7 @@ func TestAuditUseCase_ListForApplication(t *testing.T) {
 		auditRepo.ListError = errors.New("boom")
 		uc := newAuditUseCaseForTest(NewMockTeamRepository(), auditRepo)
 
-		if _, err := uc.ListForApplication(context.Background(), "app-1", nil, 0); err == nil {
+		if _, err := uc.ListForApplication(context.Background(), "app-1", AuditListOptions{}, nil, 0); err == nil {
 			t.Error("expected an error when the repository fails")
 		}
 	})

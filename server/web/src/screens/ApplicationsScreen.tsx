@@ -108,7 +108,7 @@ export function ApplicationsScreen() {
         <div className="empty">
           <Icon name="apps" size={40} />
           <div className="et">No applications yet</div>
-          <div className="ed">Create your first application to get started.</div>
+          <div className="ed">Create one to start managing its toggles.</div>
         </div>
       )}
       {state.status === "loaded" && state.applications.length > 0 && (

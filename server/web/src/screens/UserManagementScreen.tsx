@@ -18,6 +18,9 @@ type LoadState = { status: "loading" } | { status: "loaded"; users: User[] } | {
 // Rota client-side "/users" (não mais "/user-management") — segura desde a migração de toda a
 // API pra debaixo de /api (ver "Separação API vs SPA" em server/CLAUDE.md), então o antigo motivo
 // pra evitar esse nome de rota não existe mais.
+//
+// Fase 6 (fidelity pass): título/desc/botão/busca/badges/empty-state tinham ficado em português
+// por engano num decode anterior — get_full_jsx("UsersView") confirma o texto real (inglês).
 export function UserManagementScreen() {
   const currentUser = useAppUser();
   const toast = useToast();
@@ -90,14 +93,14 @@ export function UserManagementScreen() {
     <div className="page">
       <div className="page-head">
         <div className="h">
-          <div className="page-title">Usuários</div>
+          <div className="page-title">Users</div>
           <div className="page-desc">
-            Contas de acesso ao toToggle. {isRoot ? "Root cria usuários em qualquer time." : "Admin cria usuários apenas nos times em que participa."} A
-            senha provisória é exibida na criação e a troca é obrigatória no primeiro acesso.
+            Access accounts for toToggle. {isRoot ? "Root creates users in any team." : "Admin creates users only in teams they belong to."} The
+            temporary password is shown at creation and must be changed on first login.
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          <Icon name="plus" size={16} /> Criar usuário
+          <Icon name="plus" size={16} /> Create user
         </button>
       </div>
 
@@ -111,14 +114,14 @@ export function UserManagementScreen() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <div className="search" style={{ flex: 1, maxWidth: 320 }}>
             <Icon name="search" size={15} />
-            <input placeholder="Buscar por nome ou username" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input placeholder="Search by name or username" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <span className="badge">
-            {visible.length} usuário{visible.length !== 1 ? "s" : ""}
+            {visible.length} user{visible.length !== 1 ? "s" : ""}
           </span>
           {pendingCount > 0 && (
             <span className="badge" style={{ background: "var(--warn-soft)", color: "var(--warn)", borderColor: "transparent" }}>
-              {pendingCount} aguardando 1º acesso
+              {pendingCount} awaiting first login
             </span>
           )}
         </div>
@@ -128,7 +131,7 @@ export function UserManagementScreen() {
       {state.status === "error" && <div className="empty">{state.message}</div>}
       {state.status === "loaded" && visible.length === 0 && (
         <div className="field-hint" style={{ padding: "8px 2px" }}>
-          Nenhum usuário encontrado.
+          No users found.
         </div>
       )}
       {state.status === "loaded" &&

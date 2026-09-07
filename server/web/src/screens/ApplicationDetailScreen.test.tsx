@@ -774,5 +774,73 @@ describe("ApplicationDetailScreen", () => {
     renderScreen(undefined, "/applications/app1?tab=activity");
 
     expect(await screen.findByText((_, node) => node?.textContent === "Created toggle payments.card")).toBeInTheDocument();
+    // Confirmado via get_section(screen="App", section="Page") depois que "App" ficou alcançável
+    // no design-graph — antes a Activity tab caía no branch "else" do page-desc e mostrava por
+    // engano o texto da aba Service key.
+    expect(
+      screen.getByText("Everything that happened in this application — toggles created and removed, switches, activation rules and approvals.")
+    ).toBeInTheDocument();
+  });
+
+  // v2.6 §7 — fidelity gap real, achado depois que o design-graph passou a conseguir extrair
+  // ActivityView de verdade (antes um "buraco" conhecido da ferramenta, ver
+  // docs/investigation/design-graph-unreachable-components.md): a Activity tab confirmada tem
+  // AuditChips (categoria) e um AuditToolbar sem ator (intervalo + Export CSV) — a primeira
+  // versão desta aba era só um AuditFeed puro, sem filtro nenhum.
+  it("filters the Activity tab by category and range, and exports it as app-scoped CSV", async () => {
+    let lastAuditUrl = "";
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/applications/app1") {
+        return Promise.resolve(jsonResponse(200, { id: "app1", name: "Checkout Web", created_at: "", updated_at: "" }));
+      }
+      if (path.includes("hierarchy=true")) {
+        return Promise.resolve(jsonResponse(200, { application: "app1", toggles: [] }));
+      }
+      if (path === "/api/applications/app1/toggles") {
+        return Promise.resolve(jsonResponse(200, []));
+      }
+      if (path.startsWith("/api/applications/app1/audit")) {
+        lastAuditUrl = path;
+        return Promise.resolve(
+          jsonResponse(200, {
+            data: [
+              {
+                id: "au1",
+                event_type: "toggle_created",
+                category: "toggles",
+                text: "Created toggle <b>payments.card</b>",
+                target: "",
+                team_id: "team-1",
+                application_id: "app1",
+                before: null,
+                after: null,
+                actor_id: "u1",
+                actor_name: "Alice",
+                created_at: new Date().toISOString(),
+              },
+            ],
+            next_cursor: "",
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen(undefined, "/applications/app1?tab=activity");
+    await screen.findByText((_, node) => node?.textContent === "Created toggle payments.card");
+
+    // Nenhum <select> de ator nesta aba — só History tem um.
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Keys" }));
+    await vi.waitFor(() => expect(lastAuditUrl).toContain("category=keys"));
+
+    await user.click(screen.getByRole("button", { name: "7 days" }));
+    await vi.waitFor(() => expect(lastAuditUrl).toContain("range=7d"));
+
+    const exportButton = screen.getByRole("button", { name: /export csv/i });
+    expect(exportButton).not.toBeDisabled();
   });
 });

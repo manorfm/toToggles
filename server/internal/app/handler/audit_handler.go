@@ -88,6 +88,21 @@ func parseAuditPaging(c *gin.Context) (cursor *repository.AuditLogCursor, limit 
 	return cursor, limit, true
 }
 
+// parseAuditCategory lê e valida o query param "category" — compartilhado por GetAuditLog e
+// GetApplicationAudit, que agora oferecem os mesmos 4 chips de categoria (AuditChips, confirmado
+// também na ActivityView real quando o design-graph passou a conseguir extrair esse componente;
+// antes disso a Activity tab não tinha filtro de categoria nenhum). "" (chip "All") não filtra.
+func parseAuditCategory(c *gin.Context) (category entity.AuditCategory, ok bool) {
+	category = entity.AuditCategory(c.Query("category"))
+	switch category {
+	case "", entity.AuditCategoryToggles, entity.AuditCategoryKeys, entity.AuditCategoryAccess, entity.AuditCategoryApprovals:
+		return category, true
+	default:
+		c.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "invalid category"))
+		return "", false
+	}
+}
+
 // paginateAuditLogs corta a linha extra pedida por parseAuditPaging+limit e monta o cursor da
 // próxima página quando ela existir.
 func paginateAuditLogs(logs []*entity.AuditLog, limit int) (page []*entity.AuditLog, nextCursor string) {
@@ -111,12 +126,8 @@ func (h *AuditHandler) GetAuditLog(c *gin.Context) {
 		return
 	}
 
-	category := entity.AuditCategory(c.Query("category"))
-	switch category {
-	case "", entity.AuditCategoryToggles, entity.AuditCategoryKeys, entity.AuditCategoryAccess, entity.AuditCategoryApprovals:
-		// válida
-	default:
-		c.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "invalid category"))
+	category, ok := parseAuditCategory(c)
+	if !ok {
 		return
 	}
 
@@ -164,8 +175,9 @@ func (h *AuditHandler) GetAuditActors(c *gin.Context) {
 // GetApplicationAudit lista o audit trail de UMA aplicação (Activity tab, v2.6 §7) — qualquer
 // usuário autenticado pode ver, mesma postura de acesso de GET /applications/:id (sem checagem
 // de time por trás dela hoje); AuditUseCase.ListForApplication não recebe `caller` nenhum de
-// propósito, ver o comentário lá.
-// GET /api/applications/:id/audit?cursor=<opaco>&limit=30
+// propósito, ver o comentário lá. Categoria + intervalo (sem ator: a Activity real nunca teve um
+// filtro de ator) — mesmos parâmetros de GetAuditLog, confirmados na ActivityView real.
+// GET /api/applications/:id/audit?category=toggles&range=7d&cursor=<opaco>&limit=30
 func (h *AuditHandler) GetApplicationAudit(c *gin.Context) {
 	if auditActor(c) == nil {
 		c.JSON(http.StatusUnauthorized, entity.NewAppError(entity.ErrCodeValidation, "user not authenticated"))
@@ -178,12 +190,21 @@ func (h *AuditHandler) GetApplicationAudit(c *gin.Context) {
 		return
 	}
 
+	category, ok := parseAuditCategory(c)
+	if !ok {
+		return
+	}
+
 	cursor, limit, ok := parseAuditPaging(c)
 	if !ok {
 		return
 	}
 
-	logs, err := h.auditUseCase.ListForApplication(c.Request.Context(), applicationID, cursor, limit+1)
+	opts := usecase.AuditListOptions{
+		Category:     category,
+		CreatedAfter: auditRangeCutoff(c.Query("range")),
+	}
+	logs, err := h.auditUseCase.ListForApplication(c.Request.Context(), applicationID, opts, cursor, limit+1)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "error fetching application audit log"))
 		return

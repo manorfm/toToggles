@@ -251,7 +251,7 @@ export function OnboardingModal({ existingTeams, existingApps, existingUsernames
               </button>
               <div style={{ flex: 1 }} />
               <button type="button" className="btn btn-primary" onClick={next}>
-                Start setup <Icon name="chevron-down" size={16} style={{ transform: "rotate(-90deg)" }} />
+                Start setup <Icon name="chevright" size={16} />
               </button>
             </>
           ) : step === 6 ? (
@@ -275,7 +275,7 @@ export function OnboardingModal({ existingTeams, existingApps, existingUsernames
                 disabled={!canAdvance() || submitting || keyAckPending}
                 onClick={next}
               >
-                {submitting ? "Please wait…" : "Next"} <Icon name="chevron-down" size={16} style={{ transform: "rotate(-90deg)" }} />
+                {submitting ? "Please wait…" : "Next"} <Icon name="chevright" size={16} />
               </button>
             </>
           )}

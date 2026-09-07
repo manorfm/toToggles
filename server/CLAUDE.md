@@ -1945,8 +1945,13 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
   do repositório: `UserUseCase.CreateUserDeprecated`, `GetAllUsersPtr`, `UpdateUserDeprecated`.
 - ✅ **Designação de aprovadores por time** (`POST /teams/:id/approvers/:user_id`) — integrada
   direto em `components/MemberRow.tsx`/`TeamMembersSection.tsx`, adaptado de
-  `get_component_spec("MemberRow")` (JSX confirmado com o switch de aprovador de verdade, incluindo
-  o texto literal "Aprovador"/"Designar como aprovador"/"Remover como aprovador"). **Troca de role
+  `get_component_spec("MemberRow")` (JSX confirmado com o switch de aprovador de verdade). **Fase
+  6 (fidelity pass) corrigiu uma afirmação falsa deste próprio bullet**: dizia ter confirmado o
+  texto literal "Aprovador"/"Designar como aprovador"/"Remover como aprovador" (português), mas
+  `get_component_spec("MemberRow")` na verdade sempre mostrou "Approver"/"Make approver"/"Remove
+  as approver" (inglês) em `## Textos` — o componente tinha ficado em português por engano numa
+  sessão anterior que nunca cruzou essa afirmação com a fonte real antes de escrevê-la aqui.
+  Corrigido (código + testes) pro texto real confirmado. **Troca de role
   do protótipo (role-pill) foi deliberadamente deixada de fora**: já existe uma tela dedicada pra
   isso (`UserManagementScreen`), e role é global no usuário — duplicar a mesma ação aqui criaria
   duas fontes de verdade pro mesmo estado. O switch só aparece pra membros com role `admin` (a API
@@ -1970,6 +1975,175 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
   client): o middleware `ServeStatic` serve a casca do SPA em `/` sem checar sessão antes do
   `ValidateToken()` da rota rodar — a proteção real está nas chamadas de API. `useCurrentUser`
   (`GET /profile`) é quem faz esse gate de verdade hoje.
+- ✅ **v2.6 §8 — Phase 6 (polish pass final)**: fecha o plano de paridade v2.6. Três frentes:
+  - **§8.2 empty states**: `ApplicationsScreen`'s "ed" (descrição do estado vazio) dizia "Create
+    your first application to get started." — `get_full_jsx("AppList")` (alcançável direto,
+    apesar de a árvore autenticada de `App` ser um buraco conhecido do design-graph — vale sempre
+    tentar antes de assumir que não dá) confirma "Create one to start managing its toggles.".
+    Corrigido (TDD: teste vermelho com o texto confirmado, depois o fix).
+  - **§8.4 mobile**: `.bulk-bar` (seleção múltipla, v2.6 §6.5) e `.cmdk-scrim`/`.cmdk-box`
+    (command palette, v2.6 §6.1/6.2) nunca tinham ganhado um breakpoint — a barra de bulk-select
+    (label + 2 botões numa linha só, sem wrap) transbordava horizontalmente em telas estreitas,
+    e o palette perdia espaço vertical demais com `padding-top: 12vh` fixo. Adicionado ao bloco
+    `@media (max-width: 600px)` já existente em `styles/global.css`: `.bulk-bar` ganha
+    `flex-wrap: wrap` (label empurrado pra linha própria via `flex: 1 1 100%`, mesmo padrão já
+    usado por `.tree-toolbar .search`), `.cmdk-scrim`/`.cmdk-box` ganham padding/max-height
+    ajustados pro viewport pequeno.
+  - **Fidelity pass — achado real e maior que o esperado**: comparando telas inteiras contra
+    `get_full_jsx`/`get_screen_full`/`get_component_spec`, uma quantidade grande de texto
+    confirmado (inglês) tinha ficado em português por engano em sessões anteriores que nunca de
+    fato cruzaram a implementação com a fonte antes de declarar "confirmado" — incluindo, num
+    caso (`MemberRow`), uma afirmação **falsa** de que o português tinha sido confirmado (ver
+    bullet "Designação de aprovadores por time" acima). Corrigido em: `ApprovalSettingsPanel.tsx`
+    ("Sistema de aprovação"→"Approval system", "Ações que exigem aprovação"→"Actions that require
+    approval", textos de sistema ativo/desativado, badge "N ativa(s)"→"N active"),
+    `ApprovalsScreen.tsx` (page-desc, banner "Sistema ativo/desativado · N ações
+    configuradas"→"System active/disabled · N configured actions", botão "Configurar"→"Configure",
+    empty states "Tudo limpo"/"Nenhum registro"→"All clear"/"No records"), `UserModal.tsx`
+    (título/sub/labels/hints/botões inteiros — "Criar usuário"→"Create user", "Nome
+    completo"→"Full name", "Time"→"Team", "Papel"→"Role", "Aprovador do time"→"Team approver",
+    etc.), `UserManagementScreen.tsx` (page-title "Usuários"→"Users", page-desc, busca "Buscar por
+    nome ou username"→"Search by name or username" — um comentário de teste citava esse
+    placeholder errado como "confirmado", nunca tinha sido checado de verdade —, badges,
+    "Nenhum usuário encontrado."→"No users found."), `UserRow.tsx` ("você"→"you", "Resetar
+    senha"→"Reset password", "Reativar"/"Desativar"→"Reactivate"/"Disable", "Excluir
+    usuário"→"Delete user", separador/fallback de times "," /"—"→" · "/"Unassigned"),
+    `MemberRow.tsx` ("Aprovador"/switch titles), `TempPasswordModal.tsx` (título/sub/labels/botão
+    inteiros, incluindo a caixa de ack — que não existe no protótipo, endurecimento deliberado já
+    presente em `GeneratedKeyModal` — só teve o texto traduzido pro mesmo tom em inglês),
+    `TeamsScreen.tsx` (empty state "Nenhum time ainda."→"No teams yet."). Mensagens de
+    validação/erro (formulário e catch de submit) foram deliberadamente **mantidas em português**
+    em todo lugar — convenção já estabelecida no resto do app (estado transitório, não cópia
+    confirmada do protótipo), distinta de rótulo/título/botão estático. Toda a suíte de testes
+    (unit + e2e, ~10 arquivos de spec) foi atualizada junto — nenhuma asserção continua checando o
+    texto antigo em português.
+  - **Gap real encontrado mas fora de escopo desta rodada** (feature ausente, não cópia errada):
+    o pequeno badge "⚠ no approver" ao lado da contagem de membros no `TeamsScreen` (planejado no
+    §2.10 original, Phase 1) nunca foi construído — só o aviso equivalente na tela de Approvals
+    existe. Precisaria de um campo novo (`GET /teams` não devolve se um time tem aprovador
+    designado hoje), então fica documentado aqui como pendência real, não corrigido nesta rodada
+    de polish.
+  - **Rodada extra, depois que o design-graph em si foi corrigido** (ver
+    `docs/investigation/design-graph-unreachable-components.md` — dossiê escrito nesta mesma
+    sessão pedindo pra outro agente investigar; o usuário confirmou o conserto e pediu pra
+    reverificar tudo que antes era inacessível): `CommandPalette`, `TogglePaths`, `OnboardingModal`,
+    `ToggleCard`, `SuggestChangeModal` e `ActivityView` — os 6 componentes que antes só
+    `get_full_jsx` recusava com "JSX completo não disponível" — agora extraem normalmente.
+    Recomparados um a um contra o que já existia:
+    - `CommandPalette.tsx`, `TogglePaths.tsx`, `SuggestChangeModal.tsx`, `OnboardingModal.tsx`: já
+      batiam 1:1 com o confirmado (construídos corretamente na época via decode do bundle, antes
+      da diretiva atual de só usar design-graph) — nenhuma mudança de texto/estrutura necessária.
+    - `ToggleCard.tsx`: um `title="Somente leitura"` (português) sobrou onde o confirmado diz
+      `title="Read-only"` — corrigido.
+    - **`ActivityView` — gap real e maior**: o confirmado mostra `<AuditChips>` (filtro de
+      categoria) + um `<AuditToolbar>` sem ator (filtro de intervalo + Export CSV) + `<AuditFeed>`;
+      a Activity tab desta reescrita era só um `<AuditFeed>` puro, sem filtro nenhum — nunca dava
+      pra saber que esses dois faltavam enquanto o componente ficava fora do alcance da
+      ferramenta. Corrigido de ponta a ponta:
+      - **Backend**: `AuditUseCase.ListForApplication` ganhou o mesmo `AuditListOptions` de `List`
+        (categoria + intervalo; nunca ator, de propósito — a Activity real nunca teve um `<select>`
+        de ator). O repositório já suportava combinar `ApplicationID` com `Category`/`CreatedAfter`
+        desde a Fase 5 (nenhuma mudança lá) — só faltava o usecase/handler repassarem os
+        parâmetros. `GET /applications/:id/audit` ganhou `?category=`/`?range=` (mesma validação
+        de categoria de `GetAuditLog`, extraída pra `parseAuditCategory` — evita duplicar o
+        `switch` nos dois handlers).
+      - **Frontend**: `components/AuditChips.tsx` (novo) extrai o que antes era JSX inline em
+        `HistoryScreen` (agora reusado pelos dois lugares — `CATEGORY_TABS` também virou
+        exportado de lá). `AuditToolbar` ganhou ator opcional (`onActorChange` como sinal de
+        presença — só renderiza o `<select>` quando fornecido), pra poder ser reusado pela
+        Activity tab sem ator nenhum. `ApplicationDetailScreen`'s aba Activity ganhou estado de
+        categoria/intervalo/entries e monta `AuditChips` + `AuditToolbar` (sem ator) +
+        `AuditFeed`, com `downloadCSV(entries, \`totoggle-${applicationName}-activity.csv\`)`
+        (nome de arquivo confirmado literalmente no JSX real).
+    - **`HistoryScreen` também ganhou dois ajustes confirmados só agora**: o page-desc
+      ("An append-only audit trail...", uma aproximação razoável mas nunca confirmada) virou o
+      texto real ("Administrative audit trail — accounts, teams, applications, service keys and
+      the approval system."); e um `.scope-note` novo (ícone `shield` + "Root only. Changes to
+      toggles live in each application's Activity tab.") que não existia — o texto "Root only..."
+      já era conhecido de uma fase anterior, mas nunca como um elemento visível próprio, só como
+      justificativa de uma decisão de acesso. `Icon.tsx` ganhou o glifo `shield` (o `d` exato do
+      SVG não é exposto pela extração do design-graph — só o USO `<Icon name="shield"/>`, nunca o
+      mapa `ICONS` em si — path de escudo padrão usado como aproximação razoável, mesmo estilo de
+      traço do resto do arquivo).
+    - Coberto por TDD em toda camada nova (usecase, handler de integração, componentes,
+      `ApplicationDetailScreen`) e um novo e2e (`history-and-activity.spec.ts`) provando o filtro
+      de categoria excluindo/reincluindo o toggle certo e o download do CSV com o nome de arquivo
+      exato confirmado.
+  - **Segunda rodada extra, depois de uma NOVA atualização do design-graph** (o usuário pediu uma
+    varredura de ícones/fontes/imagens): duas tools novas ficaram disponíveis —
+    `get_full_texts(name)` (lista de textos sem corte) e `get_component_data(name)` (conteúdo
+    completo de qualquer constante em nível de módulo que o componente referencia — ex.: um mapa
+    `ICONS[name] -> path`). `get_component_data("Icon")` devolveu o `ICONS` real inteiro do
+    `icons.jsx` do protótipo — comparado 1:1 contra todo glifo já usado neste projeto:
+    - ~30 ícones já batiam exatamente (incluindo `shield`, cujo path tinha sido uma aproximação
+      Feather/Lucide padrão — coincidência feliz, o real é idêntico).
+    - **2 gaps reais fechados**: `chevright` (`M9 18l6-6-6-6`, distinto de `chevdown`/
+      `chevron-down`) e `code` (`M16 18l6-6-6-6M8 6l-6 6 6 6`) nunca tinham sido confirmados — o
+      onboarding wizard usava duas substituições deliberadas documentadas no topo de
+      `OnboardingSteps.tsx` ("settings" no lugar de "code" pro card "Integration", "chevron-down"
+      rotacionado -90° no lugar de "chevright" em toda seta "→"). Ambas corrigidas pros glifos
+      reais; a rotação CSS não era visualmente errada (girar um chevron pra baixo em -90° já dá um
+      chevron pra direita), mas usar o path certo é mais correto que uma transformação por cima de
+      outro glifo.
+    - **Fontes**: `--font-sans`/`--font-mono` (`styles/tokens.css`) e o `<link>` do Google Fonts em
+      `index.html` já batiam exatamente com os tokens confirmados (`font_sans`: "Space Grotesk",
+      `font_mono`: "JetBrains Mono") — nenhuma mudança necessária.
+    - **Imagens**: o protótipo `toToggle` não tem nenhum asset de imagem/logo/ilustração (busca
+      confirmou — só a classe `.avatar`, iniciais de texto, já implementada em toda parte via
+      `lib/userDisplay.ts#initialsOf`) — nada a ajustar.
+    - Achado adicional sobre a própria ferramenta (não sobre este código): `get_full_texts`/
+      `get_component_data` resolvem o componente ERRADO quando o nome pedido é prefixo de outro
+      nome existente (`name="App"` resolveu pra `AppStep`) — documentado em
+      `docs/investigation/design-graph-findings.md` (Achado 6, novo) junto com a confirmação de
+      que os Achados 1 e 2 desse mesmo documento foram resolvidos por essas atualizações.
+  - **Terceira rodada extra, depois de uma TERCEIRA atualização do design-graph** (o usuário
+    reportou "tinha partes faltando como respostas" e pediu nova análise): `App` passou a
+    aparecer em `list_screens()` pela primeira vez desde sempre (24 componentes, 7 seções —
+    Sidebar/Topbar/Page/Confirm app row/Skey warn ×2/Toast), e `get_section(screen="App", ...)`
+    passou a devolver dados reais em vez de "Seção não encontrada" — resolvendo de vez o Achado 3
+    de `docs/investigation/design-graph-findings.md` (atualizado nesta mesma rodada). Usado pra
+    reconferir a sidebar/topbar/page-desc reais e achar gaps concretos:
+    - **Botão de nav "Search ⌘K" faltando**: o app só tinha o atalho de teclado (⌘K/Ctrl+K) pro
+      command palette, sem nenhuma affordance clicável persistente pra descobri-lo/acioná-lo — a
+      seção Sidebar real confirma um item de nav próprio (ícone `search` + label "Search" +
+      `<span className="count">⌘K</span>`, mesmo padrão visual dos contadores de badge).
+      Adicionado a `AppShell.tsx`, dentro do `<aside>` (já tem `className="nav-item"`, então o
+      fechamento automático do menu mobile em qualquer clique de `.nav-item` funciona de graça).
+    - **Branch de page-desc da aba Activity faltando**: o ternário de `ApplicationDetailScreen.tsx`
+      só tinha 2 branches (`toggles` / senão-keys) — abrir a aba Activity mostrava por engano o
+      texto da Service key. A seção "Page" real do `App` confirma um 3º branch condicional
+      (`tab === "history"` na nomenclatura do protótipo, mapeado aqui pra `tab === "activity"`):
+      "Everything that happened in this application — toggles created and removed, switches,
+      activation rules and approvals." Corrigido.
+    - **`RejectApprovalModal.tsx` e `ApprovalRow.tsx` inteiramente em português, com uma alegação
+      FALSA de que já tinham sido confirmados em inglês** (mesma classe de erro do bullet
+      "Designação de aprovadores por time" acima, sobre `MemberRow.tsx`) — achado investigando o
+      componente `RejectModal` (agora extraível via `get_full_jsx`, antes um dos 6 componentes
+      bloqueados documentados em `docs/investigation/design-graph-unreachable-components.md`).
+      Confirmado e corrigido: `RejectApprovalModal` ganhou de volta a linha "Action" que faltava
+      inteiramente (o confirmado tem 3 linhas de resumo — Action/Requested by/Target; a
+      implementação só tinha 2), título/sub/botões/labels traduzidos ("Reject request"/"The action
+      will not run"/"Cancel"/"Confirm rejection"/"Requested by"/"Target"/"Rejection reason
+      (optional)"). `ApprovalRow` teve os botões "Reject"/"Approve" e o `StatusChip`
+      ("Approved"/"Rejected"/"Pending"/"Expired") corrigidos do mesmo jeito, com o comentário do
+      `StatusChip` reescrito pra explicitar o erro anterior e não deixá-lo se repetir. Todos os
+      testes de componente e ~10 specs e2e (`grep`+`sed` em massa, mais correções manuais onde o
+      padrão de string variava) atualizados junto.
+    - **`AddMemberModal.tsx` comparado contra o `MemberModal` real**: o `sub` estava reduzido
+      demais (`` `Invite someone to ${teamName}` ``) — o confirmado é bem mais explicativo:
+      "Team members must have an account — pick one (people can belong to more than one team) or
+      create a new one for {teamName}". O rótulo do botão de submit também divergia: "Add member"
+      (confirmado é "Add to team" — o modal continua se chamando "Add member" no título, só o
+      texto do BOTÃO mudou) e a dica de "nenhum candidato" estava sintetizada em português
+      ("Todos os usuários já são membros deste time.") onde o confirmado, pro estado análogo
+      (`candidateUsers.length === 0`), diz "No other accounts to add right now." Os três
+      corrigidos; o botão que ABRE o modal (em `TeamMembersSection.tsx`) continua dizendo "Add
+      member" de propósito — ele reflete o título do modal, não o texto do botão de submit
+      interno, então não muda.
+    - **Demais componentes de `App` reconferidos sem gap**: `UserMenu.tsx` (já batia — "Change
+      password"/"Sign out", omissão documentada do nome do time por custo de uma chamada extra),
+      `ChangePasswordForm.tsx` (já confirmado numa fase anterior, sem mudança), `ConfirmModal.tsx`
+      (label padrão "Confirm" já correto), `CreateTeamModal.tsx` (já batia com `TeamModal`).
 
 ## Principais Funcionalidades
 

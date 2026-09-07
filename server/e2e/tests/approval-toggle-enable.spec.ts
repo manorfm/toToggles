@@ -16,7 +16,7 @@ test("toggle_enable is intercepted, shown to the approver, and applied after app
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Settings" }).click();
 
-  const masterSwitch = rootPage.getByRole("button", { name: "Sistema de aprovação" });
+  const masterSwitch = rootPage.getByRole("button", { name: "Approval system" });
   await ensureSwitchOn(masterSwitch);
   const enableSwitch = rootPage.getByRole("button", { name: "Enable toggle (recursive, whole subtree)" });
   await expect(enableSwitch).toBeVisible();
@@ -43,7 +43,7 @@ test("toggle_enable is intercepted, shown to the approver, and applied after app
 
   const pendingRow = rootPage.locator(".appr-row", { hasText: fixtures.togglePath });
   await expect(pendingRow).toContainText("Enable toggle");
-  await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
   await expect(pendingRow).toHaveCount(0);
 
   // 4. Admin recarrega (sem invalidação de estado entre telas, confirmado — precisa de

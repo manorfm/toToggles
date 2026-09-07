@@ -7,10 +7,11 @@ import { OnboardingCodeBlock } from "./OnboardingCodeBlock";
 // neste único arquivo — são 10 componentes pequenos, cada um usado uma única vez, só por
 // OnboardingModal.tsx; dividir em 10 arquivos não ajudaria a legibilidade.
 //
-// Duas substituições deliberadas por falta de dado confirmado (design-graph não indexa o path
-// SVG bruto do ícone "code" nem de "chevright" — só o wrapper genérico do componente Icon, sem
-// os dados de cada glifo): o card "Integration" do Welcome reusa o ícone já existente "settings"
-// em vez de inventar um path novo; toda seta "→" reusa "chevron-down" rotacionado -90°.
+// Os ícones "code" (card "Integration") e "chevright" (toda seta "→") usam os glifos reais desde
+// que get_component_data("Icon") passou a expor o mapa ICONS bruto do icons.jsx — antes disso o
+// design-graph só indexava o USO `<Icon name="X"/>`, nunca o path SVG de cada glifo, então esta
+// tela usava duas substituições deliberadas ("settings" no lugar de "code", "chevron-down"
+// rotacionado -90° no lugar de "chevright") documentadas aqui até o dado ficar disponível.
 
 // ---- Progress dots ----
 const PROGRESS_LABELS = ["Teams", "People", "Application", "Toggles", "Service Key", "Integration"];
@@ -64,7 +65,7 @@ const WELCOME_CARDS: { icon: IconName; n: number; label: string; desc: string }[
   { icon: "apps", n: 3, label: "Application", desc: "Groups every toggle of a service" },
   { icon: "layers", n: 4, label: "Toggles", desc: "Dotted-path flags with automatic cascading" },
   { icon: "key", n: 5, label: "Service Key", desc: "Secret key shown exactly once" },
-  { icon: "settings", n: 6, label: "Integration", desc: "Kotlin/Java lib — 3 lines to connect" },
+  { icon: "code", n: 6, label: "Integration", desc: "Kotlin/Java lib — 3 lines to connect" },
 ];
 
 export function WelcomeStep() {

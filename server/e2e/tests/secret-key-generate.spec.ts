@@ -38,7 +38,7 @@ test.describe("secret key — generate/regenerate", () => {
     const rootContext = await browser.newContext({ storageState: ROOT_STATE });
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOff(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOff(rootPage.getByRole("button", { name: "Approval system" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -62,7 +62,7 @@ test.describe("secret key — generate/regenerate", () => {
     const rootContext = await browser.newContext({ storageState: ROOT_STATE });
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Sistema de aprovação" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Generate secret key" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
@@ -85,7 +85,7 @@ test.describe("secret key — generate/regenerate", () => {
     await rootPage.getByRole("button", { name: "Pending" }).click();
     const pendingRow = rootPage.locator(".appr-row", { hasText: "Generate secret key" });
     await expect(pendingRow).toBeVisible();
-    await pendingRow.getByRole("button", { name: "Aprovar" }).click();
+    await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);
 
     // A chave em si nunca é exposta pro admin depois (foi gerada de forma assíncrona, fora da
