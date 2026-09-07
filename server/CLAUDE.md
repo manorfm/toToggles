@@ -1241,6 +1241,23 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       `browser.newContext()` totalmente à parte, autenticado via formulário de login de verdade —
       prova o mesmo ponto (favorito não vive em localStorage/memória de uma sessão específica) sem
       destruir o estado global do suite.
+    - **Bug real reportado em uso ao vivo, achado logo depois de subir a persistência acima**: "não
+      está aparecendo na barra os favoritos quando marco como favorito uma aplicação". Confirmado
+      direto no banco (`sqlite3 db/toggles.db "SELECT * FROM user_favorites"`) que o `POST` tinha
+      persistido normalmente — a aplicação favoritada existia, o registro existia — mas a sidebar
+      nunca refletia isso. Causa raiz: uma corrida real entre o `GET /profile/favorites` disparado
+      no mount (`ensureLoaded()`) e o clique em "Favorite" logo em seguida — em produção (rede de
+      verdade, não o `fetch` mockado e instantâneo dos testes) nada garante que esse GET, que
+      partiu ANTES do clique, também RESOLVE antes dele; quando a resposta (a lista de favoritos de
+      ANTES do clique) chegava DEPOIS da atualização otimista, `cached = favorites` sobrescrevia o
+      favorito recém-adicionado com a lista velha — o servidor tinha o dado certo, só a cópia local
+      voltava a ficar desatualizada. Corrigido em `hooks/useFavorites.ts` com uma flag
+      `localMutationHappened`: assim que qualquer `toggleFavorite` acontece, o estado otimista
+      local passa a ser mais confiável que qualquer resposta do carregamento inicial que ainda
+      esteja em voo — uma resposta tardia desse GET é só descartada, nunca mais sobrescreve
+      `cached`. Regressão travada em `useFavorites.test.ts` controlando manualmente a ordem de
+      resolução das duas promises (a inicial só resolve DEPOIS do toggle) — confirmado que o teste
+      falha de verdade sem a correção antes de ser aceito como válido.
     - ✅ **§6.6 — "Suggest a change" (rocket icon)**: completo. `ToggleCard`/`TogglePaths` já
       tinham o prop `onSuggest` (botão foguete ao lado do switch somente-leitura, só quando
       `!canEdit`) da mesma passada de §6.4/§6.5. Backend: `POST

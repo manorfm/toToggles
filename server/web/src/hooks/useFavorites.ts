@@ -13,6 +13,16 @@ import { toggleFavorite as flipFavorite } from "../lib/favorites";
 // só o primeiro mount de qualquer instância dispara o carregamento real.
 let cached: string[] = [];
 let fetchPromise: Promise<void> | null = null;
+// Bug real reportado em uso ao vivo: favoritar um item não aparecia na sidebar, mesmo o POST
+// tendo persistido de verdade no servidor (confirmado direto no banco). Causa raiz — uma corrida
+// entre o GET inicial (disparado no mount) e um clique em "Favorite" logo em seguida: se a
+// resposta do GET (que partiu ANTES do clique, com os favoritos de então) chega DEPOIS da
+// atualização otimista do clique, `cached = favorites` sobrescrevia o favorito recém-adicionado
+// com a lista antiga — o servidor tinha o dado certo, a UI local voltava a ficar desatualizada.
+// `localMutationHappened` trava esse `cached = favorites` assim que qualquer toggle acontece: a
+// partir daí, o estado otimista local já está mais atualizado que qualquer GET que tenha partido
+// antes dele, então uma resposta tardia do carregamento inicial é só descartada.
+let localMutationHappened = false;
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void): () => void {
@@ -32,6 +42,7 @@ function ensureLoaded(): void {
   if (fetchPromise) return;
   fetchPromise = listFavorites()
     .then((favorites) => {
+      if (localMutationHappened) return; // ver o comentário acima — dado velho, descartado.
       cached = favorites;
       notify();
     })
@@ -56,6 +67,7 @@ export function useFavorites(): UseFavorites {
   }, []);
 
   const toggleFavorite = useCallback((key: string) => {
+    localMutationHappened = true;
     const wasFavorite = cached.includes(key);
     cached = flipFavorite(cached, key);
     notify();
