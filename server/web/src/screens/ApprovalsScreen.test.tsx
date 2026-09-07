@@ -91,7 +91,7 @@ describe("ApprovalsScreen", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/pending", expect.anything());
   });
 
-  it("fetches /approval/requests/approvable for non-root, and shows no status banner or Settings tab", async () => {
+  it("fetches /approval/requests/approvable for non-root, and shows no status banner, Settings or History tab", async () => {
     // mockImplementation (não mockResolvedValue): cada chamada precisa do seu próprio objeto
     // Response — a tela dispara fetches concorrentes de verdade agora (requests + times/
     // aprovador-status pro banner de §2.10), e um único Response compartilhado só permite
@@ -105,6 +105,70 @@ describe("ApprovalsScreen", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests/approvable", expect.anything());
     expect(screen.queryByRole("button", { name: /configure/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^settings$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^history$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^mine$/i })).toBeInTheDocument();
+  });
+
+  // Estrutura de abas confirmada contra o `App`/`ApprovalsView` reais (get_full_jsx): root NUNCA
+  // vê "Mine" — em vez disso ganha "History" (itens já resolvidos, org-wide); não-root nunca vê
+  // "History" nem "Settings". Achado numa auditoria de status geral (v2.6 §2, gap documentado
+  // desde a fase 11 e nunca corrigido até agora).
+  it("shows 'History' (not 'Mine') for root, alongside Pending and Settings", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderScreen(root);
+
+    await screen.findByText(/all clear/i);
+    expect(screen.getByRole("button", { name: /^pending$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^history$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^settings$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^mine$/i })).not.toBeInTheDocument();
+  });
+
+  it("switches to the History tab, fetches /approval/requests, and only shows resolved requests read-only", async () => {
+    const pendingOne = { ...request, id: "p1", status: "pending" };
+    const approvedOne = { ...request, id: "h1", status: "approved", toggle_path: "payments.old" };
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
+      if (path === "/api/approval/requests") return Promise.resolve(jsonResponse(200, { message: "ok", data: [pendingOne, approvedOne] }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen(root);
+    await screen.findByText(/all clear/i);
+
+    await user.click(screen.getByRole("button", { name: /^history$/i }));
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/approval/requests", expect.anything());
+    expect(await screen.findByText("payments.old")).toBeInTheDocument();
+    expect(screen.queryByText("payments.card")).not.toBeInTheDocument(); // o pendente fica de fora
+    expect(screen.getByText(/approved/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /withdraw/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the History tab's own empty state when there are no resolved requests", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
+      if (path === "/api/approval/requests") return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+      return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderScreen(root);
+    await screen.findByText(/all clear/i);
+
+    await user.click(screen.getByRole("button", { name: /^history$/i }));
+
+    expect(await screen.findByText(/no records/i)).toBeInTheDocument();
+    expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument();
   });
 
   it("warns a non-approver that none of their teams have an approver at all", async () => {
@@ -229,16 +293,17 @@ describe("ApprovalsScreen", () => {
     expect(await screen.findByText(/all clear/i)).toBeInTheDocument();
   });
 
+  // "Mine" só existe pra não-root desde a correção de estrutura de abas (ver testes acima) —
+  // root ganhou "History" no lugar. Reescrito de root pra admin por esse motivo.
   it("switches to the Mine tab, fetches /approval/requests/my, and shows the awaiting-review hint (never action buttons)", async () => {
     const fetchMock = vi.fn().mockImplementation((path: string) => {
-      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
       if (path === "/api/approval/requests/my") return Promise.resolve(jsonResponse(200, { message: "ok", data: [request] }));
       return Promise.resolve(jsonResponse(200, { message: "ok", data: [] }));
     });
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    renderScreen(root);
+    renderScreen(admin);
     await screen.findByText(/all clear/i);
 
     await user.click(screen.getByRole("button", { name: /^mine$/i }));
@@ -252,7 +317,6 @@ describe("ApprovalsScreen", () => {
   it("withdraws a pending request from the Mine tab, clearing it from the list", async () => {
     let withdrawn = false;
     const fetchMock = vi.fn().mockImplementation((path: string, init?: RequestInit) => {
-      if (path === "/api/approval/settings") return Promise.resolve(jsonResponse(200, { message: "ok", data: settings() }));
       if (path === "/api/approval/requests/1/withdraw" && init?.method === "POST") {
         withdrawn = true;
         return Promise.resolve(jsonResponse(200, { message: "ok" }));
@@ -263,7 +327,7 @@ describe("ApprovalsScreen", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
-    renderScreen(root);
+    renderScreen(admin);
     await screen.findByText(/all clear/i);
     await user.click(screen.getByRole("button", { name: /^mine$/i }));
     await screen.findByText(/delete toggle/i);

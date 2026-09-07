@@ -2225,11 +2225,20 @@ de favoritos foi adicionada além do escopo original a pedido do usuário. Os it
 divergências de documentação (texto desatualizado dizendo que o onboarding não existia — existe
 desde §6.7-6.9 — e um bug real de tradução, o nav item "Users" que tinha ficado "Usuários"):
 
-1. **Estrutura de abas de `ApprovalsScreen` diverge do confirmado por papel** — root vê hoje
-   Pending/Approvable + Mine + Settings (igual a qualquer role); o confirmado real é root sem
-   "Mine" (com uma aba "Histórico" que filtra decisões já tomadas, no lugar dela) e não-root com
-   Pending + "Minhas solicitações" (sem Settings). Documentado como gap de ESTRUTURA (não CSS/
-   copy) desde a fase 11, nunca revisitado.
+1. ✅ **RESOLVIDO (2026-09-07)** — Estrutura de abas de `ApprovalsScreen` por papel. Root agora vê
+   Pending/History/Settings (sem "Mine"); não-root vê Pending-ou-Approvable/Mine (sem Settings/
+   History), confirmado contra `get_full_jsx("App")`/`get_screen_full("ApprovalsView")` (o
+   ternário real do empty state, `tab === "pending" ? "check" : tab === "mine" ? "user" :
+   "history"`, prova que existe um 3º valor de tab fora de pending/mine, e que ele usa o ícone
+   "history"). A aba "History" reusa `GET /approval/requests` (`api/approvals.ts#listAllApprovals`)
+   — endpoint que já existia no backend E no frontend, mas estava **morto** (zero chamadores reais,
+   só os próprios testes) desde que o `/history` global migrou pro sistema de audit log genérico;
+   revivido em vez de recriado, sem nenhuma mudança de backend necessária. `ApprovalsScreen`
+   filtra `status !== "pending"` no cliente, mesma lógica do `ApprovalsView` real. TDD: 3 testes
+   novos + 2 reescritos (os que testavam "Mine" como root migraram pra admin, já que root perdeu
+   essa aba) em `ApprovalsScreen.test.tsx`; e2e (`approval-reject.spec.ts`) estendido pra provar
+   que root vê o item rejeitado em "History" (não em "Mine", que nem existe pra root) e que
+   admin nunca vê "History".
 2. **`TeamsScreen`'s "No teams yet" é texto solto**, não a estrutura `.empty` (ícone + título +
    descrição) já aplicada em Applications/Approvals.
 3. **Badge "⚠ no approver" no `TeamsScreen`** (planejado no §2.10 original) nunca foi construído

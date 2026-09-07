@@ -8,6 +8,7 @@ import { ApiError } from "../api/client";
 import {
   approveApproval,
   executeApproval,
+  listAllApprovals,
   listApprovableApprovals,
   listMyApprovals,
   listMyApproverTeams,
@@ -21,7 +22,15 @@ import { useAppUser } from "../hooks/useAppUser";
 import type { ApprovalRequest } from "../types/approval";
 import type { ApprovalActionKey, ApprovalSettings } from "../types/approvalSettings";
 
-type Tab = "pending" | "mine" | "settings";
+// Estrutura de abas por papel confirmada contra get_full_jsx("App")/get_screen_full("ApprovalsView")
+// numa auditoria de status geral: root NUNCA vê "Mine" (o ternário do empty state real é
+// `tab === "pending" ? "check" : tab === "mine" ? "user" : "history"` — só existe um 3º valor de
+// tab possível fora de pending/mine/settings, e ele usa o ícone "history") — em vez disso vê
+// "History" (itens já resolvidos, org-wide, via GET /approval/requests — endpoint que já existia
+// e estava morto no frontend até agora, criado numa fase anterior sem nenhum chamador real).
+// Não-root nunca vê "History" nem "Settings". Gap de estrutura documentado desde a fase 11 do
+// histórico deste arquivo, nunca corrigido até esta rodada.
+type Tab = "pending" | "mine" | "history" | "settings";
 
 type RequestsState =
   | { status: "loading" }
@@ -34,11 +43,12 @@ type SettingsState =
   | { status: "loaded"; settings: ApprovalSettings }
   | { status: "error"; message: string };
 
-// Adaptado de get_screen_full("ApprovalsView") — uma ÚNICA tela com abas (Pending/Mine/Settings),
-// não três rotas separadas como numa fase anterior desta reescrita: "Configure" no banner de
-// status (root only) só troca de aba, nunca navega. ApprovalSettingsView é literalmente uma aba
-// desta tela no protótipo, não um destino de navegação próprio — settings/get_full_jsx confirma
-// o componente sendo renderizado inline quando tab === "settings".
+// Adaptado de get_screen_full("ApprovalsView") — uma ÚNICA tela com abas por papel (root:
+// Pending/History/Settings; não-root: Pending ou Approvable/Mine), não três rotas separadas como
+// numa fase anterior desta reescrita: "Configure" no banner de status (root only) só troca de
+// aba, nunca navega. ApprovalSettingsView é literalmente uma aba desta tela no protótipo, não um
+// destino de navegação próprio — settings/get_full_jsx confirma o componente sendo renderizado
+// inline quando tab === "settings".
 //
 // Fase 6 (fidelity pass): page-desc e o botão do banner de status ("Configurar") tinham ficado em
 // português por engano num decode anterior — get_full_jsx("ApprovalsView") confirma o texto real
@@ -93,7 +103,17 @@ export function ApprovalsScreen() {
   }, [isRoot]);
 
   const loadRequests = useCallback(() => {
-    const fetcher = tab === "mine" ? listMyApprovals : isRoot ? listPendingApprovals : listApprovableApprovals;
+    // "history" filtra fora os pendentes no CLIENTE (mesma lógica do protótipo real,
+    // `approvals.filter(a => a.status !== "pending")`) — o endpoint devolve qualquer status,
+    // já escopado no servidor (root vê tudo, qualquer outro role só os próprios teams).
+    const fetcher =
+      tab === "history"
+        ? () => listAllApprovals().then((all) => all.filter((a) => a.status !== "pending"))
+        : tab === "mine"
+          ? listMyApprovals
+          : isRoot
+            ? listPendingApprovals
+            : listApprovableApprovals;
     setRequestsState({ status: "loading" });
     fetcher()
       .then((requests) => setRequestsState({ status: "loaded", requests }))
@@ -273,9 +293,15 @@ export function ApprovalsScreen() {
         <button className={"chip" + (tab === "pending" ? " on" : "")} onClick={() => setTab("pending")}>
           {isRoot ? "Pending" : "Approvable"}
         </button>
-        <button className={"chip" + (tab === "mine" ? " on" : "")} onClick={() => setTab("mine")}>
-          Mine
-        </button>
+        {isRoot ? (
+          <button className={"chip" + (tab === "history" ? " on" : "")} onClick={() => setTab("history")}>
+            History
+          </button>
+        ) : (
+          <button className={"chip" + (tab === "mine" ? " on" : "")} onClick={() => setTab("mine")}>
+            Mine
+          </button>
+        )}
         {isRoot && (
           <button className={"chip" + (tab === "settings" ? " on" : "")} onClick={() => setTab("settings")}>
             Settings
@@ -319,7 +345,7 @@ export function ApprovalsScreen() {
           {requestsState.status === "error" && <div className="empty">{requestsState.message}</div>}
           {requestsState.status === "loaded" && requestsState.requests.length === 0 && (
             <div className="empty">
-              <Icon name={tab === "pending" ? "check" : "user"} size={40} />
+              <Icon name={tab === "pending" ? "check" : tab === "mine" ? "user" : "history"} size={40} />
               <div className="et">{tab === "pending" ? "All clear" : "No records"}</div>
               <div className="ed">{tab === "pending" ? "No pending requests." : "Nothing here yet."}</div>
             </div>
@@ -349,7 +375,7 @@ export function ApprovalsScreen() {
                       onApprove={() => handleApprove(request.id)}
                       onReject={() => setRejecting(request)}
                       busy={busyId === request.id}
-                      readOnly={tab === "mine"}
+                      readOnly={tab === "mine" || tab === "history"}
                       isOwn={tab === "mine"}
                       onWithdraw={tab === "mine" ? () => handleWithdraw(request.id) : undefined}
                     />

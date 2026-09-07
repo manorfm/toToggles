@@ -29,6 +29,14 @@ test("root rejects a pending request: nothing is applied, admin sees it as Rejec
   await rootPage.getByRole("button", { name: "Confirm rejection" }).click();
   await expect(pendingRow).toHaveCount(0); // some da lista de pendentes
 
+  // Estrutura de abas por papel (achado numa auditoria de status geral, corrigido nesta rodada):
+  // root nunca tem uma aba "Mine" — em vez disso, itens já resolvidos (de qualquer solicitante)
+  // aparecem em "History", org-wide. Confirmado contra get_full_jsx("App")/("ApprovalsView").
+  await expect(rootPage.getByRole("button", { name: "Mine" })).not.toBeVisible();
+  await rootPage.getByRole("button", { name: "History" }).click();
+  const historyRow = rootPage.locator(".appr-row", { hasText: "e2e.reject.target" });
+  await expect(historyRow).toContainText("Rejected");
+
   // Nada foi aplicado: o toggle continua ligado.
   await adminPage.reload();
   await expect(sw).toHaveAttribute("aria-checked", "true");
@@ -38,6 +46,7 @@ test("root rejects a pending request: nothing is applied, admin sees it as Rejec
   // PT-BR; nunca tinha sido cruzado contra a fonte real — mesmo tipo de erro corrigido em
   // ApprovalRow.tsx, ver server/CLAUDE.md).
   await adminPage.goto("/approvals");
+  await expect(adminPage.getByRole("button", { name: "History" })).not.toBeVisible();
   await adminPage.getByRole("button", { name: "Mine" }).click();
   const mineRow = adminPage.locator(".appr-row", { hasText: "e2e.reject.target" });
   await expect(mineRow).toContainText("Rejected");

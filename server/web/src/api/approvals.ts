@@ -2,11 +2,13 @@ import { apiFetch } from "./client";
 import type { ApprovalRequest } from "../types/approval";
 import type { Team } from "../types/team";
 
-// GET /approval/requests — qualquer status (pending/approved/rejected/expired),
-// acessível pra qualquer role autenticada (sem RequireRoot/RequireAdmin no servidor).
-// Usado pela tela de History como o log de auditoria disponível de verdade — o
-// protótipo mostra "todo evento do sistema", mas o backend só registra o que passou
-// pelo workflow de aprovação.
+// GET /approval/requests — qualquer status (pending/approved/rejected/expired), root vê tudo,
+// qualquer outro role só as solicitações dos próprios teams. Fonte da aba "History" da tela de
+// Approvals (root only) — ApprovalsScreen filtra fora os pendentes no cliente
+// (`status !== "pending"`), mesma lógica do `ApprovalsView` real. Achado dead code até esta
+// correção: existia desde uma fase anterior (planejado como fonte do antigo /history global),
+// sem nenhum chamador real depois que /history migrou pro sistema de audit log genérico
+// (GET /api/audit) — revivido aqui, não recriado do zero.
 export async function listAllApprovals(): Promise<ApprovalRequest[]> {
   const body = await apiFetch<{ message: string; data?: ApprovalRequest[] }>("/approval/requests");
   return body.data ?? [];
