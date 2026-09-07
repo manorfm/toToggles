@@ -760,14 +760,15 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       "Toggles" da sub-nav) e as regras `.nav-item svg { color: var(--ink-3) }`/`.nav-item.active
       svg { color: var(--accent) }`/`.key-active-dot` que também estavam faltando em
       `global.css`.
-  - **Ainda deliberadamente fora de escopo** (confirmados no JSX real, não construídos): item de
-    nav "Guia de início" (ícone `rocket`, abre `OnboardingModal` de 7 passos — feature inteira
-    ainda não existe, adicionar o link seria clique morto); linha "Light mode" no rodapé (no
-    protótipo é funcional de verdade, mas este app só suporta o tema escuro por decisão já
-    documentada — replicar só visualmente seria UI morta pelo mesmo motivo). Ambos continuam
-    visivelmente ausentes na comparação lado a lado com o protótipo — é uma divergência real e
-    conhecida, não um erro de implementação; construí-los exigiria as features de verdade por
-    trás (o wizard de onboarding, o suporte a tema claro), não só o item de menu.
+  - **Bullet original desatualizado — corrigido** (o item de nav "Guia de início"/onboarding foi
+    construído numa fase seguinte, v2.6 §6.7-6.9, ver mais abaixo; este texto ficou obsoleto sem
+    ser atualizado até uma auditoria de status geral encontrar a divergência entre este arquivo e
+    o código real). **Ainda deliberadamente fora de escopo**: só a linha "Light mode" no rodapé
+    (no protótipo é funcional de verdade, mas este app só suporta o tema escuro por decisão já
+    documentada — replicar só visualmente seria UI morta). Confirmado byte a byte contra
+    `get_full_jsx("App")` numa rodada posterior: o botão real é `{dark ? "Light mode" : "Dark
+    mode"}` com ícone `sun`/`shield` alternando — a mesma decisão de omitir continua válida, não
+    revisitada.
   - **`EditToggleDrawer` (regras de ativação) corrigido contra o `RULE_TYPES` real, achado no
     mesmo decode do bundle v2.1.** Uma fase anterior tinha inventado nome/descrição/placeholder/
     hint em português pros 7 tipos de regra porque, na época, `get_full_jsx("EditDrawer")` só
@@ -1258,6 +1259,17 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       `cached`. Regressão travada em `useFavorites.test.ts` controlando manualmente a ordem de
       resolução das duas promises (a inicial só resolve DEPOIS do toggle) — confirmado que o teste
       falha de verdade sem a correção antes de ser aceito como válido.
+    - **Auditoria de status geral pedida pelo usuário** ("todas as mudanças pra fechar a v2.6 já
+      foram implementadas e estamos sem pendências?") — revarredura de todo este arquivo atrás de
+      marcadores de pendência (`ainda não`, `não corrigido`, `AINDA ABERTO`, `candidato a uma
+      próxima passada` etc.) cruzados contra o código real e, quando possível, contra
+      `get_full_jsx`/`get_full_texts` de novo. Achado um bug real de tradução no processo: o item
+      de nav "Users" e o 3º nível do breadcrumb (`/users`) estavam com o rótulo em português
+      ("Usuários") — `get_full_jsx("App")` confirma o literal `"Users"` (a fase 11, que traduziu o
+      TÍTULO da página pra inglês, tinha deixado o rótulo do NAV ITEM de fora por engano, uma
+      string diferente). Corrigido em `AppShell.tsx` (nav item + breadcrumb) e no teste
+      correspondente. Ver a tabela de pendências reais abaixo (seção "Status v2.6") pro resultado
+      completo desta auditoria.
     - ✅ **§6.6 — "Suggest a change" (rocket icon)**: completo. `ToggleCard`/`TogglePaths` já
       tinham o prop `onSuggest` (botão foguete ao lado do switch somente-leitura, só quando
       `!canEdit`) da mesma passada de §6.4/§6.5. Backend: `POST
@@ -2204,6 +2216,39 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       password"/"Sign out", omissão documentada do nome do time por custo de uma chamada extra),
       `ChangePasswordForm.tsx` (já confirmado numa fase anterior, sem mudança), `ConfirmModal.tsx`
       (label padrão "Confirm" já correto), `CreateTeamModal.tsx` (já batia com `TeamModal`).
+
+### Status v2.6 — pendências reais conhecidas (última auditoria: 2026-09-07)
+
+O plano v2.6 está **substancialmente completo** (Phases 1–6, ver histórico acima) e persistência
+de favoritos foi adicionada além do escopo original a pedido do usuário. Os itens abaixo são os
+únicos gaps REAIS ainda abertos, encontrados numa auditoria de status que também corrigiu duas
+divergências de documentação (texto desatualizado dizendo que o onboarding não existia — existe
+desde §6.7-6.9 — e um bug real de tradução, o nav item "Users" que tinha ficado "Usuários"):
+
+1. **Estrutura de abas de `ApprovalsScreen` diverge do confirmado por papel** — root vê hoje
+   Pending/Approvable + Mine + Settings (igual a qualquer role); o confirmado real é root sem
+   "Mine" (com uma aba "Histórico" que filtra decisões já tomadas, no lugar dela) e não-root com
+   Pending + "Minhas solicitações" (sem Settings). Documentado como gap de ESTRUTURA (não CSS/
+   copy) desde a fase 11, nunca revisitado.
+2. **`TeamsScreen`'s "No teams yet" é texto solto**, não a estrutura `.empty` (ícone + título +
+   descrição) já aplicada em Applications/Approvals.
+3. **Badge "⚠ no approver" no `TeamsScreen`** (planejado no §2.10 original) nunca foi construído
+   — precisaria de um campo novo em `GET /teams` (hoje não expõe se o time tem aprovador
+   designado).
+4. **`EditToggleDrawer`/`CreateToggleModal`/`StatusRing` nunca foram auditados contra o
+   design-graph** (JSX real nunca comparado lado a lado, diferente de todo o resto da tela de
+   detalhe de aplicação, já confirmado). Candidatos naturais a uma próxima varredura.
+5. **`PUT /applications/:id` classificado como `application_create` pelo middleware de aprovação**
+   (não existe uma constante `application_update` própria) — pré-existente ao frontend, afeta só
+   o approval workflow quando alguém edita (não cria) uma aplicação com aprovação ligada para
+   `application_create`.
+6. **Achado sobre o próprio design-graph, não uma pendência deste código**: `get_full_texts`/
+   `get_component_data` ainda resolvem o componente errado quando o nome pedido é prefixo de
+   outro (Achado 6, `docs/investigation/design-graph-findings.md`) — sem solução possível deste
+   lado, é bug da ferramenta.
+
+Nenhum destes é um bloqueador — todos são cosméticos, de escopo pequeno e bem isolado, ou fora do
+alcance deste código (o Achado 6). Peça pra atacar qualquer um deles quando fizer sentido.
 
 ## Principais Funcionalidades
 

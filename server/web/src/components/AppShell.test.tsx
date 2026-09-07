@@ -205,25 +205,27 @@ describe("AppShell", () => {
   });
 
   // O protótipo foi atualizado com uma tela de usuários de verdade (UsersView) e um item de nav
-  // confirmado ("Usuários", canManageUsers = root || admin) — diferente de uma fase anterior,
-  // onde "Users" tinha sido removido do menu por não ter respaldo nenhum no protótipo.
-  it("shows the 'Usuários' nav link for root and for admin, but not for a read-only user", async () => {
+  // confirmado ("Users", canManageUsers = root || admin) — diferente de uma fase anterior, onde
+  // "Users" tinha sido removido do menu por não ter respaldo nenhum no protótipo. O rótulo tinha
+  // ficado em português ("Usuários") por engano até ser corrigido numa rodada posterior —
+  // `get_full_jsx("App")` confirma o literal em inglês.
+  it("shows the 'Users' nav link for root and for admin, but not for a read-only user", async () => {
     vi.stubGlobal("fetch", mockFetch({ id: "1", username: "root", role: "root", must_change_password: false }));
     const { unmount } = renderShell();
     await screen.findByText("Applications content");
-    expect(screen.getByRole("link", { name: /usuários/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^users/i })).toBeInTheDocument();
     unmount();
 
     vi.stubGlobal("fetch", mockFetch({ id: "2", username: "alice", role: "admin", must_change_password: false }));
     const { unmount: unmount2 } = renderShell();
     await screen.findByText("Applications content");
-    expect(screen.getByRole("link", { name: /usuários/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^users/i })).toBeInTheDocument();
     unmount2();
 
     vi.stubGlobal("fetch", mockFetch({ id: "3", username: "bob", role: "user", must_change_password: false }));
     renderShell();
     await screen.findByText("Applications content");
-    expect(screen.queryByRole("link", { name: /usuários/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^users/i })).not.toBeInTheDocument();
   });
 
   it("hides 'Teams & people' for non-root users (the API is RequireRoot())", async () => {

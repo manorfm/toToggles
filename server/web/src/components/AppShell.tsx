@@ -45,14 +45,16 @@ import { UserMenu } from "./UserMenu";
 // como título de página (page-title/breadcrumb), mas o item da sidebar continua "Approvals";
 // "Configurar" só troca de aba dentro da mesma tela, nunca navega.
 //
-// "Usuários" (User Management) FOI removido do menu numa fase anterior por não ter texto
+// "Users" (User Management) FOI removido do menu numa fase anterior por não ter texto
 // confirmado no protótipo — o protótipo foi atualizado depois e agora tem uma tela de usuários
 // de verdade (UsersView/UserModal/TempPasswordModal/StatusPill), com este item de nav
-// confirmado: `{canManageUsers && <button>...<Icon name="user" size={17}/> Usuários
-// <span className="count">{users.length}</span></button>}`, `canManageUsers =
-// role === "root" || role === "admin"`. "Guia de início" continua de fora: é confirmado (ícone
-// "rocket", abre um OnboardingModal de 7 passos) mas mapeia pra uma feature inteira ainda não
-// construída nesta reescrita — adicionar o item de nav sem destino real seria um clique morto.
+// confirmado: `{canManageUsers && <button>...<Icon name="user" size={17}/> Users
+// <span className="count">{users.length}</span></button>}` (rótulo em INGLÊS — achado e corrigido
+// numa rodada posterior, `get_full_jsx("App")` confirma "Users", não "Usuários"; ficou português
+// por engano desde a fase que criou este item), `canManageUsers = role === "root" || role ===
+// "admin"`. "Guia de início" (onboarding wizard, ícone `rocket`) foi construído numa fase
+// seguinte (v2.6 §6.7-6.9) — confirmado 1:1 contra `get_full_jsx("App")`: `{obDone ? "Review
+// setup" : "Getting started"}`, idêntico ao que este componente renderiza.
 //
 // Sub-navegação da aplicação aberta — confirmada no app.jsx real como um `<div className=
 // "nav-label">{app.name}</div>` seguido de dois nav-items ("Toggles" com contador de
@@ -64,7 +66,7 @@ import { UserMenu } from "./UserMenu";
 const NAV_ITEMS: { to: string; label: string; end?: boolean; rootOnly?: boolean; adminOrRoot?: boolean; icon: IconName; alwaysShowCount?: boolean }[] = [
   { to: "/", label: "Applications", end: true, icon: "apps", alwaysShowCount: true },
   { to: "/teams", label: "Teams & people", rootOnly: true, icon: "users", alwaysShowCount: true },
-  { to: "/users", label: "Usuários", adminOrRoot: true, icon: "user", alwaysShowCount: true },
+  { to: "/users", label: "Users", adminOrRoot: true, icon: "user", alwaysShowCount: true },
   { to: "/approvals", label: "Approvals", icon: "check" },
   { to: "/history", label: "History", rootOnly: true, icon: "history" },
 ];
@@ -96,7 +98,7 @@ function Crumbs({ pathname, onHome, openApp }: { pathname: string; onHome: () =>
   const now = pathname.startsWith("/teams")
     ? "Teams & people"
     : pathname.startsWith("/users")
-      ? "Usuários"
+      ? "Users"
       : pathname.startsWith("/approvals")
         ? "Approval Management"
         : pathname.startsWith("/history")
