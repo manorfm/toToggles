@@ -44,6 +44,12 @@ describe("NodeRequestContextResolver", () => {
     resolver.run(request("2001:db8:1::8", { forwarded: "for=2001:db8::1" }), () => expect(resolver.resolve("ip")).toBe("2001:db8::1"));
   });
 
+  it("uses an injected local country resolver only for a trusted peer", () => {
+    const resolver = new NodeRequestContextResolver({ trustedProxyAddresses: ["10.0.0.8"], countryResolver: () => "br" });
+    resolver.run(request("10.0.0.8"), () => expect(resolver.resolve("country")).toBe("BR"));
+    resolver.run(request("10.0.0.9"), () => expect(resolver.resolve("country")).toBeUndefined());
+  });
+
   it("makes request context available through middleware", () => {
     const resolver = new NodeRequestContextResolver();
     resolver.middleware()(request("10.0.0.8"), undefined, () => {

@@ -8,6 +8,8 @@ export interface NodeRequestContextOptions {
   readonly trustedProxyAddresses?: readonly string[];
   /** Country header emitted by a trusted edge. It is ignored for untrusted peers. */
   readonly countryHeader?: string;
+  /** Optional local GeoIP resolver; called only when a trusted country header is unavailable. */
+  readonly countryResolver?: (ip: string) => string | undefined;
   /** Domain-owned values such as user_id, rollout_key, cohort and attributes.*. */
   readonly values?: (request: IncomingMessage) => Readonly<Record<string, string | undefined>>;
 }
@@ -50,7 +52,8 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
       if (forwarded && isIP(forwarded) !== 0) values.set("ip", forwarded);
       const country = request.headers[this.countryHeader];
       const countryValue = Array.isArray(country) ? country[0] : country;
-      if (countryValue && /^[A-Za-z]{2}$/.test(countryValue.trim())) values.set("country", countryValue.trim().toUpperCase());
+      const resolvedCountry = countryValue ?? (remote ? this.options.countryResolver?.(remote) : undefined);
+      if (resolvedCountry && /^[A-Za-z]{2}$/.test(resolvedCountry.trim())) values.set("country", resolvedCountry.trim().toUpperCase());
     }
     for (const [key, value] of Object.entries(this.options.values?.(request) ?? {})) {
       if (value !== undefined && value !== "") values.set(key, value);
