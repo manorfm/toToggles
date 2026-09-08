@@ -9,12 +9,27 @@ interface GeneratedKeyModalProps {
   // já existe (inativo) e este é o único momento em que alguém vai ver o valor em texto puro, mas
   // ele ainda não autentica nada até um aprovador aprovar a solicitação (server/CLAUDE.md).
   pendingApproval?: boolean;
+  // true quando já existia uma chave (current ou previous) antes desta geração — confirmado no
+  // protótipo real (get_full_jsx("ServiceKeyModal")): título vira "New service key generated".
+  // SecretKeySection.tsx já calculava exatamente essa condição pra decidir se mostra confirmação
+  // antes de gerar — só nunca repassava pra este modal (achado numa varredura posterior).
+  //
+  // Divergência deliberada: o confirmado também tem um aviso "The previous key was revoked" nessa
+  // variante — omitido aqui de propósito, porque seria FALSO no nosso modelo. O protótipo sempre
+  // substitui a chave na hora (sem overlap); esta reescrita tem uma janela de overlap real (v2.6
+  // §5.1) onde a chave anterior CONTINUA válida até ser revogada explicitamente — dizer "foi
+  // revogada" aqui contradiria o aviso correto que SecretKeySection.tsx já mostra logo em seguida
+  // ("The previous key is still valid during the rotation overlap window...").
+  rotated?: boolean;
+  // Nome da aplicação, só pra exibição na subtítulo — confirmado no protótipo real
+  // (`${appName} · shown once...`); omitido em qualquer chamador que não tenha esse dado à mão.
+  appName?: string;
 }
 
 // Adaptado de get_full_jsx("ServiceKeyModal") — a chave só existe nesta resposta
 // (docs/rest-flow.md §8: "plain_key is never persisted or retrievable again"), então
 // o modal só pode ser fechado depois que o usuário confirmar que já a salvou.
-export function GeneratedKeyModal({ plainKey, onClose, pendingApproval }: GeneratedKeyModalProps) {
+export function GeneratedKeyModal({ plainKey, onClose, pendingApproval, rotated, appName }: GeneratedKeyModalProps) {
   const [acked, setAcked] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -23,11 +38,17 @@ export function GeneratedKeyModal({ plainKey, onClose, pendingApproval }: Genera
     setCopied(true);
   }
 
+  const title = pendingApproval
+    ? "Service key generated — pending approval"
+    : rotated
+      ? "New service key generated"
+      : "Service key generated";
+
   return (
     <Modal
       icon="key"
-      title={pendingApproval ? "Service key generated — pending approval" : "Service key generated"}
-      sub="Shown once — save it now before closing"
+      title={title}
+      sub={appName ? `${appName} · shown once — save it now before closing` : "Shown once — save it now before closing"}
       onClose={onClose}
       closeable={acked}
       footer={

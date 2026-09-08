@@ -72,10 +72,11 @@ parece uma resposta completa.
 > especificamente pra dados referenciados (ICONS e afins) — não precisa mais decodificar o bundle
 > pra confirmar um path de ícone.
 >
-> **Ressalva — ver Achado 6**: `get_full_texts`/`get_component_data` erram a resolução de nome
-> quando o nome pedido é PREFIXO de outros nomes de componente (ex.: `name="App"` resolve pro
-> componente errado, `AppStep`, em vez do componente raiz `App`) — funcionam perfeitamente pra
-> nomes sem essa ambiguidade (`ApprovalRow`, `Icon`, `MemberRow` testados e corretos).
+> **Ressalva histórica — ver Achado 6 (RESOLVIDO em 2026-09-08)**: por um tempo,
+> `get_full_texts`/`get_component_data` erravam a resolução de nome quando o nome pedido era
+> PREFIXO de outros nomes de componente (ex.: `name="App"` resolvia pro componente errado,
+> `AppStep`, em vez do componente raiz `App`). Já não reproduz mais — `name="App"` resolve certo
+> agora, incluindo pra `App` sendo uma tela (screen), não só um componente comum.
 
 **Sintoma histórico (como estava antes do conserto)**: `get_component_spec("App")` devolvia só 8
 textos com `> ... +7 mais` no final — sem nenhum parâmetro pra pedir os +7 restantes. O mesmo
@@ -185,18 +186,29 @@ não por-sessão-de-tarefa, já que a skill (`design-graph-ui-context`) recomend
 
 ---
 
-## Achado 6 (novo, 2026-09-07): `get_full_texts`/`get_component_data` resolvem o nome errado quando ele é prefixo de outro componente
+## Achado 6: `get_full_texts`/`get_component_data` resolviam o nome errado quando ele era prefixo de outro componente
 
-**Sintoma**: `get_full_texts(name="App")` (e o mesmo com `doc="toToggle v2.6"` explícito) devolve
-`"# Textos completos: AppStep"` — o componente `AppStep` (uma tela do onboarding wizard), não o
-componente raiz `App` que foi pedido. `App` é prefixo de vários outros nomes reais no mesmo
-protótipo (`AppStep`, `AppList`, `AppModal`, `AppCard`), e o resolver parece escolher um desses em
-vez de priorizar o match EXATO quando ele existe.
+> **RESOLVIDO** (2026-09-08, reverificado ao vivo depois de um novo reconnect do MCP):
+> `get_full_texts(name="App")` agora devolve corretamente `"# Textos completos: App"` — uma lista
+> enorme (centenas de entradas, cada uma já rotulada com o componente-filho de origem: Sidebar,
+> Topbar, AppCard, AppModal, EditDrawer, MemberModal, NewToggleModal, ToggleCard, TogglePaths,
+> UserModal, etc.), cobrindo a árvore autenticada inteira de `App` de uma vez — não mais os 4
+> textos isolados de `AppStep`. `get_component_data(name="App")` também parou de resolver errado:
+> agora devolve uma mensagem própria e correta, `"'App' é uma tela; dados referenciados de módulo
+> ainda só estão disponíveis para componentes"` — reconhece `App` como screen (não confunde mais
+> com `AppStep`), só não expõe esse recurso específico pra screens ainda (limitação diferente,
+> documentada com clareza em vez de silenciosamente devolver o componente errado).
 
-**Confirmado que não é geral**: `get_full_texts(name="MemberRow")` e
-`get_full_texts(name="ApprovalRow")` resolvem corretamente pros componentes exatos — nenhum dos
-dois tem outro nome de componente como prefixo/sufixo no mesmo protótipo. O problema é específico
-de nomes ambíguos por prefixo.
+**Sintoma histórico (como estava antes do conserto)**: `get_full_texts(name="App")` (e o mesmo com
+`doc="toToggle v2.6"` explícito) devolvia `"# Textos completos: AppStep"` — o componente `AppStep`
+(uma tela do onboarding wizard), não o componente raiz `App` que foi pedido. `App` é prefixo de
+vários outros nomes reais no mesmo protótipo (`AppStep`, `AppList`, `AppModal`, `AppCard`), e o
+resolver escolhia um desses em vez de priorizar o match EXATO quando ele existia.
+
+**Confirmado que não era geral**: `get_full_texts(name="MemberRow")` e
+`get_full_texts(name="ApprovalRow")` já resolviam corretamente pros componentes exatos — nenhum
+dos dois tinha outro nome de componente como prefixo/sufixo no mesmo protótipo. O problema era
+específico de nomes ambíguos por prefixo, e parece ter sido corrigido nesse escopo exato.
 
 **Comando pra reproduzir**:
 ```
@@ -216,16 +228,16 @@ prestar atenção nesse cabeçalho em vez de assumir que o `name` pedido foi res
 
 ---
 
-## Resumo prático (o que fazer da próxima vez, atualizado em 2026-09-07)
+## Resumo prático (o que fazer da próxima vez, atualizado em 2026-09-08)
 
 1. `get_full_jsx(name)` já devolve TODOS os branches de retorno de um componente com múltiplos
    `return` (rotulados `{[return_branch:N]}`/`{[return_branch:default]}`) — não precisa mais do
    workaround de `validate_component_implementation` pra detectar isso (Achado 1, resolvido).
 2. Pra texto sem corte, use `get_full_texts(name)`; pra qualquer constante em nível de módulo que
    o componente referencia (mapas de ícone, badge, etc.), use `get_component_data(name)` — ambos
-   sem "+N mais" (Achado 2, resolvido). **Cuidado com nomes que são prefixo de outros
-   componentes** (Achado 6, ainda aberto) — confira o cabeçalho da resposta pra ter certeza de que
-   resolveu o componente certo antes de confiar no resultado.
+   sem "+N mais" (Achado 2, resolvido). A resolução de nomes ambíguos por prefixo (ex.: `"App"`
+   vs. `"AppStep"`) também foi corrigida (Achado 6, resolvido) — confiar direto no cabeçalho da
+   resposta já basta agora, sem precisar de checagem extra.
 3. `App` (e telas-raiz equivalentes) agora aparece em `list_screens()`, com `get_section`
    funcionando pra suas seções internas (Achado 3, resolvido) — mas `get_full_jsx`/
    `get_component_spec` direto pelo nome do componente continuam válidos como alternativa.

@@ -105,6 +105,7 @@ describe("SecretKeySection", () => {
     await user.click(screen.getByRole("button", { name: /generate service key/i }));
 
     expect(await screen.findByText("sk_abc123")).toBeInTheDocument();
+    expect(screen.getByText("Service key generated")).toBeInTheDocument();
   });
 
   // v2.6 §5.1: rotating when a key ALREADY exists shows the confirmed "Rotate service key?"
@@ -134,6 +135,10 @@ describe("SecretKeySection", () => {
 
     expect(posted).toBe(true);
     expect(await screen.findByText("sk_new456")).toBeInTheDocument();
+    // Achado numa varredura posterior (get_full_jsx("ServiceKeyModal")): título muda numa
+    // rotação — computado a partir do mesmo estado (current/previous) que já decide se mostra a
+    // confirmação de rotação acima, só nunca tinha chegado até o modal de revelação.
+    expect(screen.getByText("New service key generated")).toBeInTheDocument();
   });
 
   it("cancelling the rotate confirmation never calls the API", async () => {

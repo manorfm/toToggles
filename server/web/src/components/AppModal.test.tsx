@@ -31,13 +31,24 @@ describe("AppModal — create mode", () => {
     await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "9", name: "Checkout Web" })));
   });
 
+  // Texto em inglês, mesmo padrão já usado pelo hint equivalente em UserModal.tsx ("You need to
+  // belong to a team to create a user.") — achado numa varredura posterior (o texto aqui tinha
+  // ficado em português por engano, inconsistente com o mesmo tipo de hint já corrigido lá).
   it("shows a hint and disables submit when there are no team options", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [] })));
 
     render(<AppModal isRoot={false} onClose={vi.fn()} onCreated={vi.fn()} onUpdated={vi.fn()} onPendingApproval={vi.fn()} />);
 
-    expect(await screen.findByText(/precisa estar em um time/i)).toBeInTheDocument();
+    expect(await screen.findByText(/you need to belong to a team to create an application/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /create application/i })).toBeDisabled();
+  });
+
+  it("shows the root-specific hint when there are no teams at all", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { success: true, teams: [] })));
+
+    render(<AppModal isRoot onClose={vi.fn()} onCreated={vi.fn()} onUpdated={vi.fn()} onPendingApproval={vi.fn()} />);
+
+    expect(await screen.findByText(/no teams yet — create a team first/i)).toBeInTheDocument();
   });
 
   it("calls onPendingApproval (not onCreated) when the API responds 202", async () => {

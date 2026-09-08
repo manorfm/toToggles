@@ -2310,14 +2310,47 @@ desde §6.7-6.9 — e um bug real de tradução, o nav item "Users" que tinha fi
      rest-flow.md` §9.1 reescrito (a nota "não existe application_update" virou a descrição do
      tipo de verdade). e2e (`application-lifecycle.spec.ts`/`history-and-activity.spec.ts`)
      atualizados pro rótulo novo do switch de Settings ("Update application").
-6. **Achado sobre o próprio design-graph, não uma pendência deste código**: `get_full_texts`/
-   `get_component_data` ainda resolvem o componente errado quando o nome pedido é prefixo de
-   outro (Achado 6, `docs/investigation/design-graph-findings.md`) — sem solução possível deste
-   lado, é bug da ferramenta.
+6. ✅ **RESOLVIDO (2026-09-08)** — o bug do próprio design-graph (não deste código) documentado
+   como Achado 6: `get_full_texts`/`get_component_data` resolviam o componente errado quando o
+   nome pedido era prefixo de outro (`name="App"` caía em `AppStep`). Reverificado ao vivo depois
+   de uma atualização da ferramenta — `get_full_texts(name="App")` agora devolve a árvore
+   autenticada inteira de `App` (centenas de textos, cada um já rotulado com o componente-filho
+   de origem), e `get_component_data(name="App")` devolve uma mensagem própria e correta
+   reconhecendo `App` como screen, em vez de silenciosamente cair em `AppStep`. Detalhe completo
+   em `docs/investigation/design-graph-findings.md` (Achado 6).
 
-Dos 6 itens originais, só o 6 (bug do próprio design-graph, fora do alcance deste código) continua
-como pendência real — todos os demais foram fechados ou invalidados numa sequência de rodadas
-desta mesma auditoria de status. Não há mais nenhum item acionável do plano v2.6 nesta lista.
+Dos 6 itens originais da auditoria de status, todos foram fechados (resolvidos ou invalidados por
+evidência nova) ao longo de uma sequência de rodadas — nenhum item acionável resta nesta lista.
+
+**Varredura extra (2026-09-08) depois do conserto do Achado 6** — o próprio conserto destravou
+`get_full_texts(name="App")` como um dump de texto confirmado pra árvore autenticada inteira, nunca
+possível antes. Cruzando esse dump contra a implementação atual (`get_full_jsx` direto pros
+componentes mais suspeitos: `UserModal`, `AppModal`, `ApprovalInterceptModal`, `TeamModal`,
+`ServiceKeyModal`, `TempPasswordModal`, `ArchivedModal`), a maioria já batia perfeitamente — só 2
+gaps reais, os dois já corrigidos:
+- **`AppModal.tsx`**: o hint de "sem time disponível" (estado sintético, sem fonte real — API
+  nunca fica sem time igual ao demo) tinha ficado em português por engano, inconsistente com o
+  mesmo tipo de hint em `UserModal.tsx` (`"No teams yet — create a team first."`/`"You need to
+  belong to a team to create a user."`), que já estava certo. Corrigido pro mesmo padrão em
+  inglês.
+- **`GeneratedKeyModal.tsx`**: o confirmado (`ServiceKeyModal`) tem um título próprio pra rotação
+  (`"New service key generated"`, vs. `"Service key generated"` na 1ª chave) que nunca tinha sido
+  portado — `SecretKeySection.tsx` já computava exatamente essa condição (`current || previous`
+  antes de gerar) pra decidir se mostra a confirmação de rotação, só nunca repassava adiante.
+  Ganhou um prop `rotated` novo, e um prop `appName` (também confirmado no protótipo,
+  `${appName} · shown once...`) já disponível em `SecretKeySection` mas nunca repassado.
+  **Divergência deliberada, não portada**: o confirmado também tem um aviso "The previous key was
+  revoked" nessa variante — omitido de propósito, porque seria FALSO no nosso modelo de rotação
+  com overlap (v2.6 §5.1): a chave anterior continua válida até ser revogada de verdade, e
+  `SecretKeySection.tsx` já mostra o aviso correto disso ("The previous key is still valid during
+  the rotation overlap window...") logo depois de fechar este modal — copiar o texto do
+  confirmado aqui contradiria essa mensagem já certa. Achado colateral ao migrar: um e2e
+  (`secret-key-generate.spec.ts`) fixava a asserção do título em `"Service key generated"` sem
+  considerar que a mesma aplicação compartilhada pode já ter uma chave de um spec anterior
+  (rodando a suíte inteira, não isolado) — corrigido pra escolher o título esperado dinamicamente,
+  a mesma forma como o teste já escolhia entre os botões "Generate service key"/"Rotate key".
+  TDD em toda a cadeia (`AppModal.test.tsx`, `GeneratedKeyModal.test.tsx`,
+  `SecretKeySection.test.tsx`); suíte completa (648 frontend + Go) e e2e revalidados depois.
 
 ## Principais Funcionalidades
 

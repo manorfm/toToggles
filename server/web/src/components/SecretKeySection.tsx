@@ -44,6 +44,10 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
   // A chave revelada veio de uma solicitação sob aprovação (generate-secret 202 com plain_key) —
   // muda o texto do modal pra deixar claro que ela ainda não está ativa.
   const [revealedKeyPending, setRevealedKeyPending] = useState(false);
+  // true quando já existia uma chave (current ou previous) ANTES desta geração — mesma condição
+  // de handleGenerateClick, capturada no momento de gerar (antes de `load()` recarregar `state`)
+  // pra escolher o título certo em GeneratedKeyModal ("New service key generated" numa rotação).
+  const [revealedKeyRotated, setRevealedKeyRotated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const toast = useToast();
@@ -68,6 +72,7 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
 
   async function doGenerate() {
     setConfirming(null);
+    const wasRotation = state.status === "loaded" && !!(state.current || state.previous);
     await guard("secret_key_create", { actionDesc: "Generate secret key", path: applicationName }, async () => {
       setBusy(true);
       try {
@@ -79,11 +84,13 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
           // chave pendente não aparece em GET .../secret-keys até ser aprovada).
           if (result.plainKey) {
             setRevealedKeyPending(true);
+            setRevealedKeyRotated(wasRotation);
             setRevealedKey(result.plainKey);
           }
           return;
         }
         setRevealedKeyPending(false);
+        setRevealedKeyRotated(wasRotation);
         setRevealedKey(result.plainKey);
         load();
       } catch (err) {
@@ -292,6 +299,8 @@ export function SecretKeySection({ applicationId, applicationName, canManage, is
         <GeneratedKeyModal
           plainKey={revealedKey}
           pendingApproval={revealedKeyPending}
+          rotated={revealedKeyRotated}
+          appName={applicationName}
           onClose={() => setRevealedKey(null)}
         />
       )}

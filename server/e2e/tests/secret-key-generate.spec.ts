@@ -20,7 +20,10 @@ const GENERATE_OR_ROTATE = /^(Generate service key|Rotate key)$/i;
 // key") vai direto, sem esse passo. Como este spec reusa a aplicação compartilhada com outros
 // specs da suíte completa, qual dos dois rótulos está visível — e portanto se o passo extra de
 // confirmação é necessário — depende do que já rodou antes neste mesmo servidor/banco.
-async function clickGenerateOrRotate(page: import("@playwright/test").Page): Promise<void> {
+// Devolve se era uma rotação (havia chave antes) — o chamador precisa saber pra escolher o
+// título certo do modal de revelação ("New service key generated" numa rotação, achado numa
+// varredura contra get_full_jsx("ServiceKeyModal") e portado em GeneratedKeyModal.tsx).
+async function clickGenerateOrRotate(page: import("@playwright/test").Page): Promise<boolean> {
   const button = page.getByRole("button", { name: GENERATE_OR_ROTATE });
   const isRotating = (await button.textContent())?.includes("Rotate") ?? false;
   await button.click();
@@ -30,6 +33,7 @@ async function clickGenerateOrRotate(page: import("@playwright/test").Page): Pro
     // modal — scope to the modal's own confirm button to avoid Playwright's strict-mode error.
     await page.getByTestId("modal-scrim").getByRole("button", { name: "Generate new key" }).click();
   }
+  return isRotating;
 }
 
 test.describe("secret key — generate/regenerate", () => {
@@ -43,9 +47,9 @@ test.describe("secret key — generate/regenerate", () => {
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
     await adminPage.goto(`/applications/${fixtures.appId}?tab=keys`);
-    await clickGenerateOrRotate(adminPage);
+    const wasRotating = await clickGenerateOrRotate(adminPage);
 
-    await expect(adminPage.getByText("Service key generated")).toBeVisible();
+    await expect(adminPage.getByText(wasRotating ? "New service key generated" : "Service key generated")).toBeVisible();
     await expect(adminPage.locator(".skey-val")).toContainText("sk_");
     await adminPage.locator(".skey-ack input[type=checkbox]").check();
     await adminPage.getByRole("button", { name: /I've saved the key/i }).click();

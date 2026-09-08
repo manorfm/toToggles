@@ -176,8 +176,8 @@ export function AppModal({ isRoot, initial, onClose, onCreated, onUpdated, onPen
             <div className="field-hint">
               {noTeamsAvailable
                 ? isRoot
-                  ? "Nenhum time cadastrado ainda — crie um time primeiro."
-                  : "Você precisa estar em um time para criar uma aplicação."
+                  ? "No teams yet — create a team first."
+                  : "You need to belong to a team to create an application."
                 : "Only members of this team can manage the application."}
             </div>
           </div>
