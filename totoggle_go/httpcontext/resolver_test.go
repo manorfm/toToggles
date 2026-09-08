@@ -38,3 +38,15 @@ func TestResolver_UsesTrustedProxyAndDomainValues(t *testing.T) {
 		assert.Equal(t, "u-1", userID)
 	})).ServeHTTP(httptest.NewRecorder(), req)
 }
+
+func TestResolver_TrustsForwardedHeadersForCIDRProxy(t *testing.T) {
+	resolver := New(Options{TrustedProxyAddresses: []string{"10.0.0.0/24"}})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.8:443"
+	req.Header.Set("X-Forwarded-For", "203.0.113.4")
+	resolver.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		ip, ok := resolver.Resolve(request.Context(), "ip")
+		assert.True(t, ok)
+		assert.Equal(t, "203.0.113.4", ip)
+	})).ServeHTTP(httptest.NewRecorder(), req)
+}

@@ -13,6 +13,7 @@ import (
 )
 
 type Options struct {
+	// TrustedProxyAddresses accepts exact IPs or CIDRs.
 	TrustedProxyAddresses []string
 	CountryHeader         string
 	Values                func(*http.Request) map[string]string
@@ -72,9 +73,15 @@ func (r *Resolver) values(req *http.Request) map[string]string {
 }
 
 func (r *Resolver) trusted(remote string) bool {
+	peer := net.ParseIP(remote)
 	for _, trusted := range r.options.TrustedProxyAddresses {
 		if remote == trusted {
 			return true
+		}
+		if peer != nil {
+			if _, network, err := net.ParseCIDR(trusted); err == nil && network.Contains(peer) {
+				return true
+			}
 		}
 	}
 	return false
