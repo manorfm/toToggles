@@ -1000,7 +1000,7 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 			expectedError:  "tipo de regra inválido: invalid_type",
 		},
 		{
-			name:     "empty_rule_value",
+			name:     "contextual_rule_without_context_key",
 			appID:    "app123",
 			toggleID: "toggle123",
 			body: `{
@@ -1008,7 +1008,7 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 				"has_activation_rule": true,
 				"activation_rule": {
 					"type": "percentage",
-					"value": ""
+					"value": "50"
 				}
 			}`,
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
@@ -1023,7 +1023,7 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 				toggleMock.Toggles["toggle123"] = toggle
 			},
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "valor de porcentagem é obrigatório",
+			expectedError:  "configuração context_key válida é obrigatória para regra percentage",
 		},
 		{
 			name:     "toggle_not_found",
