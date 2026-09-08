@@ -665,7 +665,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-2",
                             "app_id": "app-123",
                             "has_activation_rule": true,
-                            "activation_rule": {"type": "parameter", "value": "premium"}
+                            "activation_rule": {"type": "parameter", "value": "premium", "config": {"context_key": "parameter"}}
                         }
                     ]
                 }
@@ -694,7 +694,7 @@ class ToToggleClientTest {
                             "parent_id": null,
                             "app_id": "app-123",
                             "has_activation_rule": true,
-                            "activation_rule": {"type": "user_id", "value": "12,48,103"}
+                            "activation_rule": {"type": "user_id", "value": "12,48,103", "config": {"context_key": "user_id"}}
                         }
                     ]
                 }

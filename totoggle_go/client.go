@@ -55,7 +55,7 @@ func newStrategyRegistry(zone *time.Location) *strategy.Registry {
 	reg.Register(toggle.RuleTypeParameter, matchList)
 	reg.Register(toggle.RuleTypeUserID, matchList)
 	reg.Register(toggle.RuleTypeCountry, matchList)
-	reg.Register(toggle.RuleTypeCanary, matchList)
+	reg.Register(toggle.RuleTypeCohort, matchList)
 
 	reg.Register(toggle.RuleTypePercentage, strategy.NewPercentageEvaluator(nil))
 	reg.Register(toggle.RuleTypeIP, strategy.IPEvaluator{})
@@ -211,7 +211,12 @@ func (c *Client) evaluateRule(tg toggle.Toggle, legacyContext *ToggleContext, re
 	if !tg.HasActivationRule || tg.ActivationRule == nil {
 		return true
 	}
-	key, hasKey := c.contextKey(tg.ActivationRule.Type, legacyContext, tg.Path.String(), requestContext)
+	contextKey, valid := tg.ActivationRule.ContextKey()
+	if !valid {
+		log.Printf("totoggle: rule type %q has no valid context_key; evaluation fails closed", tg.ActivationRule.Type)
+		return false
+	}
+	key, hasKey := c.contextKey(contextKey, tg.ActivationRule.Type == toggle.RuleTypePercentage, legacyContext, tg.Path.String(), requestContext)
 	if tg.ActivationRule.Type != toggle.RuleTypeTime && !hasKey {
 		return false
 	}
@@ -219,38 +224,39 @@ func (c *Client) evaluateRule(tg toggle.Toggle, legacyContext *ToggleContext, re
 	return result
 }
 
-func (c *Client) contextKey(ruleType toggle.RuleType, legacyContext *ToggleContext, path string, requestContext context.Context) (string, bool) {
+func (c *Client) contextKey(contextKey string, percentage bool, legacyContext *ToggleContext, path string, requestContext context.Context) (string, bool) {
 	ctx := legacyContext
 	if ctx == nil && c.cfg.ContextProvider != nil {
 		ctx = c.cfg.ContextProvider.ToggleContext(requestContext)
 	}
-	if ruleType == toggle.RuleTypeTime {
-		return "", false
-	}
 	if ctx == nil {
-		log.Printf("totoggle: rule type %q requires ToggleContextProvider; evaluation fails closed", ruleType)
+		log.Printf("totoggle: rule context %q requires ToggleContextProvider; evaluation fails closed", contextKey)
 		return "", false
 	}
 	var value string
-	switch ruleType {
-	case toggle.RuleTypePercentage:
-		value = path + ":" + ctx.RolloutKey
-	case toggle.RuleTypeParameter:
+	switch contextKey {
+	case "rollout_key":
+		value = ctx.RolloutKey
+	case "parameter":
 		value = ctx.Parameter
-	case toggle.RuleTypeUserID:
+	case "user_id":
 		value = ctx.UserID
-	case toggle.RuleTypeIP:
+	case "ip":
 		value = ctx.IP
-	case toggle.RuleTypeCountry:
+	case "country":
 		value = ctx.Country
-	case toggle.RuleTypeCanary:
+	case "cohort":
 		value = ctx.Cohort
+	default:
+		if len(contextKey) > len("attributes.") && contextKey[:len("attributes.")] == "attributes." {
+			value = ctx.Attributes[contextKey[len("attributes."):]]
+		}
 	}
-	if value == "" || (ruleType == toggle.RuleTypePercentage && ctx.RolloutKey == "") {
-		log.Printf("totoggle: rule type %q requires context that is absent; evaluation fails closed", ruleType)
+	if value == "" {
+		log.Printf("totoggle: rule context %q is absent; evaluation fails closed", contextKey)
 	}
-	if ruleType == toggle.RuleTypePercentage && ctx.RolloutKey == "" {
-		return "", false
+	if percentage && value != "" {
+		value = path + ":" + value
 	}
 	return value, value != ""
 }

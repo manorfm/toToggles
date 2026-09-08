@@ -207,20 +207,26 @@ class ToToggleClient(private val config: ToToggleConfig) {
     private fun evaluateRule(rule: com.totoggle.client.model.ActivationRule, legacyContext: ToggleContext?, path: String): Boolean {
         return try {
             val context = legacyContext ?: config.contextProvider?.getContext()
-            val key = when (rule.type) {
-                "percentage" -> context?.rolloutKey?.let { "$path:$it" }
+            if (rule.type == "time") return strategyFactory.evaluate(rule, null)
+            val contextKey = rule.config?.get("context_key")?.asText()
+            if (contextKey.isNullOrBlank()) {
+                logger.warn("Activation rule type '{}' has no valid context_key; returning false", rule.type)
+                return false
+            }
+            val rawKey = when (contextKey) {
+                "rollout_key" -> context?.rolloutKey
                 "parameter" -> context?.parameter
                 "user_id" -> context?.userId
                 "ip" -> context?.ip
                 "country" -> context?.country
-                "canary" -> context?.cohort
-                "time" -> null
-                else -> null
+                "cohort" -> context?.cohort
+                else -> if (contextKey.startsWith("attributes.")) context?.attributes?.get(contextKey.removePrefix("attributes.")) else null
             }
-            if (rule.type != "time" && key == null) {
-                logger.warn("Activation rule type '{}' requires ToggleContextProvider context; returning false", rule.type)
+            if (rawKey.isNullOrBlank()) {
+                logger.warn("Activation rule context '{}' is absent; returning false", contextKey)
                 false
             } else {
+                val key = if (rule.type == "percentage") "$path:$rawKey" else rawKey
                 strategyFactory.evaluate(rule, key)
             }
         } catch (e: Exception) {

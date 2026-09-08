@@ -46,5 +46,5 @@ func TestRuleType_Constants(t *testing.T) {
 	assert.Equal(t, RuleType("ip"), RuleTypeIP)
 	assert.Equal(t, RuleType("country"), RuleTypeCountry)
 	assert.Equal(t, RuleType("time"), RuleTypeTime)
-	assert.Equal(t, RuleType("canary"), RuleTypeCanary)
+	assert.Equal(t, RuleType("cohort"), RuleTypeCohort)
 }

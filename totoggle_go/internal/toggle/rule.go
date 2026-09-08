@@ -1,5 +1,7 @@
 package toggle
 
+import "encoding/json"
+
 // RuleType is one of the 7 activation-rule types the server supports
 // (server/internal/app/domain/entity/activation_rule.go#ActivationRuleType) — a typed string so
 // a typo can't silently compile as a valid, never-matching type the way a bare string could.
@@ -12,14 +14,29 @@ const (
 	RuleTypeIP         RuleType = "ip"
 	RuleTypeCountry    RuleType = "country"
 	RuleTypeTime       RuleType = "time"
-	RuleTypeCanary     RuleType = "canary"
+	RuleTypeCohort     RuleType = "cohort"
 )
 
 // ActivationRule is a value object: Type and Value together define a condition, and neither is
 // meaningful alone (a Value with no Type, or vice versa, is never a valid rule).
 type ActivationRule struct {
-	Type  RuleType `json:"type"`
-	Value string   `json:"value"`
+	Type   RuleType        `json:"type"`
+	Value  string          `json:"value"`
+	Config json.RawMessage `json:"config"`
+}
+
+// ContextKey returns the configured provider key. Invalid or missing configuration fails closed.
+func (r ActivationRule) ContextKey() (string, bool) {
+	if r.Type == RuleTypeTime {
+		return "", true
+	}
+	var config struct {
+		ContextKey string `json:"context_key"`
+	}
+	if json.Unmarshal(r.Config, &config) != nil || config.ContextKey == "" {
+		return "", false
+	}
+	return config.ContextKey, true
 }
 
 // IsEmpty reports whether this is "no rule configured" (both fields blank).

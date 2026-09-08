@@ -39,14 +39,14 @@ func TestMatchListEvaluator_NoKeyNeverMatches(t *testing.T) {
 
 func TestMatchListEvaluator_BlankRuleValueNeverMatches(t *testing.T) {
 	e := MatchListEvaluator{}
-	rule := toggle.ActivationRule{Type: toggle.RuleTypeCanary, Value: "   "}
+	rule := toggle.ActivationRule{Type: toggle.RuleTypeCohort, Value: "   "}
 
 	assert.False(t, e.Evaluate(rule, "true", true))
 }
 
 func TestMatchListEvaluator_EmptyStringKeyCanMatchAnEmptyListEntry(t *testing.T) {
 	e := MatchListEvaluator{}
-	rule := toggle.ActivationRule{Type: toggle.RuleTypeCanary, Value: "true,"}
+	rule := toggle.ActivationRule{Type: toggle.RuleTypeCohort, Value: "true,"}
 
 	assert.True(t, e.Evaluate(rule, "", true))
 }

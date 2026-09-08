@@ -45,6 +45,6 @@ class ActivationRuleTest {
         assertThat(ActivationRule.TYPE_IP).isEqualTo("ip")
         assertThat(ActivationRule.TYPE_COUNTRY).isEqualTo("country")
         assertThat(ActivationRule.TYPE_TIME).isEqualTo("time")
-        assertThat(ActivationRule.TYPE_CANARY).isEqualTo("canary")
+        assertThat(ActivationRule.TYPE_COHORT).isEqualTo("cohort")
     }
 }

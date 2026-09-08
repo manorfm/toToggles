@@ -21,7 +21,7 @@ class StrategyFactoryTest {
         val registeredTypes = factory.getRegisteredRuleTypes()
 
         assertThat(registeredTypes).containsExactlyInAnyOrder(
-            "percentage", "parameter", "user_id", "ip", "country", "time", "canary"
+            "percentage", "parameter", "user_id", "ip", "country", "time", "cohort"
         )
     }
     
@@ -150,7 +150,7 @@ class StrategyFactoryTest {
             ActivationRule.TYPE_PARAMETER,
             ActivationRule.TYPE_USER_ID,
             ActivationRule.TYPE_COUNTRY,
-            ActivationRule.TYPE_CANARY,
+            ActivationRule.TYPE_COHORT,
         )) {
             val rule = ActivationRule(type, "some-value")
             assertThat(factory.evaluate(rule)).isFalse()

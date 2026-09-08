@@ -1,6 +1,7 @@
 package com.totoggle.client.model
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.JsonNode
 
 /**
  * Represents an activation rule for a toggle.
@@ -15,7 +16,10 @@ data class ActivationRule(
     val type: String,
     
     @JsonProperty("value")
-    val value: String
+    val value: String,
+
+    @JsonProperty("config")
+    val config: JsonNode? = null
 ) {
     
     companion object {
@@ -25,7 +29,7 @@ data class ActivationRule(
         const val TYPE_IP = "ip"
         const val TYPE_COUNTRY = "country"
         const val TYPE_TIME = "time"
-        const val TYPE_CANARY = "canary"
+        const val TYPE_COHORT = "cohort"
         
         /**
          * Creates an empty activation rule (no rule applied).

@@ -32,7 +32,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
             ActivationRule.TYPE_PARAMETER,
             ActivationRule.TYPE_USER_ID,
             ActivationRule.TYPE_COUNTRY,
-            ActivationRule.TYPE_CANARY,
+            ActivationRule.TYPE_COHORT,
         )
     }
 
@@ -43,7 +43,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
         registerStrategy(IpStrategy())
         registerStrategy(CountryStrategy())
         registerStrategy(TimeStrategy(Clock.system(timeZone)))
-        registerStrategy(CanaryStrategy())
+        registerStrategy(CohortStrategy())
 
         logger.info("StrategyFactory initialized with {} strategies", strategies.size)
     }
