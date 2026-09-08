@@ -43,8 +43,9 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
     const values = new Map<string, string>();
     if (remote) values.set("ip", remote);
     if (trusted) {
-      const forwardedHeader = request.headers["x-forwarded-for"];
-      const forwarded = firstForwardedAddress(Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader);
+      const forwardedHeader = request.headers["forwarded"];
+      const forwarded = firstForwardedAddress(Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader)
+        ?? firstForwardedAddress(Array.isArray(request.headers["x-forwarded-for"]) ? request.headers["x-forwarded-for"][0] : request.headers["x-forwarded-for"]);
       if (forwarded) values.set("ip", forwarded);
       const country = request.headers[this.countryHeader];
       const countryValue = Array.isArray(country) ? country[0] : country;
@@ -58,7 +59,9 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
 }
 
 function firstForwardedAddress(value: string | undefined): string | undefined {
-  return value?.split(",", 1)[0]?.trim() || undefined;
+  const first = value?.split(",", 1)[0]?.trim();
+  const match = /^for=(?:"?\[?([^;\]"]+)\]?")?$/i.exec(first ?? "");
+  return (match?.[1] ?? first) || undefined;
 }
 
 function normalizeAddress(value: string | undefined): string | undefined {
