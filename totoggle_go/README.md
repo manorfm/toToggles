@@ -47,9 +47,8 @@ func main() {
 		// new behavior
 	}
 
-	// Forward a parameter to every activation rule in the path — the target's own rule AND
-	// every ancestor's, not just the leaf's.
-	if client.IsActiveFor("user.premium.features", "premium") {
+	// Request context is resolved by the configured ToggleContextProvider.
+	if client.IsActiveContext(request.Context(), "user.premium.features") {
 		// premium-only behavior
 	}
 }
@@ -74,7 +73,7 @@ wrong — a blank field, a secret key not starting with `sk_`, or a non-positive
 
 ## Cascading validation
 
-`IsActive`/`IsActiveFor` walk every ancestor from the root down to the requested path — each one
+`IsActive`/`IsActiveContext` walk every ancestor from the root down to the requested path — each one
 must be enabled before the target toggle's own state is checked. Activation rules are evaluated
 only for the exact requested toggle:
 

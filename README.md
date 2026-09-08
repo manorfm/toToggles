@@ -18,7 +18,7 @@ them with cascading validation and 7 activation rule types.
 - **Hierarchical toggles** (`service.feature.flag`) with cascading validation — a disabled parent
   disables every descendant, regardless of the child's own state
 - **7 activation rule types**: percentage rollout (consistent per-key hashing), parameter,
-  user ID, IP/CIDR, country, time window, and canary
+  user ID, IP/CIDR, country, time window, and cohort
 - **Role-based access control**: `root`/`admin`/`user`, with teams scoping which applications an
   admin can manage
 - **Optional approval workflow**: gate selected mutation types (toggle delete, rule changes,
@@ -360,5 +360,5 @@ information, configure the SDK's optional `ToggleContextProvider` in application
 It supplies `rolloutKey`, `userId`, `ip`, `country`, `cohort`, or a generic parameter. SDKs never
 guess headers, proxy IPs, authentication data, or geolocation. A missing provider/field (or a
 provider failure) logs a warning and evaluates to `false`; `isActive` always fails closed and
-never propagates an exception. `percentage: 25` enables 25% of the keyed population; `canary`
+never propagates an exception. `percentage: 25` enables 25% of the keyed population; `cohort`
 matches named cohorts such as `canary` or `beta`, not `true`/`false`.
