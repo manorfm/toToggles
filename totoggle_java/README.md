@@ -43,7 +43,7 @@ toToogle/
 
 ### Server Features
 - **Hierarchical Feature Toggles**: Manage complex toggle hierarchies with parent-child relationships
-- **Advanced Activation Rules**: Percentage-based rollouts, parameter targeting, user ID targeting
+- **Advanced Activation Rules**: Percentage rollouts, context attributes, and user targeting
 - **Multi-Level Authentication**: Root, admin, and user roles with granular permissions
 - **Team-Based Access Control**: Organize users into teams with application-specific permissions
 - **Secret Key Management**: Secure API keys for external access
@@ -54,7 +54,7 @@ toToogle/
 - **Simple API**: Easy-to-use interface for checking feature toggle status
 - **Cascading Validation**: Automatic validation of parent toggles
 - **Activation Strategies**: Support for all 7 server-defined rule types — percentage (consistent
-  per-key hashing), parameter, user ID, IP address/CIDR, country, time window, and canary
+  per-key hashing), attribute, user ID, IP address/CIDR, country, time window, and cohort
 - **Caching & Resilience**: Efficient caching with offline mode support, configurable refresh
   interval — `isActive()` never blocks on the network, always answers from memory
 - **Observability**: staleness-aware health check (`isHealthy()`/`isStale()`), consecutive-failure
@@ -117,9 +117,6 @@ client.start()
 
 // Check if a feature is active
 val isActive = client.isActive("user.payments.view-table")
-
-// Check with parameter
-val isPremiumActive = client.isActive("user.premium.features", "premium")
 
 client.shutdown()
 ```
@@ -191,7 +188,7 @@ if (client.isActive("experiment.new.algorithm")) {
 
 ### 3. User Tier Features
 ```kotlin
-if (client.isActive("premium.features", user.tier)) {
+if (client.isActive("premium.features")) {
     // Only premium users see these features
     return premiumDashboard()
 } else {
@@ -208,20 +205,20 @@ user                     (disabled)
 
 In this case, `client.isActive("user.payments.new-ui")` returns `false` because the parent `user` toggle is disabled, even though the specific toggle is enabled.
 
-## ToggleContextProvider
+## ToggleContextResolver
 
 Contextual rules are local to the requested toggle; ancestor rules never cascade. Configure the
-provider from application middleware, which is responsible for safely extracting request data:
+resolver from application middleware, which is responsible for safely extracting request data:
 
 ```kotlin
-.contextProvider(ToggleContextProvider {
-    ToggleContext(rolloutKey = user.id, country = requestCountry, cohort = System.getenv("DEPLOY_RING"))
+.contextResolver(ToggleContextResolver { key ->
+    requestContext[key]
 })
 ```
 
-`percentage` requires `rolloutKey` and enables the configured percentage of that stable,
-toggle-specific population. `canary` matches a textual `cohort` such as `canary` or `beta`.
-Missing context or provider failures log a warning and return `false`; `isActive` never throws.
+The SDK asks the resolver only for the configured key, such as `rollout_key`, `country`, or
+`attributes.plan`. `percentage` requires a stable rollout key; `cohort` matches textual values
+such as `canary` or `beta`. Missing context or resolver failures return `false`.
 
 ## 🔒 Security Features
 
