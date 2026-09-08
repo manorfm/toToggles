@@ -1,7 +1,8 @@
 package com.totoggle.client.context
 
-/** Thread-bound resolver for servlet-style request middleware. Always use [withValues] so the
- * context is restored after a request; it is intentionally unsuitable for reactive execution. */
+/** Thread-bound resolver for servlet filters/interceptors. Populate it around the filter chain
+ * with [withValues]; it restores context even when the chain throws. It is unsuitable for
+ * reactive execution. */
 class RequestContextResolver : ToggleContextResolver {
     private val values = ThreadLocal<Map<String, String>?>()
 

@@ -1,4 +1,6 @@
-// Package httpcontext adapts net/http requests to ToToggle's lazy context resolver.
+// Package httpcontext adapts net/http requests to ToToggle's lazy context resolver. Gin handlers
+// use the same request context, so wrap the Gin engine with Middleware and call
+// client.IsActiveContext(c.Request.Context(), path).
 package httpcontext
 
 import (

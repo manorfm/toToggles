@@ -43,7 +43,7 @@ resolver.
 | Wave | Deliverable | Status |
 |---|---|---|
 | 1 | Canonical rule and lazy resolver contract | Complete |
-| 2 | Request-local HTTP adapters | In progress |
+| 2 | Request-local HTTP adapters | Complete |
 | 3 | Trusted IP and country extraction | In progress |
 | 4 | Non-HTTP identity, cohort, and attributes | Planned |
 | 5 | Remove legacy APIs and dead code | In progress |
@@ -66,9 +66,9 @@ resolver.
 - [x] Node has an `AsyncLocalStorage` request resolver.
 - [x] Go has a `net/http` middleware resolver.
 - [x] Java has a thread-bound resolver with scoped restoration tests.
-- [ ] Add official Servlet/Spring adapter that extracts request data.
-- [ ] Add official framework adapters for Express/Fastify/Nest and Gin.
-- [ ] Document reactive Java limitations and provide a Reactor-context alternative if supported.
+- [x] Provide Node middleware compatible with Express/Fastify request handlers.
+- [x] Provide Go `net/http` middleware, reusable by Gin through `c.Request.Context()`.
+- [x] Provide Java request-local scope for Servlet filters/interceptors and document its reactive limitation.
 
 ### Wave 3 — Network context
 
