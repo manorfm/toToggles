@@ -1,6 +1,10 @@
 // Espelha entity.ApprovalConfig (server/internal/app/domain/entity/approval_settings.go) — as
-// 10 flags que existem no modelo. Nem todas têm efeito de verdade: ver
+// 11 flags que existem no modelo. Nem todas têm efeito de verdade: ver
 // lib/approvalActionTypes.ts sobre quais a middleware realmente infere e intercepta.
+// application_update é first-class desde uma correção posterior (achada numa auditoria de status
+// geral, docs/rest-flow.md §9.1): antes, `PUT /applications/:id` reusava application_create, então
+// uma única flag controlava tanto criar quanto editar uma aplicação — sem como exigir aprovação
+// pra um sem o outro.
 export interface ApprovalConfig {
   toggle_create: boolean;
   toggle_update: boolean;
@@ -9,6 +13,7 @@ export interface ApprovalConfig {
   toggle_disable: boolean;
   toggle_rule: boolean;
   application_create: boolean;
+  application_update: boolean;
   application_delete: boolean;
   secret_key_create: boolean;
   secret_key_delete: boolean;

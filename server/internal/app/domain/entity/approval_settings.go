@@ -27,6 +27,7 @@ type ApprovalConfig struct {
 	ToggleDisable     bool `json:"toggle_disable"`
 	ToggleRule        bool `json:"toggle_rule"`
 	ApplicationCreate bool `json:"application_create"`
+	ApplicationUpdate bool `json:"application_update"`
 	ApplicationDelete bool `json:"application_delete"`
 	SecretKeyCreate   bool `json:"secret_key_create"`
 	SecretKeyDelete   bool `json:"secret_key_delete"`
@@ -51,6 +52,11 @@ func NewApprovalSettings() *ApprovalSettings {
 		ToggleDisable:     false,
 		ToggleRule:        true, // Mudança de regras crítica
 		ApplicationCreate: true, // Criação de app crítica
+		ApplicationUpdate: true, // Edição de app crítica — mesmo nível de Create (achado real
+		// corrigido: PUT /applications/:id era classificado como application_create, então uma
+		// instalação existente que já tinha essa flag ligada já exigia aprovação pra editar
+		// também; não existe migração pra essa flag nova — ela nasce com o próprio default, sem
+		// tentar herdar o valor antigo de ApplicationCreate).
 		ApplicationDelete: true, // Exclusão de app crítica
 		SecretKeyCreate:   true, // Chaves críticas
 		SecretKeyDelete:   true, // Exclusão de chaves crítica
@@ -111,6 +117,8 @@ func (as *ApprovalSettings) RequiresApproval(actionType ApprovalActionType) bool
 		return config.ToggleRule
 	case ApprovalActionApplicationCreate:
 		return config.ApplicationCreate
+	case ApprovalActionApplicationUpdate:
+		return config.ApplicationUpdate
 	case ApprovalActionApplicationDelete:
 		return config.ApplicationDelete
 	case ApprovalActionSecretKeyCreate:

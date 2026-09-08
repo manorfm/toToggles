@@ -27,7 +27,7 @@ test.describe("application lifecycle — create", () => {
     const rootPage = await rootContext.newPage();
     await goToApprovalSettings(rootPage);
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Create or update application" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Create application" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -93,7 +93,7 @@ test.describe("application lifecycle — edit name", () => {
     expect(createRes.ok()).toBeTruthy();
     await goToApprovalSettings(rootPage);
     await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
-    await ensureSwitchOn(rootPage.getByRole("button", { name: "Create or update application" }));
+    await ensureSwitchOn(rootPage.getByRole("button", { name: "Update application" }));
 
     const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
     const adminPage = await adminContext.newPage();
@@ -110,10 +110,10 @@ test.describe("application lifecycle — edit name", () => {
 
     await rootPage.goto("/approvals");
     await rootPage.getByRole("button", { name: "Pending" }).click();
-    // A ação de update reusa o mesmo action_type "application_create" (não existe
-    // application_update — docs/rest-flow.md §9.1), então a linha aparece rotulada "Create
-    // application" mesmo sendo uma edição.
-    const pendingRow = rootPage.locator(".appr-row", { hasText: "Create application" });
+    // application_update é first-class desde uma correção posterior (achada numa auditoria de
+    // status geral, docs/rest-flow.md §9.1) — antes reusava application_create, e esta linha
+    // aparecia rotulada "Create application" mesmo sendo uma edição.
+    const pendingRow = rootPage.locator(".appr-row", { hasText: "Update application" });
     await expect(pendingRow).toBeVisible();
     await pendingRow.getByRole("button", { name: "Approve" }).click();
     await expect(pendingRow).toHaveCount(0);

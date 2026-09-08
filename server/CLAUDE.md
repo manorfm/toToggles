@@ -2277,17 +2277,47 @@ desde §6.7-6.9 — e um bug real de tradução, o nav item "Users" que tinha fi
    ou `{selector: ".drawer-path"}`) precisaram trocar pra esperar por um marcador estável
    (`"Status"`) ou consultar o container diretamente — ajustados em `EditToggleDrawer.test.tsx` e
    `ApplicationDetailScreen.test.tsx`.
-5. **`PUT /applications/:id` classificado como `application_create` pelo middleware de aprovação**
-   (não existe uma constante `application_update` própria) — pré-existente ao frontend, afeta só
-   o approval workflow quando alguém edita (não cria) uma aplicação com aprovação ligada para
-   `application_create`.
+5. ✅ **RESOLVIDO (2026-09-07)** — `application_update` virou um `ApprovalActionType` de primeira
+   classe (`entity/approval_request.go`), em vez de `PUT /applications/:id` continuar reusando
+   `application_create`. Tocou toda a cadeia que tinha ganhado uma checagem `isApplicationEdit`
+   pra compensar essa ambiguidade — removida por completo, cada tipo agora tem seu próprio branch
+   direto, sem inferência por presença de `ApplicationID`:
+   - `entity.ApprovalConfig` ganhou o campo `ApplicationUpdate` (JSON — sem migração de dados
+     antigos de propósito, `não tem retrocompatibilidade`: uma instalação existente que já tinha
+     `application_create` ligado pra cobrir edições precisa reativar a nova flag separadamente;
+     documentado, não uma lacuna).
+   - `middleware/approval.go`: `getActionType` (PUT → `application_update`), `createApprovalRequest`
+     e `determineTeamID` cada um ganhou um `case` próprio pra `ApplicationUpdate` em vez de reusar
+     o de `ApplicationCreate` com um branch condicional por dentro.
+   - `usecase/approval_usecase.go`: `resolveApprovalExecutionAudit` perdeu o parâmetro
+     `isApplicationEdit`; `ExecuteApprovedAction`'s switch e `approvalRequestTarget` ganharam um
+     `case ApprovalActionApplicationUpdate` próprio.
+   - Frontend: `types/approval.ts`/`types/approvalSettings.ts` (união de tipos + `ApprovalConfig`),
+     `lib/approvalActionTypes.ts` (linha "Create or update application" virou duas: "Create
+     application"/"Update application"), `components/ApprovalRow.tsx` (`ACTION_LABELS`).
+   - **Achado real ao migrar, não só uma limpeza de tipos**: `components/AppModal.tsx` chamava
+     `guard("application_create", ...)` incondicionalmente, mesmo editando — o pre-check
+     client-side (`useApprovalIntercept`, que consulta `GET /approval/required?action_type=...`
+     ANTES de submeter, só pra decidir se mostra o aviso de "isso vai precisar de aprovação")
+     continuaria perguntando sobre o tipo errado depois desta mudança, arriscando prever
+     certo/errado se `ApplicationCreate`/`ApplicationUpdate` divergissem (uma instalação real teria
+     visto o aviso aparecer ou sumir errado antes mesmo de enviar a edição). Corrigido pra
+     perguntar sobre `application_update` quando `editing` é true.
+   - TDD em toda camada nova: `middleware/approval_test.go` (reclassificação do PUT),
+     `usecase/approval_usecase_application_test.go`/`approval_workflow_integration_test.go` (um
+     teste novo prova as duas flags controlando independentemente create vs. update — antes
+     impossível, já que era a mesma flag), `AppModal.test.tsx` (o pre-check certo). `docs/
+     rest-flow.md` §9.1 reescrito (a nota "não existe application_update" virou a descrição do
+     tipo de verdade). e2e (`application-lifecycle.spec.ts`/`history-and-activity.spec.ts`)
+     atualizados pro rótulo novo do switch de Settings ("Update application").
 6. **Achado sobre o próprio design-graph, não uma pendência deste código**: `get_full_texts`/
    `get_component_data` ainda resolvem o componente errado quando o nome pedido é prefixo de
    outro (Achado 6, `docs/investigation/design-graph-findings.md`) — sem solução possível deste
    lado, é bug da ferramenta.
 
-Nenhum destes é um bloqueador — todos são cosméticos, de escopo pequeno e bem isolado, ou fora do
-alcance deste código (o Achado 6). Peça pra atacar qualquer um deles quando fizer sentido.
+Dos 6 itens originais, só o 6 (bug do próprio design-graph, fora do alcance deste código) continua
+como pendência real — todos os demais foram fechados ou invalidados numa sequência de rodadas
+desta mesma auditoria de status. Não há mais nenhum item acionável do plano v2.6 nesta lista.
 
 ## Principais Funcionalidades
 

@@ -229,7 +229,7 @@ describe("AppModal — edit mode", () => {
   });
 
   it("calls onPendingApproval (not onUpdated) when the update is intercepted for approval", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "application_create" })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(202, { approval_required: true, action_type: "application_update" })));
     const onUpdated = vi.fn();
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
@@ -247,7 +247,33 @@ describe("AppModal — edit mode", () => {
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
-    await vi.waitFor(() => expect(onPendingApproval).toHaveBeenCalledWith("application_create"));
+    await vi.waitFor(() => expect(onPendingApproval).toHaveBeenCalledWith("application_update"));
     expect(onUpdated).not.toHaveBeenCalled();
+  });
+
+  // Bug real que a divisão de application_create/application_update (v2.6 §9.1, achada numa
+  // auditoria de status geral) quase introduziu: o middleware real agora classifica PUT
+  // /applications/:id como application_update, mas o pre-check client-side (useApprovalIntercept)
+  // ainda perguntava sobre application_create pra QUALQUER submit deste modal, editando ou
+  // criando — pra quem tivesse só uma das duas flags ligada, o aviso de "precisa de aprovação"
+  // apareceria (ou deixaria de aparecer) errado antes mesmo de a requisição real sair.
+  it("checks application_update (not application_create) before an edit, for a non-root caller", async () => {
+    const fetchMock = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/approval/required?action_type=application_update") return Promise.resolve(jsonResponse(200, { data: { required: true } }));
+      if (path === "/api/approval/required?action_type=application_create") {
+        throw new Error("editing must check application_update, not application_create");
+      }
+      return Promise.resolve(jsonResponse(200, {}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <AppModal isRoot={false} initial={{ id: "1", name: "Checkout Web" }} onClose={vi.fn()} onCreated={vi.fn()} onUpdated={vi.fn()} onPendingApproval={vi.fn()} />
+    );
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    expect(await screen.findByText(/approval required/i)).toBeInTheDocument();
   });
 });

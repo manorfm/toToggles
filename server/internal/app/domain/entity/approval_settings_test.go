@@ -26,6 +26,7 @@ func TestNewApprovalSettings(t *testing.T) {
 		assert.False(t, config.ToggleDisable)
 		assert.True(t, config.ToggleRule)
 		assert.True(t, config.ApplicationCreate)
+		assert.True(t, config.ApplicationUpdate)
 		assert.True(t, config.ApplicationDelete)
 		assert.True(t, config.SecretKeyCreate)
 		assert.True(t, config.SecretKeyDelete)
@@ -97,6 +98,7 @@ func TestApprovalSettings_RequiresApproval(t *testing.T) {
 			ApprovalActionToggleDisable,
 			ApprovalActionToggleRule,
 			ApprovalActionApplicationCreate,
+			ApprovalActionApplicationUpdate,
 			ApprovalActionApplicationDelete,
 			ApprovalActionSecretKeyCreate,
 			ApprovalActionSecretKeyDelete,

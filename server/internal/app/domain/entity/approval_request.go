@@ -19,6 +19,7 @@ const (
 	ApprovalActionToggleDisable     ApprovalActionType = "toggle_disable"
 	ApprovalActionToggleRule        ApprovalActionType = "toggle_rule"
 	ApprovalActionApplicationCreate ApprovalActionType = "application_create"
+	ApprovalActionApplicationUpdate ApprovalActionType = "application_update"
 	ApprovalActionApplicationDelete ApprovalActionType = "application_delete"
 	ApprovalActionSecretKeyCreate   ApprovalActionType = "secret_key_create"
 	ApprovalActionSecretKeyDelete   ApprovalActionType = "secret_key_delete"
@@ -198,6 +199,7 @@ func (ar *ApprovalRequest) Validate() error {
 		ApprovalActionToggleDisable:     true,
 		ApprovalActionToggleRule:        true,
 		ApprovalActionApplicationCreate: true,
+		ApprovalActionApplicationUpdate: true,
 		ApprovalActionApplicationDelete: true,
 		ApprovalActionSecretKeyCreate:   true,
 		ApprovalActionSecretKeyDelete:   true,
@@ -265,6 +267,7 @@ func GetActionTypeDisplayName(actionType ApprovalActionType) string {
 		ApprovalActionToggleDisable:     "Desabilitar Toggle",
 		ApprovalActionToggleRule:        "Alterar Regra de Ativação",
 		ApprovalActionApplicationCreate: "Criar Aplicação",
+		ApprovalActionApplicationUpdate: "Atualizar Aplicação",
 		ApprovalActionApplicationDelete: "Excluir Aplicação",
 		ApprovalActionSecretKeyCreate:   "Criar Chave Secreta",
 		ApprovalActionSecretKeyDelete:   "Excluir Chave Secreta",

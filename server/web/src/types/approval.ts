@@ -9,6 +9,7 @@ export type ApprovalActionType =
   | "toggle_disable"
   | "toggle_rule"
   | "application_create"
+  | "application_update"
   | "application_delete"
   | "secret_key_create"
   | "secret_key_delete";

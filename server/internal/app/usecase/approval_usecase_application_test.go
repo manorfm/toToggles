@@ -113,9 +113,10 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 }
 
 // Achado escrevendo o e2e de "editar nome de aplicação com aprovação": PUT /applications/:id
-// mapeia pro mesmo action_type application_create (não existe application_update — ver
-// docs/rest-flow.md §9.1), mas a EXECUÇÃO da aprovação nunca soube disso — sempre tentava criar
-// uma aplicação nova, que falhava (sem team_id) toda vez que a ação real era uma edição.
+// mapeava pro mesmo action_type de application_create (não existia application_update —
+// corrigido numa auditoria de status geral posterior, ver docs/rest-flow.md §9.1), e a EXECUÇÃO
+// da aprovação nunca sabia disso — sempre tentava criar uma aplicação nova, que falhava (sem
+// team_id) toda vez que a ação real era uma edição.
 func TestApprovalUseCase_ExecuteApplicationUpdateAction(t *testing.T) {
 	t.Run("updates the application's name", func(t *testing.T) {
 		mockAppRepo := NewMockApplicationRepository()
@@ -128,7 +129,7 @@ func TestApprovalUseCase_ExecuteApplicationUpdateAction(t *testing.T) {
 
 		request := &entity.ApprovalRequest{
 			ID:            "request-789",
-			ActionType:    entity.ApprovalActionApplicationCreate,
+			ActionType:    entity.ApprovalActionApplicationUpdate,
 			ApplicationID: &appID,
 			ActionData:    json.RawMessage(`{"name":"New Name"}`),
 		}
@@ -149,7 +150,7 @@ func TestApprovalUseCase_ExecuteApplicationUpdateAction(t *testing.T) {
 
 		request := &entity.ApprovalRequest{
 			ID:         "request-000",
-			ActionType: entity.ApprovalActionApplicationCreate,
+			ActionType: entity.ApprovalActionApplicationUpdate,
 			ActionData: json.RawMessage(`{"name":"New Name"}`),
 		}
 

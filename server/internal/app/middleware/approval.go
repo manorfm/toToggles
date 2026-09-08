@@ -149,7 +149,7 @@ func getActionType(c *gin.Context) entity.ApprovalActionType {
 	case method == "DELETE" && strings.Contains(path, "/applications") && !strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionApplicationDelete
 	case method == "PUT" && strings.Contains(path, "/applications") && !strings.Contains(path, "/toggle"):
-		return entity.ApprovalActionApplicationCreate // PUT pode ser considerado update, mas não há constante específica
+		return entity.ApprovalActionApplicationUpdate
 	case method == "POST" && strings.Contains(path, "/toggles"):
 		return entity.ApprovalActionToggleCreate
 	case method == "DELETE" && strings.Contains(path, "/toggles"):
@@ -271,12 +271,22 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		description = "Delete toggle"
 
 	case entity.ApprovalActionApplicationCreate:
-		// PUT /applications/:id (edição) cai no mesmo action_type de criação — não existe
-		// application_update (docs/rest-flow.md §9.1). Só a presença de :id na URL distingue os
-		// dois; sem capturar applicationID aqui, a execução (ExecuteApprovedAction) não tinha
-		// como saber que era uma edição e sempre tentava criar uma aplicação nova (achado
-		// escrevendo o e2e de "editar aplicação com aprovação" — falhava sempre, por faltar
-		// team_id, já que uma edição de nome não manda esse campo).
+		// POST /applications (sem :id ainda) — a aplicação não existe no momento do pedido,
+		// applicationID fica nil de propósito.
+		var appData map[string]interface{}
+		if err := json.Unmarshal(body, &appData); err == nil {
+			actionData = appData
+			// Nome curto só — o nome da aplicação vai no `target` do evento de auditoria
+			// (ApprovalUseCase#approvalRequestTarget), mesmo padrão do toggle create acima.
+			description = "Create application"
+		}
+
+	case entity.ApprovalActionApplicationUpdate:
+		// PUT /applications/:id — tipo próprio desde a correção do gap documentado em
+		// docs/rest-flow.md §9.1 (antes reusava application_create; achado numa auditoria de
+		// status geral, corrigido junto com o downstream que já tinha ganhado uma checagem
+		// isApplicationEdit pra compensar essa mesma ambiguidade — removida agora, sem mais
+		// necessidade).
 		if appID := c.Param("id"); appID != "" {
 			applicationID = &appID
 		}
@@ -284,13 +294,7 @@ func createApprovalRequest(c *gin.Context, approvalUseCase *usecase.ApprovalUseC
 		var appData map[string]interface{}
 		if err := json.Unmarshal(body, &appData); err == nil {
 			actionData = appData
-			verb := "Create"
-			if applicationID != nil {
-				verb = "Update"
-			}
-			// Nome curto só — o nome da aplicação vai no `target` do evento de auditoria
-			// (ApprovalUseCase#approvalRequestTarget), mesmo padrão do toggle create acima.
-			description = verb + " application"
+			description = "Update application"
 		}
 
 	case entity.ApprovalActionApplicationDelete:
@@ -413,15 +417,16 @@ func determineTeamID(c *gin.Context, approvalUseCase *usecase.ApprovalUseCase, a
 		// Buscar qual team o usuário tem acesso nesta aplicação
 		return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
 
-	case entity.ApprovalActionApplicationCreate, entity.ApprovalActionApplicationDelete:
-		// Se a aplicação já existe (PUT de edição, que reusa este mesmo action_type — não há
-		// application_update, ver docs/rest-flow.md §9.1 — ou um DELETE de verdade), resolve o
-		// team pela aplicação real, não pelo "primeiro team do usuário": um admin em múltiplos
-		// teams pode não ter a aplicação no seu primeiro team.
-		if applicationID != nil {
-			return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
+	case entity.ApprovalActionApplicationUpdate, entity.ApprovalActionApplicationDelete:
+		// A aplicação já existe pra ambos (edição de verdade ou exclusão) — resolve o team pela
+		// aplicação real, não pelo "primeiro team do usuário": um admin em múltiplos teams pode
+		// não ter a aplicação no seu primeiro team.
+		if applicationID == nil {
+			return "", entity.NewAppError(entity.ErrCodeValidation, "application ID is required")
 		}
+		return approvalUseCase.GetUserTeamForApplication(ctx, userID, *applicationID)
 
+	case entity.ApprovalActionApplicationCreate:
 		// Criação de verdade (POST /applications, sem :id ainda): o cliente já manda team_id no
 		// corpo (campo obrigatório em application_handler.go#CreateApplicationRequest) — é esse
 		// team que deve ser dono da solicitação, não "o primeiro team do usuário". Usar o

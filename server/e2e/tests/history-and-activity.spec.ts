@@ -177,7 +177,7 @@ test("an application created through the approval workflow shows its own creatio
   await rootPage.goto("/approvals");
   await rootPage.getByRole("button", { name: "Settings" }).click();
   await ensureSwitchOn(rootPage.getByRole("button", { name: "Approval system" }));
-  await ensureSwitchOn(rootPage.getByRole("button", { name: "Create or update application" }));
+  await ensureSwitchOn(rootPage.getByRole("button", { name: "Create application" }));
 
   const adminContext = await browser.newContext({ storageState: ADMIN_STATE });
   const adminPage = await adminContext.newPage();

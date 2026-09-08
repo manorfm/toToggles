@@ -73,9 +73,12 @@ export function AppModal({ isRoot, initial, onClose, onCreated, onUpdated, onPen
       return;
     }
 
-    // application_create cobre tanto criação quanto edição — não existe action_type próprio
-    // pra update (docs/rest-flow.md §9.1, PUT /applications/:id reusa o mesmo tipo).
-    await guard("application_create", { actionDesc: editing ? "Update application" : "Create application", path: trimmedName }, async () => {
+    // application_update é first-class desde uma correção posterior (docs/rest-flow.md §9.1,
+    // achada numa auditoria de status geral) — antes um único action_type ("application_create")
+    // cobria criação e edição, e este pre-check perguntava sempre sobre ele; hoje o middleware
+    // real classifica PUT /applications/:id como application_update, então o pre-check precisa
+    // perguntar sobre o tipo certo, senão prediz errado se as duas flags divergirem.
+    await guard(editing ? "application_update" : "application_create", { actionDesc: editing ? "Update application" : "Create application", path: trimmedName }, async () => {
       setSubmitting(true);
       setError(null);
       try {

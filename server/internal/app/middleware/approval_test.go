@@ -34,7 +34,10 @@ func TestGetActionType(t *testing.T) {
 	}{
 		// Regressão: os 5 tipos já suportados antes desta mudança.
 		{"create application", "POST", "/api/applications", "", entity.ApprovalActionApplicationCreate},
-		{"update application", "PUT", "/api/applications/app1", "", entity.ApprovalActionApplicationCreate},
+		// application_update é first-class desde v2.6 §9.1's fix (achado numa auditoria de status
+		// geral) — antes reusava application_create (docs/rest-flow.md §9.1 documentava essa
+		// limitação; corrigida agora).
+		{"update application", "PUT", "/api/applications/app1", "", entity.ApprovalActionApplicationUpdate},
 		{"delete application", "DELETE", "/api/applications/app1", "", entity.ApprovalActionApplicationDelete},
 		{"create toggle", "POST", "/api/applications/app1/toggles", `{"toggle":"a.b"}`, entity.ApprovalActionToggleCreate},
 		{"delete toggle", "DELETE", "/api/applications/app1/toggles/tg1", "", entity.ApprovalActionToggleDelete},

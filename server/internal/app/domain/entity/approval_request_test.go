@@ -335,6 +335,7 @@ func TestGetActionTypeDisplayName(t *testing.T) {
 		{ApprovalActionToggleUpdate, "Atualizar Toggle"},
 		{ApprovalActionToggleDelete, "Excluir Toggle"},
 		{ApprovalActionApplicationCreate, "Criar Aplicação"},
+		{ApprovalActionApplicationUpdate, "Atualizar Aplicação"},
 		{ApprovalActionType("unknown"), "unknown"},
 	}
 

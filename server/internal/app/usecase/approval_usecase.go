@@ -305,10 +305,16 @@ func (uc *ApprovalUseCase) approvalRequestTarget(request *entity.ApprovalRequest
 		return ""
 
 	case entity.ApprovalActionApplicationCreate:
-		// Cobre tanto criação (ApplicationID nil, nome vem do corpo) quanto edição (ApplicationID
-		// setado — não existe application_update, PUT /applications/:id cai neste mesmo
-		// action_type, docs/rest-flow.md §9.1); sem nome no corpo (raro, mas o campo é opcional
-		// numa edição que só muda team), cai pro nome atual da aplicação.
+		var data struct {
+			Name string `json:"name"`
+		}
+		_ = request.GetActionDataAs(&data)
+		return data.Name
+
+	case entity.ApprovalActionApplicationUpdate:
+		// Sem nome no corpo (raro, mas o campo é opcional numa edição que só muda team), cai pro
+		// nome atual da aplicação — só faz sentido pra Update, que sempre tem um ApplicationID já
+		// existente pra resolver esse fallback (Create nunca tem, a aplicação não existe ainda).
 		var data struct {
 			Name string `json:"name"`
 		}
@@ -681,15 +687,10 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	// Isso dependerá da integração com os outros use cases
 	// Por enquanto, apenas marcamos como processada (se necessário)
 
-	// Não existe application_update (docs/rest-flow.md §9.1) — PUT /applications/:id também cai
-	// neste mesmo action_type. ApplicationID só é preenchido pra esse caso (edição); numa criação
-	// de verdade a aplicação ainda não existe, então fica nil.
-	isApplicationEdit := request.ActionType == entity.ApprovalActionApplicationCreate && request.ApplicationID != nil
-
 	// Resolvido ANTES de executar a ação: toggle_delete/application_delete apagam a entidade que
 	// este texto/target descrevem, então buscar o nome/path DEPOIS da execução seria tarde demais
 	// (mesmo cuidado já tomado nos handlers diretos — ver toggle_handler.go/application_handler.go).
-	eventType, auditText, auditTarget := uc.resolveApprovalExecutionAudit(request, isApplicationEdit)
+	eventType, auditText, auditTarget := uc.resolveApprovalExecutionAudit(request)
 
 	var execErr error
 	// applicationID é o valor gravado no evento de execução — normalmente request.ApplicationID,
@@ -719,14 +720,12 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 	case entity.ApprovalActionToggleRule:
 		execErr = uc.executeToggleUpdateAction(ctx, request)
 	case entity.ApprovalActionApplicationCreate:
-		if isApplicationEdit {
-			execErr = uc.executeApplicationUpdateAction(ctx, request)
-		} else {
-			createdApplicationID, execErr = uc.executeApplicationCreateAction(ctx, request)
-			if execErr == nil {
-				applicationID = &createdApplicationID
-			}
+		createdApplicationID, execErr = uc.executeApplicationCreateAction(ctx, request)
+		if execErr == nil {
+			applicationID = &createdApplicationID
 		}
+	case entity.ApprovalActionApplicationUpdate:
+		execErr = uc.executeApplicationUpdateAction(ctx, request)
 	case entity.ApprovalActionApplicationDelete:
 		execErr = uc.executeApplicationDeleteAction(ctx, request)
 	case entity.ApprovalActionSecretKeyCreate:
@@ -770,7 +769,7 @@ func (uc *ApprovalUseCase) ExecuteApprovedAction(ctx context.Context, requestID 
 // gap. Rule-set, application-create e secret-key não têm case nenhum em executePendingAction (o
 // protótipo real nunca de fato executa essas aprovações) — sem fonte real pra confirmar, o
 // target cai pro mesmo identificador que a ação direta equivalente usa.
-func (uc *ApprovalUseCase) resolveApprovalExecutionAudit(request *entity.ApprovalRequest, isApplicationEdit bool) (entity.AuditEventType, string, string) {
+func (uc *ApprovalUseCase) resolveApprovalExecutionAudit(request *entity.ApprovalRequest) (entity.AuditEventType, string, string) {
 	const suffix = " (after approval)"
 
 	appName := ""
@@ -860,14 +859,14 @@ func (uc *ApprovalUseCase) resolveApprovalExecutionAudit(request *entity.Approva
 		return eventType, verb + " <b>" + togglePath + "</b>" + suffix, appName
 
 	case entity.ApprovalActionApplicationCreate:
-		if isApplicationEdit {
-			return entity.AuditEventApplicationUpdated, "Updated application <b>" + appName + "</b>" + suffix, appName
-		}
 		var data struct {
 			Name string `json:"name"`
 		}
 		_ = request.GetActionDataAs(&data)
 		return entity.AuditEventApplicationCreated, "Created application <b>" + data.Name + "</b>" + suffix, teamName + " team"
+
+	case entity.ApprovalActionApplicationUpdate:
+		return entity.AuditEventApplicationUpdated, "Updated application <b>" + appName + "</b>" + suffix, appName
 
 	case entity.ApprovalActionApplicationDelete:
 		// Confirmado no protótipo real: o pendingAction de deleteApp não passa target nenhum —

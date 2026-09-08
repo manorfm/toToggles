@@ -379,14 +379,15 @@ func TestApprovalWorkflow_ToggleRule_Intercepted(t *testing.T) {
 
 // TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication closes the loop on
 // a real bug found while writing the e2e journey for "edit application name with approval": PUT
-// /applications/:id shares the application_create action_type with POST (no application_update
-// constant exists — docs/rest-flow.md §9.1), and ExecuteApprovedAction's dispatch used to always
-// treat it as a create, which failed every time (missing team_id) since an edit's body never has
-// one. This proves the fix: approving an edit now actually renames the application instead of
-// erroring out.
+// /applications/:id used to share the application_create action_type with POST (no
+// application_update constant existed — docs/rest-flow.md §9.1), and ExecuteApprovedAction's
+// dispatch always treated it as a create, which failed every time (missing team_id) since an
+// edit's body never has one. application_update is now its own first-class action type (found
+// and fixed in a later status-check auditing round) — this proves the original fix still holds
+// under the new type: approving an edit actually renames the application instead of erroring out.
 func TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication(t *testing.T) {
 	router, db, _ := setupApprovalWorkflowTestRouter(t)
-	root := enableApproval(t, db, entity.ApprovalConfig{ApplicationCreate: true})
+	root := enableApproval(t, db, entity.ApprovalConfig{ApplicationUpdate: true})
 
 	req := httptest.NewRequest(http.MethodPut, "/applications/app-1", strings.NewReader(`{"name": "Renamed App"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -397,8 +398,8 @@ func TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication
 	}
 
 	var pending entity.ApprovalRequest
-	if err := db.Where("application_id = ? AND action_type = ?", "app-1", entity.ApprovalActionApplicationCreate).First(&pending).Error; err != nil {
-		t.Fatalf("expected a pending application_create (edit) request, got: %v", err)
+	if err := db.Where("application_id = ? AND action_type = ?", "app-1", entity.ApprovalActionApplicationUpdate).First(&pending).Error; err != nil {
+		t.Fatalf("expected a pending application_update request, got: %v", err)
 	}
 
 	ctx := context.Background()
@@ -423,6 +424,55 @@ func TestApprovalWorkflow_ApplicationEdit_ApprovedAndExecuted_RenamesApplication
 	if count != 1 {
 		t.Errorf("expected exactly 1 application to exist, got %d", count)
 	}
+}
+
+// TestApprovalWorkflow_ApplicationCreateAndUpdate_AreIndependentlyConfigurable proves the actual
+// fix behind splitting application_update out of application_create (found in a status-check
+// auditing round, docs/rest-flow.md §9.1): before, PUT /applications/:id shared the SAME
+// action_type as POST, so a single "application_create" flag in required_actions controlled both
+// — there was no way to require approval for one but not the other. Now they're independent.
+func TestApprovalWorkflow_ApplicationCreateAndUpdate_AreIndependentlyConfigurable(t *testing.T) {
+	t.Run("ApplicationCreate on, ApplicationUpdate off: create is intercepted, edit is not", func(t *testing.T) {
+		router, db, _ := setupApprovalWorkflowTestRouter(t)
+		enableApproval(t, db, entity.ApprovalConfig{ApplicationCreate: true, ApplicationUpdate: false})
+
+		editReq := httptest.NewRequest(http.MethodPut, "/applications/app-1", strings.NewReader(`{"name": "Renamed App"}`))
+		editReq.Header.Set("Content-Type", "application/json")
+		editW := httptest.NewRecorder()
+		router.ServeHTTP(editW, editReq)
+		if editW.Code != http.StatusOK {
+			t.Fatalf("expected the edit to apply directly (200), got %d: %s", editW.Code, editW.Body.String())
+		}
+
+		createReq := httptest.NewRequest(http.MethodPost, "/applications", strings.NewReader(`{"name": "New App", "team_id": "team-1"}`))
+		createReq.Header.Set("Content-Type", "application/json")
+		createW := httptest.NewRecorder()
+		router.ServeHTTP(createW, createReq)
+		if createW.Code != http.StatusAccepted {
+			t.Fatalf("expected the create to be intercepted (202), got %d: %s", createW.Code, createW.Body.String())
+		}
+	})
+
+	t.Run("ApplicationUpdate on, ApplicationCreate off: edit is intercepted, create is not", func(t *testing.T) {
+		router, db, _ := setupApprovalWorkflowTestRouter(t)
+		enableApproval(t, db, entity.ApprovalConfig{ApplicationCreate: false, ApplicationUpdate: true})
+
+		editReq := httptest.NewRequest(http.MethodPut, "/applications/app-1", strings.NewReader(`{"name": "Renamed App"}`))
+		editReq.Header.Set("Content-Type", "application/json")
+		editW := httptest.NewRecorder()
+		router.ServeHTTP(editW, editReq)
+		if editW.Code != http.StatusAccepted {
+			t.Fatalf("expected the edit to be intercepted (202), got %d: %s", editW.Code, editW.Body.String())
+		}
+
+		createReq := httptest.NewRequest(http.MethodPost, "/applications", strings.NewReader(`{"name": "New App", "team_id": "team-1"}`))
+		createReq.Header.Set("Content-Type", "application/json")
+		createW := httptest.NewRecorder()
+		router.ServeHTTP(createW, createReq)
+		if createW.Code != http.StatusCreated {
+			t.Fatalf("expected the create to apply directly (201), got %d: %s", createW.Code, createW.Body.String())
+		}
+	})
 }
 
 // TestApprovalWorkflow_ApplicationCreate_UsesRequestedTeam_NotFirstUserTeam reproduces a bug

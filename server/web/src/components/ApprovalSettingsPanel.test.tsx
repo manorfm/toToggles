@@ -12,6 +12,7 @@ const disabledConfig = {
   toggle_disable: false,
   toggle_rule: true,
   application_create: true,
+  application_update: true,
   application_delete: true,
   secret_key_create: true,
   secret_key_delete: true,
@@ -60,7 +61,7 @@ describe("ApprovalSettingsPanel", () => {
     renderPanel({ settings: settings({ approval_enabled: true }) });
 
     expect(screen.getByText("Delete toggle")).toBeInTheDocument();
-    expect(screen.getByText((_, el) => el?.className === "badge on" && el.textContent === "6 active")).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.className === "badge on" && el.textContent === "7 active")).toBeInTheDocument();
   });
 
   it("calls onToggleSystem when the master switch is clicked", async () => {
@@ -83,11 +84,13 @@ describe("ApprovalSettingsPanel", () => {
     expect(onToggleAction).toHaveBeenCalledWith("toggle_create");
   });
 
-  it("shows every one of the 10 configurable actions, now that all are enforced", () => {
+  it("shows every one of the 11 configurable actions, now that all are enforced", () => {
     renderPanel({ settings: settings({ approval_enabled: true }) });
 
     expect(screen.getByText("Enable toggle (recursive, whole subtree)")).toBeInTheDocument();
     expect(screen.getByText("Change activation rule")).toBeInTheDocument();
+    expect(screen.getByText("Create application")).toBeInTheDocument();
+    expect(screen.getByText("Update application")).toBeInTheDocument();
     expect(screen.getByText("Generate secret key")).toBeInTheDocument();
     expect(screen.getByText("Delete secret key")).toBeInTheDocument();
   });

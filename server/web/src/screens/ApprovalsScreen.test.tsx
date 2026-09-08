@@ -55,6 +55,7 @@ const disabledConfig = {
   toggle_disable: false,
   toggle_rule: true,
   application_create: true,
+  application_update: true,
   application_delete: true,
   secret_key_create: true,
   secret_key_delete: true,
@@ -251,7 +252,7 @@ describe("ApprovalsScreen", () => {
 
     expect(await screen.findByText(/system/i)).toBeInTheDocument();
     expect(screen.getByText(/active/i)).toBeInTheDocument();
-    expect(screen.getByText(/6 configured actions/i)).toBeInTheDocument();
+    expect(screen.getByText(/7 configured actions/i)).toBeInTheDocument();
   });
 
   it("switches to the Settings tab when 'Configure' is clicked on the banner", async () => {

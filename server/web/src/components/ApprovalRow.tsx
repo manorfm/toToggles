@@ -29,6 +29,7 @@ export const ACTION_LABELS: Record<ApprovalActionType, string> = {
   toggle_disable: "Disable toggle",
   toggle_rule: "Change activation rule",
   application_create: "Create application",
+  application_update: "Update application",
   application_delete: "Delete application",
   secret_key_create: "Generate secret key",
   secret_key_delete: "Delete secret key",

@@ -4,7 +4,7 @@ export interface ApprovalActionMeta {
   key: ApprovalActionKey;
   group: string;
   label: string;
-  // Todos os 10 tipos são de fato inferidos de uma rota real hoje (getActionType,
+  // Todos os 11 tipos são de fato inferidos de uma rota real hoje (getActionType,
   // internal/app/middleware/approval.go) — toggle_enable/toggle_disable pelo valor de
   // `enabled` no endpoint recursivo singular, toggle_rule pela presença de
   // has_activation_rule/activation_rule no corpo do endpoint plural, e
@@ -17,8 +17,10 @@ export interface ApprovalActionMeta {
 }
 
 // Ordem e agrupamento espelham entity.ApprovalConfig; labels vêm de ler getActionType
-// diretamente (não do protótipo — APPROVAL_ACTIONS lá é só texto de exemplo, sem os 10
-// valores reais).
+// diretamente (não do protótipo — APPROVAL_ACTIONS lá é só texto de exemplo, sem os 11
+// valores reais). application_create/application_update viraram entradas separadas numa correção
+// posterior (achada numa auditoria de status geral) — antes application_create sozinho controlava
+// as duas (PUT /applications/:id reusava esse mesmo action_type, sem uma flag própria pra editar).
 export const APPROVAL_ACTIONS: ApprovalActionMeta[] = [
   { key: "toggle_create", group: "Toggles", label: "Create toggle", enforced: true },
   { key: "toggle_update", group: "Toggles", label: "Update toggle (plain enable/disable of a single node)", enforced: true },
@@ -26,7 +28,8 @@ export const APPROVAL_ACTIONS: ApprovalActionMeta[] = [
   { key: "toggle_enable", group: "Toggles", label: "Enable toggle (recursive, whole subtree)", enforced: true },
   { key: "toggle_disable", group: "Toggles", label: "Disable toggle (recursive, whole subtree)", enforced: true },
   { key: "toggle_rule", group: "Toggles", label: "Change activation rule", enforced: true },
-  { key: "application_create", group: "Applications", label: "Create or update application", enforced: true },
+  { key: "application_create", group: "Applications", label: "Create application", enforced: true },
+  { key: "application_update", group: "Applications", label: "Update application", enforced: true },
   { key: "application_delete", group: "Applications", label: "Delete application", enforced: true },
   { key: "secret_key_create", group: "Secret keys", label: "Generate secret key", enforced: true },
   { key: "secret_key_delete", group: "Secret keys", label: "Delete secret key", enforced: true },

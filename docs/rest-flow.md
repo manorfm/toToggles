@@ -1112,6 +1112,7 @@ GET /api/approval/settings
       "toggle_disable": false,
       "toggle_rule": true,
       "application_create": true,
+      "application_update": true,
       "application_delete": true,
       "secret_key_create": true,
       "secret_key_delete": true
@@ -1141,9 +1142,9 @@ Root only. All fields optional — partial patch (only supplied keys are applied
 ```
 
 `default_expiration_days` must be between 1 and 30. Note `required_actions`, when present, is set wholesale
-(all ten booleans), so clients should send the complete config object, not just the keys they want to flip.
+(all eleven booleans), so clients should send the complete config object, not just the keys they want to flip.
 
-All ten action types are now intercepted end-to-end by the middleware. `toggle_enable`/
+All eleven action types are now intercepted end-to-end by the middleware. `toggle_enable`/
 `toggle_disable` are distinguished from a plain `toggle_update` by the `enabled` value sent to the
 recursive endpoint (`PUT /api/applications/:id/toggle/:toggleId`) — the same two action types also
 cover the bulk endpoint (`PUT /api/applications/:id/toggles/bulk`, §7); a pending request from
@@ -1161,15 +1162,15 @@ One known limitation: the `toggle_rule` heuristic can't detect *clearing* a prev
 would require reading the toggle's current state — the middleware only looks at the request body.
 That request is classified as `toggle_update` instead.
 
-> Note: there is no separate `application_update` action type — `getActionType` maps **any** `PUT
-> /api/applications/:id` to `application_create`, same as the create route. So the single
-> `application_create` flag in `required_actions` gates both creating and updating applications;
-> there's no way to require approval for one but not the other. Execution correctly tells the two
-> apart internally, though: the middleware captures the target application's ID when the request
-> is a `PUT` (never possible for a real `POST` create, which has no ID yet), and
-> `ExecuteApprovedAction` branches on that to update the existing application instead of
-> attempting to create a new one. Before this was fixed, approving an edit always failed at
-> execute time (it tried to create a new application and had no `team_id` to do it with).
+> `application_update` is its own action type: `getActionType` maps `PUT /api/applications/:id`
+> to `application_update`, distinct from `application_create` (`POST /api/applications`). The two
+> flags in `required_actions` gate independently — an install can require approval to create
+> applications without requiring it to rename one, or vice versa. This used to not be the case:
+> before a later fix, `PUT` shared the `application_create` action type with `POST`, so a single
+> flag controlled both, with no way to require approval for one but not the other; execution told
+> the two apart internally by whether the request carried an existing application ID, which also
+> once shipped broken (approving an edit tried to create a new application instead, and failed for
+> lack of a `team_id`). Both gaps are closed now — dedicated action type, dedicated execution path.
 
 ```http
 GET /api/approval/enabled
@@ -1212,8 +1213,8 @@ POST /api/approval/requests
 ```
 
 Rules: `action_type` must be one of `toggle_create`, `toggle_update`, `toggle_delete`, `toggle_enable`,
-`toggle_disable`, `toggle_rule`, `application_create`, `application_delete`, `secret_key_create`,
-`secret_key_delete`; toggle-related action types require `application_id`. `expires_at` is set automatically
+`toggle_disable`, `toggle_rule`, `application_create`, `application_update`, `application_delete`,
+`secret_key_create`, `secret_key_delete`; toggle-related action types require `application_id`. `expires_at` is set automatically
 (7 days from creation, independent of `default_expiration_days` in settings — see note below). `action_data`
 is stored opaquely and only reinterpreted by `POST /api/approval/requests/:id/execute`.
 

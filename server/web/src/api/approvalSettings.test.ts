@@ -14,6 +14,7 @@ const requiredActions: ApprovalConfig = {
   toggle_disable: false,
   toggle_rule: true,
   application_create: true,
+  application_update: true,
   application_delete: true,
   secret_key_create: true,
   secret_key_delete: true,
