@@ -34,7 +34,12 @@ func toggleJSON(id, path, value string, enabled bool, level int, parentID string
 	}
 	rule := "null"
 	if hasRule {
-		rule = `{"type":"` + ruleType + `","value":"` + ruleValue + `"}`
+		contextKey := map[string]string{"percentage": "rollout_key", "parameter": "parameter", "user_id": "user_id", "ip": "ip", "country": "country", "cohort": "cohort"}[ruleType]
+		config := ""
+		if contextKey != "" {
+			config = `,"config":{"context_key":"` + contextKey + `"}`
+		}
+		rule = `{"type":"` + ruleType + `","value":"` + ruleValue + `"` + config + `}`
 	}
 	return `{"id":"` + id + `","path":"` + path + `","value":"` + value + `","enabled":` +
 		strconv.FormatBool(enabled) + `,"level":` + strconv.Itoa(level) + `,"parent_id":` + parent +
