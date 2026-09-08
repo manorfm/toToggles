@@ -42,7 +42,7 @@ resolver.
 
 | Wave | Deliverable | Status |
 |---|---|---|
-| 1 | Canonical rule and lazy resolver contract | In progress |
+| 1 | Canonical rule and lazy resolver contract | Complete |
 | 2 | Request-local HTTP adapters | In progress |
 | 3 | Trusted IP and country extraction | In progress |
 | 4 | Non-HTTP identity, cohort, and attributes | Planned |
@@ -58,8 +58,8 @@ resolver.
 - [x] Node introduced `ToggleContextResolver` and removed `isActiveFor`.
 - [x] Go introduced `ToggleContextResolver` and lazy lookup from `IsActiveContext`.
 - [x] Java introduced `ToggleContextResolver` and removed the `isActive(path, parameter)` API.
-- [ ] Finish renaming Java files/tests/comments from `parameter` to `attribute`.
-- [ ] Align frontend rule union, drawer labels, API fixtures, REST contract, and all SDK READMEs.
+- [x] Remove the legacy parameter API and canonicalize `attribute` across production contracts.
+- [x] Add regression coverage for `attribute` and rejection of the removed `parameter` type.
 
 ### Wave 2 — HTTP adapters
 

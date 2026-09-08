@@ -169,6 +169,18 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 	}
 }
 
+func TestActivationRule_AttributeRequiresNamedAttributeContextKey(t *testing.T) {
+	valid := &ActivationRule{Type: ActivationRuleTypeAttribute, Value: "pro", Config: json.RawMessage(`{"context_key":"attributes.plan"}`)}
+	invalid := &ActivationRule{Type: ActivationRuleTypeAttribute, Value: "pro", Config: json.RawMessage(`{"context_key":"user_id"}`)}
+
+	if err := valid.ValidateRule(); err != nil {
+		t.Fatalf("expected named attribute context key to be valid: %v", err)
+	}
+	if err := invalid.ValidateRule(); err == nil {
+		t.Fatal("expected non-attribute context key to be rejected")
+	}
+}
+
 func TestActivationRule_JSONSerialization(t *testing.T) {
 	rule := ActivationRule{
 		Type:   ActivationRuleTypePercentage,

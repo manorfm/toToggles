@@ -38,4 +38,9 @@ describe("ActivationRule", () => {
       "cohort",
     ]);
   });
+
+  it("does not retain the removed parameter rule type", () => {
+    expect(RULE_TYPES).not.toContain("parameter");
+    expect(RULE_TYPES).toContain("attribute");
+  });
 });

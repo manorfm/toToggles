@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveInitialRuleState } from "./activationRuleTypes";
+import { deriveInitialRuleState, RULE_TYPES } from "./activationRuleTypes";
 import type { ActivationRuleType, ToggleDetail } from "../types/toggle";
 
 const baseToggle: ToggleDetail = {
@@ -15,6 +15,10 @@ const baseToggle: ToggleDetail = {
 };
 
 describe("deriveInitialRuleState", () => {
+  it("exposes attribute and excludes the removed parameter type", () => {
+    expect(RULE_TYPES.map((rule) => rule.type)).toContain("attribute");
+    expect(RULE_TYPES.map((rule) => rule.type)).not.toContain("parameter");
+  });
   it("returns null/empty when there is no rule and activation_rule is literally null", () => {
     expect(deriveInitialRuleState(baseToggle)).toEqual({ ruleType: null, ruleValue: "" });
   });

@@ -455,7 +455,7 @@ interface IntegrateStepProps {
 // Amostras de código reais (não fictícias): API confirmada 1:1 contra totoggle_java/src/main/
 // kotlin/com/totoggle/client/config/ToToggleConfig.kt (`builder()`, `applicationName`,
 // `serverUrl`, `secretKey`, `refreshInterval`, `enableOfflineMode`) e ToToggleClient.kt
-// (`start()`, `isActive(path)`, `isActive(path, param)`, `shutdown()`) — não uma cópia cega do
+// (`start()`, `isActive(path)`, `shutdown()`) — não uma cópia cega do
 // protótipo, embora o texto tenha acabado sendo idêntico ao já confirmado ali.
 function integrationCodes(appName: string, togglePath: string): [string, string, string] {
   const nm = appName || "my-app";
@@ -485,7 +485,7 @@ if (client.isActive("${tp}")) {
 }
 
 // With a parameter (for targeting rules)
-if (client.isActive("${tp}", user.tier)) {
+if (client.isActive("${tp}")) {
     // active only for the value configured in the rule
 }
 

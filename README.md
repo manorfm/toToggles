@@ -121,7 +121,7 @@ client.start()
 
 // Check if features are active
 val isPaymentsEnabled = client.isActive("user.payments")
-val isTableViewEnabled = client.isActive("user.payments.view-table", "premium")
+val isTableViewEnabled = client.isActive("user.payments.view-table")
 
 // Clean up
 client.shutdown()
@@ -164,7 +164,7 @@ Activates for ~25% of requests using consistent hashing.
 **Parameter Strategy:**
 ```json
 {
-  "type": "parameter",
+  "type": "attribute",
   "value": "premium,enterprise"
 }
 ```
