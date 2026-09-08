@@ -29,7 +29,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
         // choice — it can only mean the caller forgot to pass one, whether the rule lives on the
         // toggle being asked about or on one of its ancestors in the path.
         private val TYPES_REQUIRING_PARAMETER = setOf(
-            ActivationRule.TYPE_PARAMETER,
+            ActivationRule.TYPE_ATTRIBUTE,
             ActivationRule.TYPE_USER_ID,
             ActivationRule.TYPE_COUNTRY,
             ActivationRule.TYPE_COHORT,
@@ -38,7 +38,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
 
     init {
         registerStrategy(PercentageStrategy())
-        registerStrategy(ParameterStrategy())
+        registerStrategy(AttributeStrategy())
         registerStrategy(UserIdStrategy())
         registerStrategy(IpStrategy())
         registerStrategy(CountryStrategy())

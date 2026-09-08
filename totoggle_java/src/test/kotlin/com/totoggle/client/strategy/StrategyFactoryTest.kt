@@ -21,7 +21,7 @@ class StrategyFactoryTest {
         val registeredTypes = factory.getRegisteredRuleTypes()
 
         assertThat(registeredTypes).containsExactlyInAnyOrder(
-            "percentage", "parameter", "user_id", "ip", "country", "time", "cohort"
+            "percentage", "attribute", "user_id", "ip", "country", "time", "cohort"
         )
     }
     
@@ -35,10 +35,10 @@ class StrategyFactoryTest {
     
     @Test
     fun `should get correct strategy for parameter rule`() {
-        val strategy = factory.getStrategy("parameter")
+        val strategy = factory.getStrategy("attribute")
         
-        assertThat(strategy).isInstanceOf(ParameterStrategy::class.java)
-        assertThat(strategy.getRuleType()).isEqualTo("parameter")
+        assertThat(strategy).isInstanceOf(AttributeStrategy::class.java)
+        assertThat(strategy.getRuleType()).isEqualTo("attribute")
     }
     
     @Test
@@ -51,7 +51,7 @@ class StrategyFactoryTest {
     @Test
     fun `should check if strategy is available`() {
         assertThat(factory.hasStrategy("percentage")).isTrue()
-        assertThat(factory.hasStrategy("parameter")).isTrue()
+        assertThat(factory.hasStrategy("attribute")).isTrue()
         assertThat(factory.hasStrategy("unknown")).isFalse()
     }
     
@@ -99,7 +99,7 @@ class StrategyFactoryTest {
     
     @Test
     fun `should evaluate valid parameter rule`() {
-        val rule = ActivationRule("parameter", "premium")
+        val rule = ActivationRule("attribute", "premium")
         
         val resultWithMatch = factory.evaluate(rule, "premium")
         val resultWithoutMatch = factory.evaluate(rule, "basic")
@@ -147,7 +147,7 @@ class StrategyFactoryTest {
     @Test
     fun `should not throw for a parameter-requiring type given no parameter — degrades to false`() {
         for (type in listOf(
-            ActivationRule.TYPE_PARAMETER,
+            ActivationRule.TYPE_ATTRIBUTE,
             ActivationRule.TYPE_USER_ID,
             ActivationRule.TYPE_COUNTRY,
             ActivationRule.TYPE_COHORT,

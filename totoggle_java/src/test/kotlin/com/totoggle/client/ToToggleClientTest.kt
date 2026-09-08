@@ -17,6 +17,7 @@ class ToToggleClientTest {
     private lateinit var mockServer: MockWebServer
     private lateinit var config: ToToggleConfig
     private lateinit var client: ToToggleClient
+    private val contextValues = mutableMapOf<String, String>()
     
     @BeforeEach
     fun setUp() {
@@ -30,7 +31,8 @@ class ToToggleClientTest {
             refreshInterval = Duration.ofMinutes(1),
             connectionTimeout = Duration.ofSeconds(1),
             readTimeout = Duration.ofSeconds(1),
-            logLevel = LogLevel.DEBUG
+            logLevel = LogLevel.DEBUG,
+            contextResolver = { key -> contextValues[key] }
         )
         
         client = ToToggleClient(config)
@@ -138,8 +140,6 @@ class ToToggleClientTest {
         )
         client.start()
 
-        assertThat(client.isActive("t1.t2", "42")).isTrue()
-        assertThat(client.isActive("t1.t2", "1")).isTrue()
         assertThat(client.isActive("t1.t2")).isTrue()
     }
 
@@ -150,16 +150,20 @@ class ToToggleClientTest {
         
         // A percentage rollout requires a stable rollout key from context.
         assertThat(client.isActive("user.payments.view-table")).isFalse()
-        assertThat(client.isActive("user.payments.view-table", "user-42")).isIn(true, false)
+        contextValues["rollout_key"] = "user-42"
+        assertThat(client.isActive("user.payments.view-table")).isIn(true, false)
     }
     
     @Test
-    fun `should evaluate parameter activation rules`() {
+    fun `should evaluate attribute activation rules`() {
         mockResponseWithParameterRule()
         client.start()
         
-        val resultWithMatch = client.isActive("user.payments.view-table", "premium")
-        val resultWithoutMatch = client.isActive("user.payments.view-table", "basic")
+        contextValues["attributes.plan"] = "premium"
+        val resultWithMatch = client.isActive("user.payments.view-table")
+        contextValues["attributes.plan"] = "basic"
+        val resultWithoutMatch = client.isActive("user.payments.view-table")
+        contextValues.remove("attributes.plan")
         val resultWithoutParam = client.isActive("user.payments.view-table")
         
         assertThat(resultWithMatch).isTrue()
@@ -172,8 +176,10 @@ class ToToggleClientTest {
         mockResponseWithUserIdRule()
         client.start()
 
-        assertThat(client.isActive("user.payments.view-table", "48")).isTrue()
-        assertThat(client.isActive("user.payments.view-table", "999")).isFalse()
+        contextValues["user_id"] = "48"
+        assertThat(client.isActive("user.payments.view-table")).isTrue()
+        contextValues["user_id"] = "999"
+        assertThat(client.isActive("user.payments.view-table")).isFalse()
         assertThat(client.isActive("user.payments.view-table")).isFalse()
     }
 
@@ -665,7 +671,7 @@ class ToToggleClientTest {
                             "parent_id": "toggle-2",
                             "app_id": "app-123",
                             "has_activation_rule": true,
-                            "activation_rule": {"type": "parameter", "value": "premium", "config": {"context_key": "parameter"}}
+                            "activation_rule": {"type": "attribute", "value": "premium", "config": {"context_key": "attributes.plan"}}
                         }
                     ]
                 }

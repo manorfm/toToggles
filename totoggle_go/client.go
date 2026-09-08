@@ -147,7 +147,7 @@ func (c *Client) IsActive(path string) (active bool) {
 }
 
 // IsActiveContext evaluates path with the application's request context. Middleware can attach
-// request-specific values for the configured ToggleContextProvider without a separate argument
+// request-specific values for the configured ToggleContextResolver without a separate argument
 // for every rule field. It always fails closed and never panics.
 func (c *Client) IsActiveContext(ctx context.Context, path string) (active bool) {
 	defer func() {

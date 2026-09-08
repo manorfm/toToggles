@@ -24,7 +24,7 @@ data class ActivationRule(
     
     companion object {
         const val TYPE_PERCENTAGE = "percentage"
-        const val TYPE_PARAMETER = "parameter"
+        const val TYPE_ATTRIBUTE = "attribute"
         const val TYPE_USER_ID = "user_id"
         const val TYPE_IP = "ip"
         const val TYPE_COUNTRY = "country"

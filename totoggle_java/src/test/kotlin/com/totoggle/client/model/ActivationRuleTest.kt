@@ -40,7 +40,7 @@ class ActivationRuleTest {
         // Matches server/internal/app/domain/entity/activation_rule.go's ActivationRuleType
         // constants exactly (the server is the source of truth for what these strings are).
         assertThat(ActivationRule.TYPE_PERCENTAGE).isEqualTo("percentage")
-        assertThat(ActivationRule.TYPE_PARAMETER).isEqualTo("parameter")
+        assertThat(ActivationRule.TYPE_ATTRIBUTE).isEqualTo("attribute")
         assertThat(ActivationRule.TYPE_USER_ID).isEqualTo("user_id")
         assertThat(ActivationRule.TYPE_IP).isEqualTo("ip")
         assertThat(ActivationRule.TYPE_COUNTRY).isEqualTo("country")

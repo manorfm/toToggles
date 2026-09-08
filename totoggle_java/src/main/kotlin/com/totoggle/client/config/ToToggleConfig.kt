@@ -2,7 +2,7 @@ package com.totoggle.client.config
 
 import java.time.Duration
 import java.time.ZoneId
-import com.totoggle.client.context.ToggleContextProvider
+import com.totoggle.client.context.ToggleContextResolver
 
 /**
  * Configuration for the ToToggle client.
@@ -30,7 +30,7 @@ data class ToToggleConfig(
     val enableOfflineMode: Boolean = true,
     val logLevel: LogLevel = LogLevel.INFO,
     val timeZone: ZoneId = ZoneId.systemDefault(),
-    val contextProvider: ToggleContextProvider? = null
+    val contextResolver: ToggleContextResolver? = null
 ) {
     
     init {
@@ -71,7 +71,7 @@ data class ToToggleConfig(
         private var enableOfflineMode: Boolean = true
         private var logLevel: LogLevel = LogLevel.INFO
         private var timeZone: ZoneId = ZoneId.systemDefault()
-        private var contextProvider: ToggleContextProvider? = null
+        private var contextResolver: ToggleContextResolver? = null
 
         fun applicationName(applicationName: String) = apply { this.applicationName = applicationName }
         fun serverUrl(serverUrl: String) = apply { this.serverUrl = serverUrl }
@@ -82,7 +82,7 @@ data class ToToggleConfig(
         fun enableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
         fun logLevel(logLevel: LogLevel) = apply { this.logLevel = logLevel }
         fun timeZone(timeZone: ZoneId) = apply { this.timeZone = timeZone }
-        fun contextProvider(contextProvider: ToggleContextProvider?) = apply { this.contextProvider = contextProvider }
+        fun contextResolver(contextResolver: ToggleContextResolver?) = apply { this.contextResolver = contextResolver }
 
         fun build(): ToToggleConfig {
             return ToToggleConfig(
@@ -95,7 +95,7 @@ data class ToToggleConfig(
                 enableOfflineMode = enableOfflineMode,
                 logLevel = logLevel,
                 timeZone = timeZone,
-                contextProvider = contextProvider
+                contextResolver = contextResolver
             )
         }
     }

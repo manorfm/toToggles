@@ -7,7 +7,6 @@ import com.totoggle.client.http.HttpClient
 import com.totoggle.client.metrics.ToToggleMetricsListener
 import com.totoggle.client.model.Toggle
 import com.totoggle.client.strategy.StrategyFactory
-import com.totoggle.client.context.ToggleContext
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
@@ -39,8 +38,8 @@ import java.util.concurrent.atomic.AtomicReference
  * // Check if a toggle is active
  * val isActive = client.isActive("user.payments.view-table")
  * 
- * // Check with parameter
- * val isActiveForPremium = client.isActive("user.payments.view-table", "premium")
+ * // Context is resolved by the configured middleware-backed resolver.
+ * val isActive = client.isActive("user.payments.view-table")
  * 
  * client.shutdown()
  * ```
@@ -127,13 +126,12 @@ class ToToggleClient(private val config: ToToggleConfig) {
      * 4. Evaluates activation rules if present
      *
      * @param path The toggle path (e.g., "user.payments.view-table")
-     * @param parameter Optional parameter for rule evaluation
      * @return true if the toggle is active, false otherwise
      */
-    fun isActive(path: String, parameter: String? = null): Boolean {
+    fun isActive(path: String): Boolean {
         val result = try {
             validateStarted()
-            logger.debug("Checking toggle: path='{}', parameter='{}'", path, parameter)
+            logger.debug("Checking toggle: path='{}'", path)
 
             val toggle = cache.getToggle(path)
             if (toggle == null) {
@@ -160,7 +158,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 // so guard defensively rather than force-unwrap.
                 val rule = toggle.activationRule
                 if (toggle.hasActivationRule && rule != null) {
-                    val ruleResult = evaluateRule(rule, parameter?.let { ToggleContext(it, it, it, it, it, it) }, toggle.path)
+                    val ruleResult = evaluateRule(rule, toggle.path)
                     logger.debug("Activation rule evaluation: path='{}', rule='{}/{}', result={}",
                         path, rule.type, rule.value, ruleResult)
                     ruleResult
@@ -204,24 +202,15 @@ class ToToggleClient(private val config: ToToggleConfig) {
     }
 
     /** Rules are local to their toggle. Missing context is warned and fails closed. */
-    private fun evaluateRule(rule: com.totoggle.client.model.ActivationRule, legacyContext: ToggleContext?, path: String): Boolean {
+    private fun evaluateRule(rule: com.totoggle.client.model.ActivationRule, path: String): Boolean {
         return try {
-            val context = legacyContext ?: config.contextProvider?.getContext()
             if (rule.type == "time") return strategyFactory.evaluate(rule, null)
             val contextKey = rule.config?.get("context_key")?.asText()
             if (contextKey.isNullOrBlank()) {
                 logger.warn("Activation rule type '{}' has no valid context_key; returning false", rule.type)
                 return false
             }
-            val rawKey = when (contextKey) {
-                "rollout_key" -> context?.rolloutKey
-                "parameter" -> context?.parameter
-                "user_id" -> context?.userId
-                "ip" -> context?.ip
-                "country" -> context?.country
-                "cohort" -> context?.cohort
-                else -> if (contextKey.startsWith("attributes.")) context?.attributes?.get(contextKey.removePrefix("attributes.")) else null
-            }
+            val rawKey = config.contextResolver?.resolve(contextKey)
             if (rawKey.isNullOrBlank()) {
                 logger.warn("Activation rule context '{}' is absent; returning false", contextKey)
                 false
@@ -230,7 +219,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 strategyFactory.evaluate(rule, key)
             }
         } catch (e: Exception) {
-            logger.warn("ToggleContextProvider or rule evaluation failed; returning false", e)
+            logger.warn("ToggleContextResolver or rule evaluation failed; returning false", e)
             false
         }
     }
