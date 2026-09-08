@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApprovalInterceptModal } from "./ApprovalInterceptModal";
+import { DottedPath } from "./DottedPath";
 import { Icon } from "./Icon";
 import { ApiError } from "../api/client";
 import { getToggle, updateToggleRule } from "../api/toggles";
@@ -31,7 +32,12 @@ interface EditToggleDrawerProps {
 type LoadState = { status: "loading" } | { status: "loaded"; toggle: ToggleDetail } | { status: "error"; message: string };
 
 // Adaptado do EditDrawer real (decodificado do bundle — ver lib/activationRuleTypes.ts pro
-// porquê get_full_jsx("EditDrawer") sozinho não bastava aqui).
+// porquê get_full_jsx("EditDrawer") sozinho não bastava aqui, na época, pra RULE_TYPES).
+// Reauditado numa rodada posterior contra `get_full_jsx("EditDrawer")` (o próprio JSX de retorno
+// já funcionava sem o bundle desde sempre — só o array RULE_TYPES é que precisava do decode):
+// batia quase byte a byte, com um único gap real — `drawer-path` renderizava o path como string
+// crua em vez de segmentos com `.dot` entre eles (mesmo padrão já usado em CreateToggleModal,
+// extraído pra components/DottedPath.tsx pra não duplicar a lógica uma terceira vez).
 export function EditToggleDrawer({
   applicationId,
   toggleId,
@@ -127,7 +133,11 @@ export function EditToggleDrawer({
               <Icon name="close" size={16} />
             </button>
           </div>
-          {loadState.status === "loaded" && <div className="drawer-path">{loadState.toggle.path}</div>}
+          {loadState.status === "loaded" && (
+            <div className="drawer-path">
+              <DottedPath segments={loadState.toggle.path.split(".")} />
+            </div>
+          )}
         </div>
 
         <div className="drawer-body">

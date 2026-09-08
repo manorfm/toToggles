@@ -317,7 +317,7 @@ describe("ApplicationDetailScreen", () => {
     await screen.findByText("user", { selector: ".root-chip" });
 
     await user.click(screen.getByRole("button", { name: /configure/i }));
-    await screen.findByText("user", { selector: ".drawer-path" });
+    await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
     await user.click(screen.getByText("Percentage"));
@@ -363,7 +363,7 @@ describe("ApplicationDetailScreen", () => {
     await screen.findByText("user", { selector: ".root-chip" });
 
     await user.click(screen.getByRole("button", { name: /configure/i }));
-    await screen.findByText("user", { selector: ".drawer-path" });
+    await screen.findByText("Status");
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
     await user.click(screen.getByText("Percentage"));
     await user.type(screen.getByLabelText(/percentage value/i), "25");

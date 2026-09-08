@@ -24,12 +24,18 @@ describe("EditToggleDrawer", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads the toggle and shows its path and current status", async () => {
+  it("loads the toggle and shows its path (segmented, with a dot between segments) and current status", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    const { container } = render(
+      <EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />
+    );
 
-    expect(await screen.findByText("payments.card")).toBeInTheDocument();
+    await screen.findByText("Status");
+    // Segmentado (DottedPath), não uma string crua — confirmado contra get_full_jsx("EditDrawer").
+    const drawerPath = container.querySelector(".drawer-path");
+    expect(drawerPath?.textContent).toBe("payments.card");
+    expect(drawerPath?.querySelectorAll(".dot")).toHaveLength(1);
     expect(screen.getByText(/^enabled$/i)).toBeInTheDocument();
   });
 
@@ -41,7 +47,7 @@ describe("EditToggleDrawer", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 
     render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
-    await screen.findByText("payments.card");
+    await screen.findByText("Status");
 
     const statusSwitch = screen.getByRole("switch", { name: /status/i });
     expect(statusSwitch).toHaveAttribute("aria-checked", "true");
@@ -59,7 +65,7 @@ describe("EditToggleDrawer", () => {
   it("shows a no-effect notice naming the blocking ancestor when the toggle is on but a parent is off", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 
-    render(
+    const { container } = render(
       <EditToggleDrawer
         applicationId="app1"
         toggleId="tgl1"
@@ -74,7 +80,9 @@ describe("EditToggleDrawer", () => {
     );
 
     expect(await screen.findByText(/no effect right now/i)).toBeInTheDocument();
-    expect(screen.getByText("payments")).toBeInTheDocument();
+    // Escopado ao <code> do aviso — "payments" sozinho também bate no 1º segmento de
+    // drawer-path ("payments.card", agora renderizado como spans via DottedPath).
+    expect(container.querySelector(".notice code")?.textContent).toBe("payments");
   });
 
   it("hides the no-effect notice once the toggle itself is turned off", async () => {
@@ -106,7 +114,7 @@ describe("EditToggleDrawer", () => {
     const user = userEvent.setup();
 
     render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
-    await screen.findByText("payments.card");
+    await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
 
@@ -129,7 +137,7 @@ describe("EditToggleDrawer", () => {
     const user = userEvent.setup();
 
     render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={onClose} onSaved={onSaved} onPendingApproval={vi.fn()} />);
-    await screen.findByText("payments.card");
+    await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
     await user.click(screen.getByText("Percentage"));
@@ -153,7 +161,7 @@ describe("EditToggleDrawer", () => {
     const user = userEvent.setup();
 
     render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={onSaved} onPendingApproval={vi.fn()} />);
-    await screen.findByText("payments.card");
+    await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
     await user.click(screen.getByText("Percentage"));
@@ -174,7 +182,7 @@ describe("EditToggleDrawer", () => {
     const user = userEvent.setup();
 
     render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={onSaved} onPendingApproval={onPendingApproval} />);
-    await screen.findByText("payments.card");
+    await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -194,7 +202,7 @@ describe("EditToggleDrawer", () => {
     render(
       <EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot={false} onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />
     );
-    await screen.findByText("payments.card");
+    await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 

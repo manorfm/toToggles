@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { ApprovalInterceptModal } from "./ApprovalInterceptModal";
+import { DottedPath } from "./DottedPath";
 import { Icon } from "./Icon";
 import { ApiError } from "../api/client";
 import { createToggle } from "../api/toggles";
@@ -88,16 +89,7 @@ export function CreateToggleModal({ applicationId, isRoot, onClose, onCreated, o
         </div>
 
         <div className="path-preview">
-          {parts.length === 0 ? (
-            <span className="empty-ph">preview · service.feature.flag</span>
-          ) : (
-            parts.map((p, i) => (
-              <span key={i}>
-                {i > 0 && <span className="dot">.</span>}
-                {p}
-              </span>
-            ))
-          )}
+          {parts.length === 0 ? <span className="empty-ph">preview · service.feature.flag</span> : <DottedPath segments={parts} />}
         </div>
 
         {error && (

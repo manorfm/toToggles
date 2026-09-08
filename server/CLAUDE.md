@@ -1777,7 +1777,7 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
       | `ChangePasswordForm`/`AccountSecurityScreen` | `ChangePasswordModal` | ✅ confere (fase 12) — regra de senha mínima (4, não 8) é do backend de propósito |
       | `TogglePaths`/`ToggleCard` | `TogglePaths`/`ToggleCard` | ✅ confere quase byte a byte (fase 12) |
       | `AppShell` (barra lateral) | *(não indexado)* | ⚪ fora do alcance do design-graph — árvore autenticada de `App` nunca indexada; fonte é o bundle decodificado |
-      | `EditToggleDrawer`/`CreateToggleModal`/`StatusRing` | — | ⚪ não auditados ainda (candidatos a uma próxima passada) |
+      | `EditToggleDrawer`/`CreateToggleModal`/`StatusRing` | `EditDrawer`/`NewToggleModal`/`StatusRing` | ✅ auditados (rodada de fechamento do plano v2.6, ver "Status v2.6" — 1 gap real corrigido) |
 
       **CSS inline — achado, não um chute**: censo (`grep -rhoE 'style=\{\{[^}]+\}\}'`) mostrou
       `style={{ color: "var(--danger)" }}` repetido 11–13× (sempre junto de `className="field-
@@ -2260,9 +2260,23 @@ desde §6.7-6.9 — e um bug real de tradução, o nav item "Users" que tinha fi
    (`teams-and-users.spec.ts`) estendido pra provar o badge aparecendo num time recém-criado sem
    membros, continuando visível com um membro não-aprovador, e sumindo assim que o 1º aprovador é
    designado.
-4. **`EditToggleDrawer`/`CreateToggleModal`/`StatusRing` nunca foram auditados contra o
-   design-graph** (JSX real nunca comparado lado a lado, diferente de todo o resto da tela de
-   detalhe de aplicação, já confirmado). Candidatos naturais a uma próxima varredura.
+4. ✅ **RESOLVIDO (2026-09-07)** — `EditToggleDrawer`/`CreateToggleModal`/`StatusRing` auditados
+   contra `get_full_jsx("EditDrawer"/"NewToggleModal"/"StatusRing")`. `StatusRing` e
+   `CreateToggleModal` já batiam perfeitamente, sem nenhuma mudança. `EditToggleDrawer` também
+   batia quase por completo — o único gap real: `drawer-path` renderizava o path do toggle como
+   string crua (`{loadState.toggle.path}`) em vez de segmentos com um `.dot` entre eles
+   (`fullPath.map(...)` no confirmado), o mesmo padrão que `CreateToggleModal`'s `path-preview` já
+   usava. Extraído pra `components/DottedPath.tsx` (TDD, 4 testes) em vez de duplicar a lógica uma
+   terceira vez, e os dois chamadores passaram a reusá-lo. Nota honesta: essa correção não muda
+   nada visualmente hoje — o CSS real só estiliza `.dot` dentro de `.path-preview`
+   (`.path-preview .dot { color: var(--accent) }`), sem nenhuma regra pra `.drawer-path .dot`, e
+   por isso um "." solto ali sempre pareceu igual a esse "." vindo de dentro de um `<span>` — a
+   correção é de fidelidade estrutural/DOM, não uma correção visual. Efeito colateral (esperado):
+   `getByText`/`findByText` do Testing Library não casa texto através de fronteira de elemento por
+   padrão, então vários testes que esperavam o path inteiro como um nó de texto só (`"payments.card"`,
+   ou `{selector: ".drawer-path"}`) precisaram trocar pra esperar por um marcador estável
+   (`"Status"`) ou consultar o container diretamente — ajustados em `EditToggleDrawer.test.tsx` e
+   `ApplicationDetailScreen.test.tsx`.
 5. **`PUT /applications/:id` classificado como `application_create` pelo middleware de aprovação**
    (não existe uma constante `application_update` própria) — pré-existente ao frontend, afeta só
    o approval workflow quando alguém edita (não cria) uma aplicação com aprovação ligada para
