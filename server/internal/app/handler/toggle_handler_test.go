@@ -900,7 +900,8 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 				"has_activation_rule": true,
 				"activation_rule": {
 					"type": "percentage",
-					"value": "50"
+					"value": "50",
+					"config": {"context_key":"rollout_key"}
 				}
 			}`,
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
@@ -926,7 +927,8 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 				"has_activation_rule": true,
 				"activation_rule": {
 					"type": "parameter",
-					"value": "premium"
+					"value": "premium",
+					"config": {"context_key":"attributes.plan"}
 				}
 			}`,
 			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {

@@ -267,7 +267,7 @@ func TestAuditIntegration_ToggleRuleSet_TextIncludesPercentageValue(t *testing.T
 		t.Fatalf("failed to create toggle: %v", err)
 	}
 
-	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40"}}`
+	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40", "config":{"context_key":"rollout_key"}}}`
 	req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/toggle-1", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Test-User", teamAdmin.ID)
@@ -1080,7 +1080,7 @@ func TestAuditIntegration_ToggleRuleSet_RecordsBeforeAndAfter(t *testing.T) {
 		t.Fatalf("failed to create toggle: %v", err)
 	}
 
-	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40"}}`
+	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40", "config":{"context_key":"rollout_key"}}}`
 	req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/toggle-1", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Test-User", teamAdmin.ID)

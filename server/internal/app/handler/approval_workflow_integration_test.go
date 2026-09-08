@@ -351,7 +351,7 @@ func TestApprovalWorkflow_ToggleRule_Intercepted(t *testing.T) {
 		t.Fatalf("failed to create toggle: %v", err)
 	}
 
-	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "50"}}`
+	body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "50", "config":{"context_key":"rollout_key"}}}`
 	req, _ := http.NewRequest(http.MethodPut, "/applications/app-1/toggles/toggle-1", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
