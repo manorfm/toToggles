@@ -135,11 +135,7 @@ func TestClient_IsActive_AllAncestorsEnabledNoRules_ReturnsTrue(t *testing.T) {
 	assert.True(t, client.IsActive("t1.t2.t3"))
 }
 
-// Regression coverage for the exact bug fixed in the Kotlin client this session: the parameter
-// passed to IsActiveFor must be forwarded to EVERY ancestor's rule evaluation, not just the
-// target's — an ancestor rule evaluated with no parameter used to always fail closed regardless
-// of what the caller passed in.
-func TestClient_IsActiveFor_ForwardsParameterToAncestorRule(t *testing.T) {
+func TestClient_AncestorRuleDoesNotAffectDescendant(t *testing.T) {
 	srv, _ := jsonServer(t, applicationJSON(
 		toggleJSON("1", "t1", "t1", true, 0, "", true, "parameter", "premium,enterprise"),
 		toggleJSON("2", "t1.t2", "t2", true, 1, "1", false, "", ""),
@@ -149,8 +145,8 @@ func TestClient_IsActiveFor_ForwardsParameterToAncestorRule(t *testing.T) {
 	t.Cleanup(client.Shutdown)
 
 	assert.True(t, client.IsActiveFor("t1.t2", "premium"))
-	assert.False(t, client.IsActiveFor("t1.t2", "basic"))
-	assert.False(t, client.IsActive("t1.t2")) // no parameter at all: the ancestor rule can never match
+	assert.True(t, client.IsActiveFor("t1.t2", "basic"))
+	assert.True(t, client.IsActive("t1.t2"))
 }
 
 func TestClient_IsActiveFor_TargetsOwnRule(t *testing.T) {

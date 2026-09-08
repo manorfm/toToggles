@@ -29,6 +29,8 @@ type Config struct {
 	// covers the whole round trip (connect+read), which is the idiomatic Go equivalent of the
 	// separate connect/read timeouts some other client libraries expose.
 	HTTPClient *http.Client
+	// ContextProvider optionally resolves request/deployment context for activation rules.
+	ContextProvider ToggleContextProvider
 }
 
 // Option customizes a Config during NewConfig.
@@ -62,6 +64,11 @@ func WithTimeZone(loc *time.Location) Option {
 // WithHTTPClient supplies a pre-built *http.Client, overriding HTTPTimeout entirely.
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Config) { c.HTTPClient = client }
+}
+
+// WithToggleContextProvider supplies request/deployment context for contextual rules.
+func WithToggleContextProvider(provider ToggleContextProvider) Option {
+	return func(c *Config) { c.ContextProvider = provider }
 }
 
 // NewConfig validates and builds a Config. secretKey must start with "sk_" — that prefix is how

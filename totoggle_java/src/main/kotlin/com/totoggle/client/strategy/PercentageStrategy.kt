@@ -3,6 +3,7 @@ package com.totoggle.client.strategy
 import com.totoggle.client.model.ActivationRule
 import org.slf4j.LoggerFactory
 import kotlin.random.Random
+import java.nio.charset.StandardCharsets
 
 /**
  * Strategy for evaluating percentage-based activation rules.
@@ -18,9 +19,8 @@ import kotlin.random.Random
  * combining a user ID with the toggle path) if independence across same-percentage toggles
  * matters for a given use case.
  *
- * With no `parameter` (the caller has no stable identity to key on), this falls back to the
- * original per-call random draw — the same behavior as before, since there is nothing to be
- * consistent with.
+ * The client requires `ToggleContext.rolloutKey` before this strategy is reached, so a missing
+ * identity fails closed instead of using a random per-call cohort.
  */
 class PercentageStrategy : ActivationStrategy {
 
@@ -61,10 +61,13 @@ class PercentageStrategy : ActivationStrategy {
     }
 
     /** Deterministic bucket in [0, 100) derived from a stable key, using the JLS-specified
-     * (portable across JVMs and runs) `String.hashCode()` algorithm. */
+     * (portable across SDKs and runs) FNV-1a over UTF-8 bytes. */
     private fun consistentBucket(ruleValue: String, key: String): Double {
-        val hash = "$ruleValue:$key".hashCode()
-        return (hash.toLong() and 0xFFFFFFFFL) % 10000L / 100.0
+        var hash = 0x811c9dc5L
+        for (byte in "$ruleValue:$key".toByteArray(StandardCharsets.UTF_8)) {
+            hash = (hash xor (byte.toLong() and 0xffL)) * 0x01000193L and 0xffffffffL
+        }
+        return hash % 10000L / 100.0
     }
 
     override fun getRuleType(): String = ActivationRule.TYPE_PERCENTAGE

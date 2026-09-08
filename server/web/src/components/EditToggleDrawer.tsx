@@ -54,6 +54,7 @@ export function EditToggleDrawer({
   const [ruleOn, setRuleOn] = useState(false);
   const [ruleType, setRuleType] = useState<ActivationRuleType | null>(null);
   const [ruleValue, setRuleValue] = useState("");
+  const [contextKey, setContextKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(isRoot);
@@ -69,6 +70,7 @@ export function EditToggleDrawer({
         const { ruleType, ruleValue } = deriveInitialRuleState(toggle);
         setRuleType(ruleType);
         setRuleValue(ruleValue);
+        setContextKey(toggle.activation_rule?.config?.context_key ?? RULE_TYPES.find((r) => r.type === ruleType)?.contextKey ?? "");
       })
       .catch((err) => {
         if (cancelled) return;
@@ -84,7 +86,7 @@ export function EditToggleDrawer({
 
   async function save() {
     if (loadState.status !== "loaded") return;
-    if (ruleOn && (!ruleType || !ruleValue.trim())) {
+    if (ruleOn && (!ruleType || !ruleValue.trim() || (selectedRuleMeta?.contextKey && !contextKey.trim()))) {
       setError(`${selectedRuleMeta?.name ?? "Rule"} value is required.`);
       return;
     }
@@ -102,7 +104,7 @@ export function EditToggleDrawer({
         const result = await updateToggleRule(applicationId, toggleId, {
           enabled,
           hasActivationRule: ruleOn,
-          activationRule: ruleOn && ruleType ? { type: ruleType, value: ruleValue.trim() } : undefined,
+          activationRule: ruleOn && ruleType ? { type: ruleType, value: ruleValue.trim(), config: selectedRuleMeta?.contextKey ? { context_key: contextKey.trim() } : null } : undefined,
         });
         if (result.kind === "pending_approval") {
           onPendingApproval(result.actionType);
@@ -203,7 +205,7 @@ export function EditToggleDrawer({
                         <button
                           key={r.type}
                           className={"rule-opt" + (ruleType === r.type ? " sel" : "")}
-                          onClick={() => setRuleType(r.type)}
+                          onClick={() => { setRuleType(r.type); setContextKey(r.contextKey ?? ""); }}
                         >
                           <Icon name={r.icon} size={16} />
                           <div>
@@ -229,6 +231,22 @@ export function EditToggleDrawer({
                           }}
                         />
                         <div className="field-hint">{selectedRuleMeta.hint}</div>
+                        {selectedRuleMeta.contextKey && (
+                          <>
+                            <label className="field-label" htmlFor="rule-context-key" style={{ marginTop: 12 }}>
+                              Context key
+                            </label>
+                            <input
+                              className="input mono"
+                              id="rule-context-key"
+                              value={contextKey}
+                              disabled={!selectedRuleMeta.contextKeyEditable}
+                              placeholder={selectedRuleMeta.contextKeyEditable ? "rollout_key or attributes.account_id" : undefined}
+                              onChange={(e) => setContextKey(e.target.value)}
+                            />
+                            <div className="field-hint">The SDK resolves this value through its ToggleContextProvider.</div>
+                          </>
+                        )}
                       </div>
                     )}
                   </>

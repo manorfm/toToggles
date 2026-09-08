@@ -1,4 +1,5 @@
 import { TotoggleConfigError } from "./errors.js";
+import type { ToggleContextProvider } from "./context.js";
 
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_HTTP_TIMEOUT_MS = 10 * 1000;
@@ -17,6 +18,8 @@ export interface ConfigOptions {
    * no way to know the server's zone on its own, so this should be set explicitly when it
    * differs. */
   timeZone?: string;
+  /** Optional source of request/deployment context for contextual activation rules. */
+  contextProvider?: ToggleContextProvider;
 }
 
 /** Validated client configuration. Build one with createConfig — there is no setter API, so a
@@ -29,6 +32,7 @@ export interface Config {
   readonly httpTimeoutMs: number;
   readonly enableOfflineMode: boolean;
   readonly timeZone?: string;
+  readonly contextProvider?: ToggleContextProvider;
 }
 
 /** Validates and builds a Config. secretKey must start with "sk_" — that prefix is how the
@@ -70,6 +74,7 @@ export function createConfig(
     httpTimeoutMs,
     enableOfflineMode: options.enableOfflineMode ?? DEFAULT_ENABLE_OFFLINE_MODE,
     timeZone: options.timeZone,
+    contextProvider: options.contextProvider,
   };
 }
 

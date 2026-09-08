@@ -15,7 +15,7 @@ help: ## Mostra esta ajuda
 run: ## Roda a aplicação localmente (aplica as próprias migrations automaticamente)
 	COOKIE_SECURE=$(COOKIE_SECURE) go run main.go
 
-build: ## Compila o binário
+build: web-build ## Builda o frontend (static/app) e compila o binário Go
 	go build -o $(APP_NAME) main.go
 
 test: ## Executa os testes

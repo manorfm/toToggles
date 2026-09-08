@@ -2,6 +2,7 @@ package com.totoggle.client.config
 
 import java.time.Duration
 import java.time.ZoneId
+import com.totoggle.client.context.ToggleContextProvider
 
 /**
  * Configuration for the ToToggle client.
@@ -28,7 +29,8 @@ data class ToToggleConfig(
     val readTimeout: Duration = Duration.ofSeconds(30),
     val enableOfflineMode: Boolean = true,
     val logLevel: LogLevel = LogLevel.INFO,
-    val timeZone: ZoneId = ZoneId.systemDefault()
+    val timeZone: ZoneId = ZoneId.systemDefault(),
+    val contextProvider: ToggleContextProvider? = null
 ) {
     
     init {
@@ -69,6 +71,7 @@ data class ToToggleConfig(
         private var enableOfflineMode: Boolean = true
         private var logLevel: LogLevel = LogLevel.INFO
         private var timeZone: ZoneId = ZoneId.systemDefault()
+        private var contextProvider: ToggleContextProvider? = null
 
         fun applicationName(applicationName: String) = apply { this.applicationName = applicationName }
         fun serverUrl(serverUrl: String) = apply { this.serverUrl = serverUrl }
@@ -79,6 +82,7 @@ data class ToToggleConfig(
         fun enableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
         fun logLevel(logLevel: LogLevel) = apply { this.logLevel = logLevel }
         fun timeZone(timeZone: ZoneId) = apply { this.timeZone = timeZone }
+        fun contextProvider(contextProvider: ToggleContextProvider?) = apply { this.contextProvider = contextProvider }
 
         fun build(): ToToggleConfig {
             return ToToggleConfig(
@@ -90,7 +94,8 @@ data class ToToggleConfig(
                 readTimeout = readTimeout,
                 enableOfflineMode = enableOfflineMode,
                 logLevel = logLevel,
-                timeZone = timeZone
+                timeZone = timeZone,
+                contextProvider = contextProvider
             )
         }
     }

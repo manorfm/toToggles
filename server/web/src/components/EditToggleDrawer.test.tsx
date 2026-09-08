@@ -119,7 +119,7 @@ describe("EditToggleDrawer", () => {
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
 
     expect(screen.getByText("Percentage")).toBeInTheDocument();
-    expect(screen.getByText("Canary")).toBeInTheDocument();
+    expect(screen.getByText("Cohort")).toBeInTheDocument();
   });
 
   it("saves enabled + activation rule and calls onSaved", async () => {
@@ -148,7 +148,7 @@ describe("EditToggleDrawer", () => {
       "/api/applications/app1/toggles/tgl1",
       expect.objectContaining({
         method: "PUT",
-        body: JSON.stringify({ enabled: true, has_activation_rule: true, activation_rule: { type: "percentage", value: "25" } }),
+          body: JSON.stringify({ enabled: true, has_activation_rule: true, activation_rule: { type: "percentage", value: "25", config: { context_key: "rollout_key" } } }),
       })
     );
     await vi.waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));

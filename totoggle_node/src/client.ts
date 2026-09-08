@@ -9,6 +9,7 @@ import { MatchListEvaluator } from "./internal/strategy/matchlist.js";
 import { PercentageEvaluator } from "./internal/strategy/percentage.js";
 import { IpEvaluator } from "./internal/strategy/ip.js";
 import { TimeWindowEvaluator } from "./internal/strategy/timewindow.js";
+import type { ToggleContext } from "./context.js";
 
 /** The cache is considered stale once this many refresh intervals have passed with no
  * successful update — e.g. with the default 5-minute interval, no successful refresh in 10
@@ -23,7 +24,7 @@ function buildRegistry(timeZone: string | undefined): Registry {
   registry.register("parameter", matchList);
   registry.register("user_id", matchList);
   registry.register("country", matchList);
-  registry.register("canary", matchList);
+  registry.register("cohort", matchList);
 
   registry.register("percentage", new PercentageEvaluator());
   registry.register("ip", new IpEvaluator());
@@ -120,22 +121,22 @@ export class ToToggleClient {
 
   /**
    * Reports whether the toggle at path is active, with no parameter for rule evaluation.
-   * Implements cascading validation: every ancestor on the path from root to target must be
-   * enabled and pass its own activation rule (if any), then the target itself must be enabled
-   * and pass its own rule (if any). A toggle that doesn't exist, or a client that isn't started
+   * Implements cascading validation: every ancestor on the path must be enabled. Activation
+   * rules are intentionally local to the requested toggle and never cascade. A toggle that
+   * doesn't exist, or a client that isn't started
    * (or has been shut down), fails closed to false.
    */
   isActive(path: string): boolean {
-    return this.evaluate(path, undefined);
+    return this.evaluate(path);
   }
 
-  /** isActive with a parameter forwarded to every activation rule in the cascade — the target's
-   * own rule AND every ancestor's rule, not just the leaf's. */
+  /** @deprecated Prefer a ToggleContextProvider. Kept as a legacy value for `parameter` rules. */
   isActiveFor(path: string, parameter: string): boolean {
-    return this.evaluate(path, parameter);
+    return this.evaluate(path, { parameter, rolloutKey: parameter, userId: parameter, ip: parameter, country: parameter, cohort: parameter });
   }
 
-  private evaluate(path: string, key: string | undefined): boolean {
+  private evaluate(path: string, legacyContext?: ToggleContext): boolean {
+    try {
     if (!this.started || this.shutdownFlag) {
       return false;
     }
@@ -153,31 +154,59 @@ export class ToToggleClient {
       return false;
     }
 
-    const result =
-      this.ancestorsActive(lookup.ancestors, key) &&
-      lookup.target.enabled &&
-      this.ruleMatches(lookup.target, key);
+    const result = this.ancestorsActive(lookup.ancestors) && lookup.target.enabled && this.ruleMatches(lookup.target, legacyContext);
 
     this.metrics.notifyEvaluation(path, result);
     return result;
+    } catch (error) {
+      console.warn(`totoggle: isActive(${path}) failed closed`, error);
+      this.metrics.notifyEvaluation(path, false);
+      return false;
+    }
   }
 
-  private ancestorsActive(ancestors: readonly Toggle[], key: string | undefined): boolean {
-    return ancestors.every((ancestor) => ancestor.enabled && this.ruleMatches(ancestor, key));
+  private ancestorsActive(ancestors: readonly Toggle[]): boolean {
+    return ancestors.every((ancestor) => ancestor.enabled);
   }
 
   /** Reports whether toggle's activation rule matches, or true if it has none. A rule type with
    * no registered Evaluator (a server-added type this client predates) fails closed to false,
    * the same as every other malformed-rule case in this package. */
-  private ruleMatches(toggle: Toggle, key: string | undefined): boolean {
+  private ruleMatches(toggle: Toggle, legacyContext?: ToggleContext): boolean {
     if (!toggle.hasActivationRule || !toggle.activationRule) {
       return true;
     }
     try {
+      const key = this.keyForRule(toggle.activationRule, legacyContext, toggle.path.toString());
+      if (key === undefined && toggle.activationRule.type !== "time") return false;
       return this.registry.evaluate(toggle.activationRule, key);
     } catch {
       return false;
     }
+  }
+
+  private keyForRule(rule: { type: string; config?: { context_key?: string } | null }, legacyContext?: ToggleContext, path?: string): string | undefined {
+    const { type } = rule;
+    let context = legacyContext;
+    if (!context && this.config.contextProvider) {
+      try { context = this.config.contextProvider.getContext(); } catch (error) {
+        console.warn("totoggle: ToggleContextProvider failed; rule evaluation fails closed", error);
+        return undefined;
+      }
+    }
+    const contextKey = rule.config?.context_key;
+    const raw = contextKey === "rollout_key" ? context?.rolloutKey
+      : contextKey === "user_id" ? context?.userId
+      : contextKey === "ip" ? context?.ip
+      : contextKey === "country" ? context?.country
+      : contextKey === "cohort" ? context?.cohort
+      : contextKey?.startsWith("attributes.") ? context?.attributes?.[contextKey.slice("attributes.".length)]
+      : undefined;
+    const key = type === "percentage" && raw !== undefined ? `${path}:${raw}` : raw;
+    if (type !== "time" && key === undefined) {
+      console.warn(`totoggle: rule type "${type}" requires configured ToggleContext key; evaluation fails closed`);
+    }
+    return key;
   }
 
   /** Whether the client is started, not shut down, has completed at least one successful

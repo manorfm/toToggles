@@ -8,6 +8,8 @@ export interface RuleTypeMeta {
   icon: IconName;
   placeholder: string;
   hint: string;
+  contextKey?: string;
+  contextKeyEditable?: boolean;
 }
 
 // name/description/icon/placeholder/hint confirmados 1:1 contra o RULE_TYPES real do
@@ -22,10 +24,12 @@ export const RULE_TYPES: RuleTypeMeta[] = [
   {
     type: "percentage",
     name: "Percentage",
-    description: "Activate for X% of traffic",
+    description: "Activate for X% of a keyed population",
     icon: "percent",
     placeholder: "e.g. 25",
-    hint: "Consistent hashing — same user always gets the same result.",
+    hint: "Requires a stable rollout key supplied by the SDK context provider. Always enables the matching percentage.",
+    contextKey: "rollout_key",
+    contextKeyEditable: true,
   },
   {
     type: "parameter",
@@ -34,6 +38,8 @@ export const RULE_TYPES: RuleTypeMeta[] = [
     icon: "sliders",
     placeholder: "premium,enterprise",
     hint: "Comma-separated values matched against the request parameter.",
+    contextKey: "attributes.",
+    contextKeyEditable: true,
   },
   {
     type: "user_id",
@@ -42,14 +48,16 @@ export const RULE_TYPES: RuleTypeMeta[] = [
     icon: "user",
     placeholder: "12,48,103",
     hint: "Comma-separated user IDs.",
+    contextKey: "user_id",
   },
   {
-    type: "canary",
-    name: "Canary",
-    description: "Canary release cohort",
+    type: "cohort",
+    name: "Cohort",
+    description: "Deployment or request cohort",
     icon: "rocket",
-    placeholder: "true",
-    hint: "Activates for the canary cohort only.",
+    placeholder: "canary,beta",
+    hint: "Comma-separated deployment/request cohorts. Avoid boolean true/false values.",
+    contextKey: "cohort",
   },
   {
     type: "ip",
@@ -58,6 +66,7 @@ export const RULE_TYPES: RuleTypeMeta[] = [
     icon: "globe",
     placeholder: "10.0.0.0/24",
     hint: "Comma-separated IPs or CIDR ranges.",
+    contextKey: "ip",
   },
   {
     type: "country",
@@ -66,6 +75,7 @@ export const RULE_TYPES: RuleTypeMeta[] = [
     icon: "map",
     placeholder: "BR,PT",
     hint: "ISO country codes, comma-separated.",
+    contextKey: "country",
   },
   {
     type: "time",

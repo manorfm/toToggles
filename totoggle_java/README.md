@@ -208,6 +208,21 @@ user                     (disabled)
 
 In this case, `client.isActive("user.payments.new-ui")` returns `false` because the parent `user` toggle is disabled, even though the specific toggle is enabled.
 
+## ToggleContextProvider
+
+Contextual rules are local to the requested toggle; ancestor rules never cascade. Configure the
+provider from application middleware, which is responsible for safely extracting request data:
+
+```kotlin
+.contextProvider(ToggleContextProvider {
+    ToggleContext(rolloutKey = user.id, country = requestCountry, cohort = System.getenv("DEPLOY_RING"))
+})
+```
+
+`percentage` requires `rolloutKey` and enables the configured percentage of that stable,
+toggle-specific population. `canary` matches a textual `cohort` such as `canary` or `beta`.
+Missing context or provider failures log a warning and return `false`; `isActive` never throws.
+
 ## 🔒 Security Features
 
 ### Server Security

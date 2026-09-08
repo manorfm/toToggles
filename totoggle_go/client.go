@@ -2,6 +2,7 @@ package totoggle
 
 import (
 	"context"
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -141,17 +142,36 @@ func (c *Client) requireUsable() error {
 // enabled and pass its own activation rule (if any), then the target itself must be enabled and
 // pass its own rule (if any). A toggle that doesn't exist, or a client that isn't started (or
 // has been shut down), fails closed to false.
-func (c *Client) IsActive(path string) bool {
-	return c.evaluate(path, "", false)
+func (c *Client) IsActive(path string) (active bool) {
+	return c.IsActiveContext(context.Background(), path)
 }
 
-// IsActiveFor is IsActive with a parameter forwarded to every activation rule in the cascade —
-// the target's own rule AND every ancestor's rule, not just the leaf's.
-func (c *Client) IsActiveFor(path, parameter string) bool {
-	return c.evaluate(path, parameter, true)
+// IsActiveContext evaluates path with the application's request context. Middleware can attach
+// request-specific values for the configured ToggleContextProvider without a separate argument
+// for every rule field. It always fails closed and never panics.
+func (c *Client) IsActiveContext(ctx context.Context, path string) (active bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("totoggle: isActive(%q) panicked; failing closed: %v", path, recovered)
+			active = false
+		}
+	}()
+	return c.evaluate(path, nil, ctx)
 }
 
-func (c *Client) evaluate(path, key string, hasKey bool) bool {
+// IsActiveFor is retained for compatibility. Prefer WithToggleContextProvider; its legacy value
+// is made available to every context field and rules never cascade from ancestors.
+func (c *Client) IsActiveFor(path, parameter string) (active bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("totoggle: isActiveFor(%q) panicked; failing closed: %v", path, recovered)
+			active = false
+		}
+	}()
+	return c.evaluate(path, &ToggleContext{Parameter: parameter, RolloutKey: parameter, UserID: parameter, IP: parameter, Country: parameter, Cohort: parameter}, context.Background())
+}
+
+func (c *Client) evaluate(path string, legacyContext *ToggleContext, requestContext context.Context) bool {
 	if !c.started.Load() || c.shutdown.Load() {
 		return false
 	}
@@ -167,17 +187,17 @@ func (c *Client) evaluate(path, key string, hasKey bool) bool {
 		return false
 	}
 
-	result := c.evaluateAncestors(ancestors, key, hasKey) &&
+	result := c.evaluateAncestors(ancestors) &&
 		target.Enabled &&
-		c.evaluateRule(target, key, hasKey)
+		c.evaluateRule(target, legacyContext, requestContext)
 
 	c.metrics.notifyEvaluation(path, result)
 	return result
 }
 
-func (c *Client) evaluateAncestors(ancestors []toggle.Toggle, key string, hasKey bool) bool {
+func (c *Client) evaluateAncestors(ancestors []toggle.Toggle) bool {
 	for _, ancestor := range ancestors {
-		if !ancestor.Enabled || !c.evaluateRule(ancestor, key, hasKey) {
+		if !ancestor.Enabled {
 			return false
 		}
 	}
@@ -187,12 +207,52 @@ func (c *Client) evaluateAncestors(ancestors []toggle.Toggle, key string, hasKey
 // evaluateRule reports whether tg's activation rule matches, or true if it has none. A rule type
 // with no registered Evaluator (a server-added type this client predates) fails closed to false,
 // the same as every other malformed-rule case in this package.
-func (c *Client) evaluateRule(tg toggle.Toggle, key string, hasKey bool) bool {
+func (c *Client) evaluateRule(tg toggle.Toggle, legacyContext *ToggleContext, requestContext context.Context) bool {
 	if !tg.HasActivationRule || tg.ActivationRule == nil {
 		return true
 	}
+	key, hasKey := c.contextKey(tg.ActivationRule.Type, legacyContext, tg.Path.String(), requestContext)
+	if tg.ActivationRule.Type != toggle.RuleTypeTime && !hasKey {
+		return false
+	}
 	result, _ := c.registry.Evaluate(*tg.ActivationRule, key, hasKey)
 	return result
+}
+
+func (c *Client) contextKey(ruleType toggle.RuleType, legacyContext *ToggleContext, path string, requestContext context.Context) (string, bool) {
+	ctx := legacyContext
+	if ctx == nil && c.cfg.ContextProvider != nil {
+		ctx = c.cfg.ContextProvider.ToggleContext(requestContext)
+	}
+	if ruleType == toggle.RuleTypeTime {
+		return "", false
+	}
+	if ctx == nil {
+		log.Printf("totoggle: rule type %q requires ToggleContextProvider; evaluation fails closed", ruleType)
+		return "", false
+	}
+	var value string
+	switch ruleType {
+	case toggle.RuleTypePercentage:
+		value = path + ":" + ctx.RolloutKey
+	case toggle.RuleTypeParameter:
+		value = ctx.Parameter
+	case toggle.RuleTypeUserID:
+		value = ctx.UserID
+	case toggle.RuleTypeIP:
+		value = ctx.IP
+	case toggle.RuleTypeCountry:
+		value = ctx.Country
+	case toggle.RuleTypeCanary:
+		value = ctx.Cohort
+	}
+	if value == "" || (ruleType == toggle.RuleTypePercentage && ctx.RolloutKey == "") {
+		log.Printf("totoggle: rule type %q requires context that is absent; evaluation fails closed", ruleType)
+	}
+	if ruleType == toggle.RuleTypePercentage && ctx.RolloutKey == "" {
+		return "", false
+	}
+	return value, value != ""
 }
 
 // IsHealthy reports whether the client is started, not shut down, has completed at least one

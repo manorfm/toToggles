@@ -7,6 +7,7 @@ import com.totoggle.client.http.HttpClient
 import com.totoggle.client.metrics.ToToggleMetricsListener
 import com.totoggle.client.model.Toggle
 import com.totoggle.client.strategy.StrategyFactory
+import com.totoggle.client.context.ToggleContext
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
@@ -130,9 +131,8 @@ class ToToggleClient(private val config: ToToggleConfig) {
      * @return true if the toggle is active, false otherwise
      */
     fun isActive(path: String, parameter: String? = null): Boolean {
-        validateStarted()
-
         val result = try {
+            validateStarted()
             logger.debug("Checking toggle: path='{}', parameter='{}'", path, parameter)
 
             val toggle = cache.getToggle(path)
@@ -147,7 +147,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
                     path, cache.getStats().toggleCount
                 )
                 false
-            } else if (!areParentsActive(path, parameter)) {
+            } else if (!areParentsActive(path)) {
                 logger.debug("Parent toggles are not active for path: {}", path)
                 false
             } else if (!toggle.enabled) {
@@ -160,7 +160,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 // so guard defensively rather than force-unwrap.
                 val rule = toggle.activationRule
                 if (toggle.hasActivationRule && rule != null) {
-                    val ruleResult = strategyFactory.evaluate(rule, parameter)
+                    val ruleResult = evaluateRule(rule, parameter?.let { ToggleContext(it, it, it, it, it, it) }, toggle.path)
                     logger.debug("Activation rule evaluation: path='{}', rule='{}/{}', result={}",
                         path, rule.type, rule.value, ruleResult)
                     ruleResult
@@ -186,19 +186,10 @@ class ToToggleClient(private val config: ToToggleConfig) {
      * - Checks that "user" is enabled (and its activation rule, if any)
      * - Checks that "user.payments" is enabled (and its activation rule, if any)
      *
-     * The same [parameter] passed to [isActive] is forwarded to every ancestor's rule
-     * evaluation, not just the target toggle's — a rule configured on an ancestor is exactly as
-     * real as one configured on the toggle itself, so it needs the same context to evaluate
-     * correctly (e.g. consistent percentage hashing, or a parameter/user_id/country/canary
-     * match). Evaluating an ancestor's rule with no parameter used to always fail it for those
-     * four match-based types, silently blocking the whole path regardless of what the caller
-     * passed in.
-     *
      * @param path The toggle path
-     * @param parameter Optional parameter for rule evaluation, forwarded to every ancestor
-     * @return true if all parents are active, false otherwise
+     * @return true if all parents are enabled, false otherwise
      */
-    private fun areParentsActive(path: String, parameter: String?): Boolean {
+    private fun areParentsActive(path: String): Boolean {
         val ancestors = cache.getAncestors(path)
 
         for (ancestor in ancestors) {
@@ -207,18 +198,35 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 return false
             }
 
-            // Check activation rules for parents too
-            val ancestorRule = ancestor.activationRule
-            if (ancestor.hasActivationRule && ancestorRule != null) {
-                val ruleResult = strategyFactory.evaluate(ancestorRule, parameter)
-                if (!ruleResult) {
-                    logger.debug("Parent toggle '{}' failed activation rule, blocking child '{}'", ancestor.path, path)
-                    return false
-                }
-            }
         }
 
         return true
+    }
+
+    /** Rules are local to their toggle. Missing context is warned and fails closed. */
+    private fun evaluateRule(rule: com.totoggle.client.model.ActivationRule, legacyContext: ToggleContext?, path: String): Boolean {
+        return try {
+            val context = legacyContext ?: config.contextProvider?.getContext()
+            val key = when (rule.type) {
+                "percentage" -> context?.rolloutKey?.let { "$path:$it" }
+                "parameter" -> context?.parameter
+                "user_id" -> context?.userId
+                "ip" -> context?.ip
+                "country" -> context?.country
+                "canary" -> context?.cohort
+                "time" -> null
+                else -> null
+            }
+            if (rule.type != "time" && key == null) {
+                logger.warn("Activation rule type '{}' requires ToggleContextProvider context; returning false", rule.type)
+                false
+            } else {
+                strategyFactory.evaluate(rule, key)
+            }
+        } catch (e: Exception) {
+            logger.warn("ToggleContextProvider or rule evaluation failed; returning false", e)
+            false
+        }
     }
     
     /**

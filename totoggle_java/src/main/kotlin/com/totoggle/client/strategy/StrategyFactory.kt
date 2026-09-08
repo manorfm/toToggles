@@ -24,7 +24,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
     companion object {
         // Rule types whose evaluation is a match against a caller-supplied value (see
         // strategy/CommaListMatch.kt) — these can NEVER pass with no parameter, unlike
-        // "percentage" (a null parameter is a legitimate fallback to a random draw) or "time"
+        // "percentage" (which is supplied from ToggleContext.rolloutKey) or "time"
         // (doesn't use a parameter at all). A null parameter here is never a valid, deliberate
         // choice — it can only mean the caller forgot to pass one, whether the rule lives on the
         // toggle being asked about or on one of its ancestors in the path.

@@ -7,7 +7,7 @@ export const RULE_TYPES = [
   "ip",
   "country",
   "time",
-  "canary",
+  "cohort",
 ] as const;
 
 export type RuleType = (typeof RULE_TYPES)[number];
@@ -18,6 +18,7 @@ export type RuleType = (typeof RULE_TYPES)[number];
 export interface ActivationRule {
   readonly type: string;
   readonly value: string;
+  readonly config?: { readonly context_key?: string } | null;
 }
 
 /** Reports whether this is "no rule configured" (both fields blank). */

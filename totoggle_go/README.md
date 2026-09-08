@@ -75,8 +75,8 @@ wrong — a blank field, a secret key not starting with `sk_`, or a non-positive
 ## Cascading validation
 
 `IsActive`/`IsActiveFor` walk every ancestor from the root down to the requested path — each one
-must be enabled and pass its own activation rule (if it has one) before the target toggle's own
-state is even checked:
+must be enabled before the target toggle's own state is checked. Activation rules are evaluated
+only for the exact requested toggle:
 
 ```
 user                       (disabled)
@@ -85,9 +85,7 @@ user                       (disabled)
 ```
 
 `client.IsActive("user.payments.new-ui")` returns `false` here because `user` is disabled, even
-though `user.payments.new-ui` itself is enabled. A parameter passed to `IsActiveFor` is forwarded
-to every ancestor's rule evaluation too, not just the leaf's — an activation rule configured on an
-ancestor needs the same context to evaluate as one on the toggle itself.
+though `user.payments.new-ui` itself is enabled.
 
 ## Activation rules
 
@@ -95,17 +93,36 @@ All 7 server-defined rule types are supported:
 
 | Type | Rule value | Matched against |
 |---|---|---|
-| `percentage` | `"0"`-`"100"` | Deterministic per key: the same key always lands in the same bucket. With no key (`IsActive`, no parameter), falls back to a random draw. |
-| `parameter` | comma-separated allowlist | The `parameter` passed to `IsActiveFor`. |
-| `user_id` | comma-separated allowlist | Same, typically a user ID. |
-| `country` | comma-separated allowlist | Same, typically an ISO country code. |
-| `canary` | comma-separated allowlist | Same, a cohort/instance identifier. |
-| `ip` | comma-separated IPv4 addresses and/or CIDR ranges (e.g. `"10.0.0.0/24"`) | Same, an IPv4 address. |
+| `percentage` | `"0"`-`"100"` | `ToggleContext.RolloutKey`; stable, toggle-specific cohort. Missing key fails closed. |
+| `parameter` | comma-separated allowlist | `ToggleContext.Parameter`. |
+| `user_id` | comma-separated allowlist | `ToggleContext.UserID`. |
+| `country` | comma-separated allowlist | `ToggleContext.Country`, typically an ISO country code. |
+| `canary` | comma-separated allowlist | `ToggleContext.Cohort`, e.g. `canary` or `beta` (not boolean). |
+| `ip` | comma-separated IPv4 addresses and/or CIDR ranges (e.g. `"10.0.0.0/24"`) | `ToggleContext.IP`. |
 | `time` | `"HH:mm-HH:mm"`, 24h, overnight-aware | The current time in the configured `WithTimeZone`. Needs no parameter. |
 
-A rule with no key/parameter supplied when it needs one, an out-of-range percentage, an
+A rule with no context supplied when it needs one, an out-of-range percentage, an
 unparseable IP, or a malformed time window all fail closed to `false` rather than erroring — a
 feature-flag check should never be able to panic a caller's request path.
+
+## ToggleContextProvider
+
+Contextual rules are local to the requested toggle; ancestor rules never cascade. Populate this
+provider from your HTTP/framework middleware (the SDK does not trust forwarded headers itself):
+
+```go
+type provider struct{}
+func (provider) ToggleContext(ctx context.Context) *totoggle.ToggleContext {
+    return &totoggle.ToggleContext{RolloutKey: userID, Country: country, Cohort: deployRing}
+}
+// pass totoggle.WithToggleContextProvider(provider{}) to NewConfig
+```
+
+`percentage` requires `RolloutKey` and enables the configured percentage of that stable,
+toggle-specific population. `canary` matches a textual `Cohort` such as `canary` or `beta`.
+Missing context or a provider panic logs a warning and returns `false`; `IsActive` never panics.
+For request-scoped values call `client.IsActiveContext(request.Context(), "payments.card")`;
+the simpler `IsActive` uses an empty background context.
 
 ## Observability
 

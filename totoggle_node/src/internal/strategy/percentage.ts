@@ -8,8 +8,9 @@ const FNV_PRIME = 0x01000193;
  * JLS-specified String.hashCode(), so this is hand-written — a few lines, no dependency. */
 function fnv1a(input: string): number {
   let hash = FNV_OFFSET_BASIS;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
+  // UTF-8 bytes make the result identical to the Go and JVM implementations.
+  for (const byte of new TextEncoder().encode(input)) {
+    hash ^= byte;
     hash = Math.imul(hash, FNV_PRIME);
   }
   return hash >>> 0;
@@ -36,9 +37,9 @@ function parsePercentage(raw: string): number | null {
  * identifier), the bucket is deterministic — the same key + rule value always lands in the same
  * bucket. This is deliberately not bit-identical to totoggle_java's or totoggle_go's bucketing
  * (neither Java's String.hashCode() nor Go's FNV-1a-via-hash/fnv is replicated bit-for-bit here)
- * — "same user always gets the same result" only requires self-consistency within one client,
- * not cross-language identity. With no key, there is nothing to be consistent with, so it falls
- * back to a per-call random draw.
+ * — now deliberately bit-identical across ToToggle SDKs. The supplied key includes the toggle
+ * path, so two flags with the same percentage do not share an accidental cohort. Without a
+ * rollout key, callers fail closed before reaching this evaluator.
  */
 export class PercentageEvaluator implements Evaluator {
   constructor(private readonly randomSource: () => number = Math.random) {}

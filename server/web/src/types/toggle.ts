@@ -38,7 +38,7 @@ export type SetToggleEnabledResult =
   | { kind: "pending_approval"; actionType: string };
 
 // Espelha entity.ActivationRuleType/ActivationRule.
-export type ActivationRuleType = "percentage" | "parameter" | "user_id" | "ip" | "country" | "time" | "canary";
+export type ActivationRuleType = "percentage" | "parameter" | "user_id" | "ip" | "country" | "time" | "cohort";
 
 export interface ActivationRule {
   // "" confirmado ao vivo: quando has_activation_rule é false, o servidor devolve
@@ -46,6 +46,7 @@ export interface ActivationRule {
   // o campo. Ver lib/activationRuleTypes.ts#deriveInitialRuleState.
   type: ActivationRuleType | "";
   value: string;
+  config?: { context_key?: string } | null;
 }
 
 // GET /applications/:id/toggles/:toggleId — entity.Toggle cru (não hierarchy-resolved):

@@ -213,10 +213,7 @@ describe("ToToggleClient", () => {
     client.shutdown();
   });
 
-  // Regression coverage for the exact bug fixed in the Kotlin client this session: the
-  // parameter passed to isActiveFor must be forwarded to EVERY ancestor's rule evaluation, not
-  // just the target's.
-  it("isActiveFor forwards the parameter to an ancestor's rule", async () => {
+  it("an ancestor's activation rule does not affect a descendant", async () => {
     const { url } = await fixedResponseServer([
       toggleJson("1", "t1", true, 0, null, true, "parameter", "premium,enterprise"),
       toggleJson("2", "t1.t2", true, 1, "1", false),
@@ -227,8 +224,8 @@ describe("ToToggleClient", () => {
     await client.start();
 
     expect(client.isActiveFor("t1.t2", "premium")).toBe(true);
-    expect(client.isActiveFor("t1.t2", "basic")).toBe(false);
-    expect(client.isActive("t1.t2")).toBe(false); // no parameter: the ancestor rule can never match
+    expect(client.isActiveFor("t1.t2", "basic")).toBe(true);
+    expect(client.isActive("t1.t2")).toBe(true);
     client.shutdown();
   });
 

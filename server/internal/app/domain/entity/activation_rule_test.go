@@ -15,40 +15,45 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 		{
 			name: "valid percentage rule",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypePercentage,
-				Value: "50",
+				Type:   ActivationRuleTypePercentage,
+				Value:  "50",
+				Config: json.RawMessage(`{"context_key":"rollout_key"}`),
 			},
 			expectError: false,
 		},
 		{
 			name: "valid parameter rule",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeParameter,
-				Value: "premium",
+				Type:   ActivationRuleTypeParameter,
+				Value:  "premium",
+				Config: json.RawMessage(`{"context_key":"attributes.plan"}`),
 			},
 			expectError: false,
 		},
 		{
 			name: "valid user_id rule",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeUserID,
-				Value: "user123",
+				Type:   ActivationRuleTypeUserID,
+				Value:  "user123",
+				Config: json.RawMessage(`{"context_key":"user_id"}`),
 			},
 			expectError: false,
 		},
 		{
 			name: "valid ip rule",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeIP,
-				Value: "192.168.1.1",
+				Type:   ActivationRuleTypeIP,
+				Value:  "192.168.1.1",
+				Config: json.RawMessage(`{"context_key":"ip"}`),
 			},
 			expectError: false,
 		},
 		{
 			name: "valid country rule",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeCountry,
-				Value: "BR",
+				Type:   ActivationRuleTypeCountry,
+				Value:  "BR",
+				Config: json.RawMessage(`{"context_key":"country"}`),
 			},
 			expectError: false,
 		},
@@ -63,8 +68,9 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 		{
 			name: "valid canary rule",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeCanary,
-				Value: "v2.0",
+				Type:   ActivationRuleTypeCohort,
+				Value:  "v2.0",
+				Config: json.RawMessage(`{"context_key":"cohort"}`),
 			},
 			expectError: false,
 		},
@@ -84,7 +90,7 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 				Value: "",
 			},
 			expectError: true,
-			errorMsg:    "valor do parâmetro é obrigatório",
+			errorMsg:    "valor da regra é obrigatório",
 		},
 		{
 			name: "empty user_id value",
@@ -93,7 +99,7 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 				Value: "",
 			},
 			expectError: true,
-			errorMsg:    "valor do user ID é obrigatório",
+			errorMsg:    "valor da regra é obrigatório",
 		},
 		{
 			name: "empty ip value",
@@ -102,7 +108,7 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 				Value: "",
 			},
 			expectError: true,
-			errorMsg:    "valor do IP é obrigatório",
+			errorMsg:    "valor da regra é obrigatório",
 		},
 		{
 			name: "empty country value",
@@ -111,7 +117,7 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 				Value: "",
 			},
 			expectError: true,
-			errorMsg:    "valor do país é obrigatório",
+			errorMsg:    "valor da regra é obrigatório",
 		},
 		{
 			name: "empty time value",
@@ -125,11 +131,11 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 		{
 			name: "empty canary value",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeCanary,
+				Type:  ActivationRuleTypeCohort,
 				Value: "",
 			},
 			expectError: true,
-			errorMsg:    "valor do canary é obrigatório",
+			errorMsg:    "valor da regra é obrigatório",
 		},
 		{
 			name: "invalid rule type",
@@ -208,7 +214,7 @@ func TestGetRuleTypeOptions(t *testing.T) {
 		ActivationRuleTypeIP,
 		ActivationRuleTypeCountry,
 		ActivationRuleTypeTime,
-		ActivationRuleTypeCanary,
+		ActivationRuleTypeCohort,
 	}
 
 	// Verify all expected types are present

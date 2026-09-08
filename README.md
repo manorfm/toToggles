@@ -352,3 +352,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ for reliable feature management**
+### Contextual activation rules
+
+Rules are evaluated by SDKs, not by the server. A hierarchical ancestor contributes only its
+`enabled` state; its rule never affects a child query. For rules that need request or deployment
+information, configure the SDK's optional `ToggleContextProvider` in application middleware.
+It supplies `rolloutKey`, `userId`, `ip`, `country`, `cohort`, or a generic parameter. SDKs never
+guess headers, proxy IPs, authentication data, or geolocation. A missing provider/field (or a
+provider failure) logs a warning and evaluates to `false`; `isActive` always fails closed and
+never propagates an exception. `percentage: 25` enables 25% of the keyed population; `canary`
+matches named cohorts such as `canary` or `beta`, not `true`/`false`.
