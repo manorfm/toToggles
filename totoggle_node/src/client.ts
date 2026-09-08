@@ -9,7 +9,6 @@ import { MatchListEvaluator } from "./internal/strategy/matchlist.js";
 import { PercentageEvaluator } from "./internal/strategy/percentage.js";
 import { IpEvaluator } from "./internal/strategy/ip.js";
 import { TimeWindowEvaluator } from "./internal/strategy/timewindow.js";
-import type { ToggleContext } from "./context.js";
 
 /** The cache is considered stale once this many refresh intervals have passed with no
  * successful update — e.g. with the default 5-minute interval, no successful refresh in 10
@@ -21,7 +20,7 @@ function buildRegistry(timeZone: string | undefined): Registry {
   const registry = new Registry();
 
   const matchList = new MatchListEvaluator();
-  registry.register("parameter", matchList);
+  registry.register("attribute", matchList);
   registry.register("user_id", matchList);
   registry.register("country", matchList);
   registry.register("cohort", matchList);
@@ -35,7 +34,7 @@ function buildRegistry(timeZone: string | undefined): Registry {
 
 /**
  * The ToToggle feature-flag client: fetches the toggle set for one application via a secret
- * key, caches it in memory, and evaluates isActive/isActiveFor entirely from that cache — no
+ * key, caches it in memory, and evaluates isActive entirely from that cache — no
  * network access on the evaluation hot path.
  */
 export class ToToggleClient {
@@ -130,12 +129,7 @@ export class ToToggleClient {
     return this.evaluate(path);
   }
 
-  /** @deprecated Prefer a ToggleContextProvider. Kept as a legacy value for `parameter` rules. */
-  isActiveFor(path: string, parameter: string): boolean {
-    return this.evaluate(path, { parameter, rolloutKey: parameter, userId: parameter, ip: parameter, country: parameter, cohort: parameter });
-  }
-
-  private evaluate(path: string, legacyContext?: ToggleContext): boolean {
+  private evaluate(path: string): boolean {
     try {
     if (!this.started || this.shutdownFlag) {
       return false;
@@ -154,7 +148,7 @@ export class ToToggleClient {
       return false;
     }
 
-    const result = this.ancestorsActive(lookup.ancestors) && lookup.target.enabled && this.ruleMatches(lookup.target, legacyContext);
+    const result = this.ancestorsActive(lookup.ancestors) && lookup.target.enabled && this.ruleMatches(lookup.target);
 
     this.metrics.notifyEvaluation(path, result);
     return result;
@@ -172,12 +166,12 @@ export class ToToggleClient {
   /** Reports whether toggle's activation rule matches, or true if it has none. A rule type with
    * no registered Evaluator (a server-added type this client predates) fails closed to false,
    * the same as every other malformed-rule case in this package. */
-  private ruleMatches(toggle: Toggle, legacyContext?: ToggleContext): boolean {
+  private ruleMatches(toggle: Toggle): boolean {
     if (!toggle.hasActivationRule || !toggle.activationRule) {
       return true;
     }
     try {
-      const key = this.keyForRule(toggle.activationRule, legacyContext, toggle.path.toString());
+      const key = this.keyForRule(toggle.activationRule, toggle.path.toString());
       if (key === undefined && toggle.activationRule.type !== "time") return false;
       return this.registry.evaluate(toggle.activationRule, key);
     } catch {
@@ -185,26 +179,20 @@ export class ToToggleClient {
     }
   }
 
-  private keyForRule(rule: { type: string; config?: { context_key?: string } | null }, legacyContext?: ToggleContext, path?: string): string | undefined {
+  private keyForRule(rule: { type: string; config?: { context_key?: string } | null }, path?: string): string | undefined {
     const { type } = rule;
-    let context = legacyContext;
-    if (!context && this.config.contextProvider) {
-      try { context = this.config.contextProvider.getContext(); } catch (error) {
-        console.warn("totoggle: ToggleContextProvider failed; rule evaluation fails closed", error);
-        return undefined;
-      }
-    }
     const contextKey = rule.config?.context_key;
-    const raw = contextKey === "rollout_key" ? context?.rolloutKey
-      : contextKey === "user_id" ? context?.userId
-      : contextKey === "ip" ? context?.ip
-      : contextKey === "country" ? context?.country
-      : contextKey === "cohort" ? context?.cohort
-      : contextKey?.startsWith("attributes.") ? context?.attributes?.[contextKey.slice("attributes.".length)]
-      : undefined;
+    if (!contextKey) return undefined;
+    let raw: string | undefined;
+    try {
+      raw = this.config.contextResolver?.resolve(contextKey);
+    } catch (error) {
+      console.warn("totoggle: ToggleContextResolver failed; rule evaluation fails closed", error);
+      return undefined;
+    }
     const key = type === "percentage" && raw !== undefined ? `${path}:${raw}` : raw;
     if (type !== "time" && key === undefined) {
-      console.warn(`totoggle: rule type "${type}" requires configured ToggleContext key; evaluation fails closed`);
+      console.warn(`totoggle: rule type "${type}" requires configured context key; evaluation fails closed`);
     }
     return key;
   }

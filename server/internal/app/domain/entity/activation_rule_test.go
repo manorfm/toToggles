@@ -22,9 +22,9 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid parameter rule",
+			name: "valid attribute rule",
 			rule: ActivationRule{
-				Type:   ActivationRuleTypeParameter,
+				Type:   ActivationRuleTypeAttribute,
 				Value:  "premium",
 				Config: json.RawMessage(`{"context_key":"attributes.plan"}`),
 			},
@@ -84,9 +84,9 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 			errorMsg:    "valor de porcentagem é obrigatório",
 		},
 		{
-			name: "empty parameter value",
+			name: "empty attribute value",
 			rule: ActivationRule{
-				Type:  ActivationRuleTypeParameter,
+				Type:  ActivationRuleTypeAttribute,
 				Value: "",
 			},
 			expectError: true,
@@ -209,7 +209,7 @@ func TestGetRuleTypeOptions(t *testing.T) {
 
 	expectedTypes := []ActivationRuleType{
 		ActivationRuleTypePercentage,
-		ActivationRuleTypeParameter,
+		ActivationRuleTypeAttribute,
 		ActivationRuleTypeUserID,
 		ActivationRuleTypeIP,
 		ActivationRuleTypeCountry,

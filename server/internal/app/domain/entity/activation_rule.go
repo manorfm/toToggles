@@ -16,7 +16,7 @@ type ActivationRuleType string
 
 const (
 	ActivationRuleTypePercentage ActivationRuleType = "percentage"
-	ActivationRuleTypeParameter  ActivationRuleType = "parameter"
+	ActivationRuleTypeAttribute  ActivationRuleType = "attribute"
 	ActivationRuleTypeUserID     ActivationRuleType = "user_id"
 	ActivationRuleTypeIP         ActivationRuleType = "ip"
 	ActivationRuleTypeCountry    ActivationRuleType = "country"
@@ -42,7 +42,7 @@ func (ar *ActivationRule) ValidateRule() error {
 		if err != nil || percentage < 0 || percentage > 100 {
 			return fmt.Errorf("porcentagem deve ser um número entre 0 e 100")
 		}
-	case ActivationRuleTypeParameter, ActivationRuleTypeUserID, ActivationRuleTypeIP, ActivationRuleTypeCountry, ActivationRuleTypeCohort:
+	case ActivationRuleTypeAttribute, ActivationRuleTypeUserID, ActivationRuleTypeIP, ActivationRuleTypeCountry, ActivationRuleTypeCohort:
 		if ar.Value == "" {
 			return fmt.Errorf("valor da regra é obrigatório")
 		}
@@ -54,10 +54,10 @@ func (ar *ActivationRule) ValidateRule() error {
 		return fmt.Errorf("tipo de regra inválido: %s", ar.Type)
 	}
 	if ar.Type == ActivationRuleTypeTime {
-		return nil
-	}
-	if ar.Type == ActivationRuleTypeTime {
-		return nil
+		if len(ar.Config) == 0 || string(ar.Config) == "null" {
+			return nil
+		}
+		return fmt.Errorf("regra time não aceita context_key")
 	}
 	var rawConfig map[string]json.RawMessage
 	if len(ar.Config) == 0 || json.Unmarshal(ar.Config, &rawConfig) != nil {
@@ -68,7 +68,7 @@ func (ar *ActivationRule) ValidateRule() error {
 		return fmt.Errorf("configuração context_key válida é obrigatória para regra %s", ar.Type)
 	}
 	var config activationRuleConfig
-	if json.Unmarshal(rawKey, &config.ContextKey) != nil || !validContextKey(config.ContextKey) {
+	if json.Unmarshal(rawKey, &config.ContextKey) != nil || !validContextKey(ar.Type, config.ContextKey) {
 		return fmt.Errorf("configuração context_key válida é obrigatória para regra %s", ar.Type)
 	}
 	if ar.Type == ActivationRuleTypeCohort {
@@ -81,19 +81,23 @@ func (ar *ActivationRule) ValidateRule() error {
 	return nil
 }
 
-func validContextKey(key string) bool {
-	switch key {
-	case "rollout_key", "user_id", "ip", "country", "cohort":
-		return true
+func validContextKey(ruleType ActivationRuleType, key string) bool {
+	if strings.HasPrefix(key, "attributes.") {
+		return len(strings.TrimPrefix(key, "attributes.")) > 0 &&
+			(ruleType == ActivationRuleTypePercentage || ruleType == ActivationRuleTypeAttribute)
 	}
-	return strings.HasPrefix(key, "attributes.") && len(strings.TrimPrefix(key, "attributes.")) > 0
+	return (ruleType == ActivationRuleTypePercentage && key == "rollout_key") ||
+		(ruleType == ActivationRuleTypeUserID && key == "user_id") ||
+		(ruleType == ActivationRuleTypeIP && key == "ip") ||
+		(ruleType == ActivationRuleTypeCountry && key == "country") ||
+		(ruleType == ActivationRuleTypeCohort && key == "cohort")
 }
 
 // GetRuleTypeOptions retorna as opções disponíveis para tipos de regra
 func GetRuleTypeOptions() map[ActivationRuleType]string {
 	return map[ActivationRuleType]string{
 		ActivationRuleTypePercentage: "Percentage - Ativar para X% de uma população identificada pela rollout key",
-		ActivationRuleTypeParameter:  "Parameter - Ativar baseado em parâmetro específico",
+		ActivationRuleTypeAttribute:  "Attribute - Ativar baseado em atributo de contexto",
 		ActivationRuleTypeUserID:     "User ID - Ativar para usuários específicos",
 		ActivationRuleTypeIP:         "IP Address - Ativar para IPs específicos",
 		ActivationRuleTypeCountry:    "Country - Ativar para países específicos",

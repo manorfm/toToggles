@@ -48,7 +48,15 @@ function toggleJson(
     parent_id: parentId,
     app_id: "app-1",
     has_activation_rule: hasRule,
-    activation_rule: hasRule ? { type: ruleType, value: ruleValue } : null,
+    activation_rule: hasRule
+      ? {
+          type: ruleType,
+          value: ruleValue,
+          config: {
+            context_key: ({ percentage: "rollout_key", attribute: "attributes.plan", user_id: "user_id", ip: "ip", country: "country", cohort: "cohort" } as Record<string, string>)[ruleType ?? ""],
+          },
+        }
+      : null,
   };
 }
 
@@ -215,7 +223,7 @@ describe("ToToggleClient", () => {
 
   it("an ancestor's activation rule does not affect a descendant", async () => {
     const { url } = await fixedResponseServer([
-      toggleJson("1", "t1", true, 0, null, true, "parameter", "premium,enterprise"),
+      toggleJson("1", "t1", true, 0, null, true, "attribute", "premium,enterprise"),
       toggleJson("2", "t1.t2", true, 1, "1", false),
     ]);
     const client = new ToToggleClient(
@@ -223,23 +231,24 @@ describe("ToToggleClient", () => {
     );
     await client.start();
 
-    expect(client.isActiveFor("t1.t2", "premium")).toBe(true);
-    expect(client.isActiveFor("t1.t2", "basic")).toBe(true);
     expect(client.isActive("t1.t2")).toBe(true);
     client.shutdown();
   });
 
-  it("isActiveFor evaluates the target's own rule", async () => {
+  it("resolves only the target rule's context key", async () => {
     const { url } = await fixedResponseServer([
       toggleJson("1", "user", true, 0, null, true, "country", "BR,US"),
     ]);
-    const client = new ToToggleClient(
-      createConfig("test-app", url, "sk_test", { refreshIntervalMs: 60 * 60 * 1000 }),
-    );
+    let country = "BR";
+    const client = new ToToggleClient(createConfig("test-app", url, "sk_test", {
+      refreshIntervalMs: 60 * 60 * 1000,
+      contextResolver: { resolve: (key) => key === "country" ? country : undefined },
+    }));
     await client.start();
 
-    expect(client.isActiveFor("user", "BR")).toBe(true);
-    expect(client.isActiveFor("user", "FR")).toBe(false);
+    expect(client.isActive("user")).toBe(true);
+    country = "FR";
+    expect(client.isActive("user")).toBe(false);
     client.shutdown();
   });
 
@@ -247,14 +256,15 @@ describe("ToToggleClient", () => {
     const { url } = await fixedResponseServer([
       toggleJson("1", "rollout", true, 0, null, true, "percentage", "50"),
     ]);
-    const client = new ToToggleClient(
-      createConfig("test-app", url, "sk_test", { refreshIntervalMs: 60 * 60 * 1000 }),
-    );
+    const client = new ToToggleClient(createConfig("test-app", url, "sk_test", {
+      refreshIntervalMs: 60 * 60 * 1000,
+      contextResolver: { resolve: (key) => key === "rollout_key" ? "user-42" : undefined },
+    }));
     await client.start();
 
-    const first = client.isActiveFor("rollout", "user-42");
+    const first = client.isActive("rollout");
     for (let i = 0; i < 10; i++) {
-      expect(client.isActiveFor("rollout", "user-42")).toBe(first);
+      expect(client.isActive("rollout")).toBe(first);
     }
     client.shutdown();
   });

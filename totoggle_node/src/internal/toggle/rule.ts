@@ -2,7 +2,7 @@
  * a parsed `type` field compare structurally without an extra mapping step. */
 export const RULE_TYPES = [
   "percentage",
-  "parameter",
+  "attribute",
   "user_id",
   "ip",
   "country",

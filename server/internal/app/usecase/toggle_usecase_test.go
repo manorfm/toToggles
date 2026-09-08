@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -910,13 +911,14 @@ func TestToggleUseCase_UpdateToggleWithRule(t *testing.T) {
 			enabled:           true,
 			hasActivationRule: true,
 			activationRule: &entity.ActivationRule{
-				Type:  entity.ActivationRuleTypePercentage,
-				Value: "50",
+				Type:   entity.ActivationRuleTypePercentage,
+				Value:  "50",
+				Config: json.RawMessage(`{"context_key":"rollout_key"}`),
 			},
 			expectError: false,
 		},
 		{
-			name: "successful_update_with_parameter_rule",
+			name: "successful_update_with_attribute_rule",
 			setupToggle: &entity.Toggle{
 				ID:      toggleID,
 				Value:   "test",
@@ -928,8 +930,9 @@ func TestToggleUseCase_UpdateToggleWithRule(t *testing.T) {
 			enabled:           true,
 			hasActivationRule: true,
 			activationRule: &entity.ActivationRule{
-				Type:  entity.ActivationRuleTypeParameter,
-				Value: "premium",
+				Type:   entity.ActivationRuleTypeAttribute,
+				Value:  "premium",
+				Config: json.RawMessage(`{"context_key":"attributes.plan"}`),
 			},
 			expectError: false,
 		},

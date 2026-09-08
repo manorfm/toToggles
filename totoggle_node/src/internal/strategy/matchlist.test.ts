@@ -9,7 +9,7 @@ describe("MatchListEvaluator", () => {
   const evaluator = new MatchListEvaluator();
 
   it("matches one of the comma-separated values", () => {
-    const rule: ActivationRule = { type: "parameter", value: "premium,enterprise" };
+    const rule: ActivationRule = { type: "attribute", value: "premium,enterprise" };
     expect(evaluator.evaluate(rule, "premium")).toBe(true);
     expect(evaluator.evaluate(rule, "enterprise")).toBe(true);
     expect(evaluator.evaluate(rule, "basic")).toBe(false);

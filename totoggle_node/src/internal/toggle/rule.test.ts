@@ -30,12 +30,12 @@ describe("ActivationRule", () => {
   it("lists exactly the 7 server-defined rule types", () => {
     expect(RULE_TYPES).toEqual([
       "percentage",
-      "parameter",
+      "attribute",
       "user_id",
       "ip",
       "country",
       "time",
-      "canary",
+      "cohort",
     ]);
   });
 });

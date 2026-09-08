@@ -1,10 +1,8 @@
 import type { ActivationRule } from "../toggle/rule.js";
 
 /**
- * Decides whether an activation rule matches a given evaluation key (e.g. the parameter passed
- * to isActiveFor, or a stable per-request identifier — the meaning of key is defined by each
- * rule type, not by this interface). `undefined` means "no key was supplied at all"
- * (Client.isActive), distinct from an explicit empty string (Client.isActiveFor(path, "")).
+ * Decides whether an activation rule matches its resolved context value. `undefined` means the
+ * configured context key was unavailable, so contextual rules fail closed.
  */
 export interface Evaluator {
   evaluate(rule: ActivationRule, key: string | undefined): boolean;
