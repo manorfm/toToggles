@@ -134,10 +134,14 @@ test.describe("toggle lifecycle — configure activation rule", () => {
 
     await adminPage.getByRole("button", { name: "Activation rule" }).click();
     await adminPage.getByText("Percentage", { exact: true }).click();
+    await expect(adminPage.getByLabel("Context key")).toHaveValue("rollout_key");
     await adminPage.locator("#rule-value").fill("25");
     await adminPage.getByRole("button", { name: "Save changes" }).click();
 
     await expect(adminPage.locator(".tg-card", { hasText: "e2e.rule.direct" }).locator(".rule-tag")).toBeVisible();
+    const togglesResponse = await rootContext.request.get(`/api/applications/${fixtures.appId}/toggles`);
+    const saved = (await togglesResponse.json()).find((toggle: { path: string }) => toggle.path === "e2e.rule.direct");
+    expect(saved.activation_rule).toMatchObject({ type: "percentage", value: "25", config: { context_key: "rollout_key" } });
 
     await rootContext.close();
     await adminContext.close();
