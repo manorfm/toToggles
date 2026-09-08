@@ -156,22 +156,10 @@ func (c *Client) IsActiveContext(ctx context.Context, path string) (active bool)
 			active = false
 		}
 	}()
-	return c.evaluate(path, nil, ctx)
+	return c.evaluate(path, ctx)
 }
 
-// IsActiveFor is retained for compatibility. Prefer WithToggleContextProvider; its legacy value
-// is made available to every context field and rules never cascade from ancestors.
-func (c *Client) IsActiveFor(path, parameter string) (active bool) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			log.Printf("totoggle: isActiveFor(%q) panicked; failing closed: %v", path, recovered)
-			active = false
-		}
-	}()
-	return c.evaluate(path, &ToggleContext{Parameter: parameter, RolloutKey: parameter, UserID: parameter, IP: parameter, Country: parameter, Cohort: parameter}, context.Background())
-}
-
-func (c *Client) evaluate(path string, legacyContext *ToggleContext, requestContext context.Context) bool {
+func (c *Client) evaluate(path string, requestContext context.Context) bool {
 	if !c.started.Load() || c.shutdown.Load() {
 		return false
 	}
@@ -189,7 +177,7 @@ func (c *Client) evaluate(path string, legacyContext *ToggleContext, requestCont
 
 	result := c.evaluateAncestors(ancestors) &&
 		target.Enabled &&
-		c.evaluateRule(target, legacyContext, requestContext)
+		c.evaluateRule(target, requestContext)
 
 	c.metrics.notifyEvaluation(path, result)
 	return result
@@ -207,7 +195,7 @@ func (c *Client) evaluateAncestors(ancestors []toggle.Toggle) bool {
 // evaluateRule reports whether tg's activation rule matches, or true if it has none. A rule type
 // with no registered Evaluator (a server-added type this client predates) fails closed to false,
 // the same as every other malformed-rule case in this package.
-func (c *Client) evaluateRule(tg toggle.Toggle, legacyContext *ToggleContext, requestContext context.Context) bool {
+func (c *Client) evaluateRule(tg toggle.Toggle, requestContext context.Context) bool {
 	if !tg.HasActivationRule || tg.ActivationRule == nil {
 		return true
 	}
@@ -216,7 +204,7 @@ func (c *Client) evaluateRule(tg toggle.Toggle, legacyContext *ToggleContext, re
 		log.Printf("totoggle: rule type %q has no valid context_key; evaluation fails closed", tg.ActivationRule.Type)
 		return false
 	}
-	key, hasKey := c.contextKey(contextKey, tg.ActivationRule.Type == toggle.RuleTypePercentage, legacyContext, tg.Path.String(), requestContext)
+	key, hasKey := c.contextKey(contextKey, tg.ActivationRule.Type == toggle.RuleTypePercentage, tg.Path.String(), requestContext)
 	if tg.ActivationRule.Type != toggle.RuleTypeTime && !hasKey {
 		return false
 	}
@@ -224,9 +212,9 @@ func (c *Client) evaluateRule(tg toggle.Toggle, legacyContext *ToggleContext, re
 	return result
 }
 
-func (c *Client) contextKey(contextKey string, percentage bool, legacyContext *ToggleContext, path string, requestContext context.Context) (string, bool) {
-	ctx := legacyContext
-	if ctx == nil && c.cfg.ContextProvider != nil {
+func (c *Client) contextKey(contextKey string, percentage bool, path string, requestContext context.Context) (string, bool) {
+	var ctx *ToggleContext
+	if c.cfg.ContextProvider != nil {
 		ctx = c.cfg.ContextProvider.ToggleContext(requestContext)
 	}
 	if ctx == nil {

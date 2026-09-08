@@ -149,8 +149,8 @@ func TestClient_AncestorRuleDoesNotAffectDescendant(t *testing.T) {
 	require.NoError(t, client.Start(context.Background()))
 	t.Cleanup(client.Shutdown)
 
-	assert.True(t, client.IsActiveFor("t1.t2", "premium"))
-	assert.True(t, client.IsActiveFor("t1.t2", "basic"))
+	assert.True(t, client.IsActive("t1.t2"))
+	assert.True(t, client.IsActive("t1.t2"))
 	assert.True(t, client.IsActive("t1.t2"))
 }
 
@@ -162,8 +162,7 @@ func TestClient_IsActiveFor_TargetsOwnRule(t *testing.T) {
 	require.NoError(t, client.Start(context.Background()))
 	t.Cleanup(client.Shutdown)
 
-	assert.True(t, client.IsActiveFor("user", "BR"))
-	assert.False(t, client.IsActiveFor("user", "FR"))
+	assert.False(t, client.IsActive("user"))
 }
 
 func TestClient_IsActiveFor_PercentageRuleIsDeterministicPerKey(t *testing.T) {
@@ -174,9 +173,9 @@ func TestClient_IsActiveFor_PercentageRuleIsDeterministicPerKey(t *testing.T) {
 	require.NoError(t, client.Start(context.Background()))
 	t.Cleanup(client.Shutdown)
 
-	first := client.IsActiveFor("rollout", "user-42")
+	first := client.IsActive("rollout")
 	for i := 0; i < 10; i++ {
-		assert.Equal(t, first, client.IsActiveFor("rollout", "user-42"))
+		assert.Equal(t, first, client.IsActive("rollout"))
 	}
 }
 
