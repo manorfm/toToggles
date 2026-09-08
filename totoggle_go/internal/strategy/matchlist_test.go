@@ -8,12 +8,12 @@ import (
 	"github.com/manorfm/toToggles/totoggle_go/internal/toggle"
 )
 
-// MatchListEvaluator is the one implementation shared by parameter, user_id, country, and canary
+// MatchListEvaluator is the one implementation shared by attribute, user_id, country, and cohort
 // — all four are "comma-separated allowlist, exact trimmed match" per the confirmed prototype
 // hints, so this is a single reused type rather than four near-identical copies.
 func TestMatchListEvaluator_MatchesOneOfCommaSeparatedValues(t *testing.T) {
 	e := MatchListEvaluator{}
-	rule := toggle.ActivationRule{Type: toggle.RuleTypeParameter, Value: "premium,enterprise"}
+	rule := toggle.ActivationRule{Type: toggle.RuleTypeAttribute, Value: "premium,enterprise"}
 
 	assert.True(t, e.Evaluate(rule, "premium", true))
 	assert.True(t, e.Evaluate(rule, "enterprise", true))

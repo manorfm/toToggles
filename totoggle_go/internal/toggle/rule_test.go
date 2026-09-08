@@ -24,8 +24,8 @@ func TestActivationRule_IsValid_RequiresBothTypeAndValue(t *testing.T) {
 		rule  ActivationRule
 		valid bool
 	}{
-		{"both set", ActivationRule{Type: RuleTypeParameter, Value: "premium"}, true},
-		{"type only", ActivationRule{Type: RuleTypeParameter}, false},
+		{"both set", ActivationRule{Type: RuleTypeAttribute, Value: "premium"}, true},
+		{"type only", ActivationRule{Type: RuleTypeAttribute}, false},
 		{"value only", ActivationRule{Value: "premium"}, false},
 		{"neither", ActivationRule{}, false},
 	}
@@ -41,7 +41,7 @@ func TestActivationRule_IsValid_RequiresBothTypeAndValue(t *testing.T) {
 // client never matches a rule the server actually configured.
 func TestRuleType_Constants(t *testing.T) {
 	assert.Equal(t, RuleType("percentage"), RuleTypePercentage)
-	assert.Equal(t, RuleType("parameter"), RuleTypeParameter)
+	assert.Equal(t, RuleType("attribute"), RuleTypeAttribute)
 	assert.Equal(t, RuleType("user_id"), RuleTypeUserID)
 	assert.Equal(t, RuleType("ip"), RuleTypeIP)
 	assert.Equal(t, RuleType("country"), RuleTypeCountry)
