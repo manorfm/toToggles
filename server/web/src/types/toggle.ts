@@ -38,7 +38,7 @@ export type SetToggleEnabledResult =
   | { kind: "pending_approval"; actionType: string };
 
 // Espelha entity.ActivationRuleType/ActivationRule.
-export type ActivationRuleType = "percentage" | "parameter" | "user_id" | "ip" | "country" | "time" | "cohort";
+export type ActivationRuleType = "percentage" | "attribute" | "user_id" | "ip" | "country" | "time" | "cohort";
 
 export interface ActivationRule {
   // "" confirmado ao vivo: quando has_activation_rule é false, o servidor devolve

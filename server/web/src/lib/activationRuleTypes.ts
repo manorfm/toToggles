@@ -32,7 +32,7 @@ export const RULE_TYPES: RuleTypeMeta[] = [
     contextKeyEditable: true,
   },
   {
-    type: "parameter",
+    type: "attribute",
     name: "Attribute",
     description: "Match a named context attribute",
     icon: "sliders",

@@ -80,8 +80,9 @@ resolver.
 
 ### Wave 4 — Domain context
 
-- [ ] Provide middleware examples for authenticated `user_id`, stable `rollout_key`, deployment
-  `cohort`, and `attributes.*`.
+- [x] Define canonical middleware values: authenticated `user_id`, stable `rollout_key`,
+  deployment `cohort`, and `attributes.*`.
+- [ ] Provide framework-specific middleware examples for those values.
 - [ ] Add request-concurrency/isolation tests for all SDK adapters.
 
 ### Wave 5 — Remove legacy code
