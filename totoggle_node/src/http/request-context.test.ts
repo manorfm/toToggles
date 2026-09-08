@@ -23,6 +23,11 @@ describe("NodeRequestContextResolver", () => {
     });
   });
 
+  it("trusts forwarded headers for an IPv4 CIDR peer", () => {
+    const resolver = new NodeRequestContextResolver({ trustedProxyAddresses: ["10.0.0.0/24"] });
+    resolver.run(request("10.0.0.8", { "x-forwarded-for": "203.0.113.4" }), () => expect(resolver.resolve("ip")).toBe("203.0.113.4"));
+  });
+
   it("makes request context available through middleware", () => {
     const resolver = new NodeRequestContextResolver();
     resolver.middleware()(request("10.0.0.8"), undefined, () => {

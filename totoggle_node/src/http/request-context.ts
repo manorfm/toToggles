@@ -39,7 +39,7 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
 
   private valuesFor(request: IncomingMessage): ReadonlyMap<string, string> {
     const remote = normalizeAddress(request.socket.remoteAddress);
-    const trusted = remote !== undefined && this.trustedPeers.has(remote);
+    const trusted = remote !== undefined && isTrustedPeer(remote, this.trustedPeers);
     const values = new Map<string, string>();
     if (remote) values.set("ip", remote);
     if (trusted) {
@@ -64,4 +64,21 @@ function firstForwardedAddress(value: string | undefined): string | undefined {
 function normalizeAddress(value: string | undefined): string | undefined {
   if (!value) return undefined;
   return value.startsWith("::ffff:") ? value.slice(7) : value;
+}
+
+function isTrustedPeer(address: string, peers: ReadonlySet<string>): boolean {
+  for (const peer of peers) {
+    if (peer === address) return true;
+    const [network, prefix] = peer.split("/");
+    if (prefix !== undefined && matchesIpv4Cidr(address, network, Number(prefix))) return true;
+  }
+  return false;
+}
+
+function matchesIpv4Cidr(address: string, network: string | undefined, prefix: number): boolean {
+  const parse = (value: string | undefined) => value?.split(".").length === 4 ? value.split(".").reduce<number | undefined>((acc, part) => acc === undefined || !/^\d+$/.test(part) || Number(part) > 255 ? undefined : (acc << 8) | Number(part), 0) : undefined;
+  const candidate = parse(address); const base = parse(network);
+  if (candidate === undefined || base === undefined || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return false;
+  const mask = prefix === 0 ? 0 : (-1 << (32 - prefix));
+  return (candidate & mask) === (base & mask);
 }
