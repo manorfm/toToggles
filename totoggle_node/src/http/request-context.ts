@@ -26,6 +26,13 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
     return this.storage.run(this.valuesFor(request), callback);
   }
 
+  /** Express/Fastify-compatible middleware: req must be a Node IncomingMessage shape. */
+  middleware() {
+    return (request: IncomingMessage, _response: unknown, next: () => void): void => {
+      this.run(request, next);
+    };
+  }
+
   resolve(contextKey: string): string | undefined {
     return this.storage.getStore()?.get(contextKey);
   }

@@ -22,4 +22,11 @@ describe("NodeRequestContextResolver", () => {
       expect(resolver.resolve("attributes.plan")).toBe("pro");
     });
   });
+
+  it("makes request context available through middleware", () => {
+    const resolver = new NodeRequestContextResolver();
+    resolver.middleware()(request("10.0.0.8"), undefined, () => {
+      expect(resolver.resolve("ip")).toBe("10.0.0.8");
+    });
+  });
 });
