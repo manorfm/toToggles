@@ -33,6 +33,17 @@ describe("NodeRequestContextResolver", () => {
     resolver.run(request("10.0.0.8", { forwarded: "for=2001:db8::1" }), () => expect(resolver.resolve("ip")).toBe("2001:db8::1"));
   });
 
+  it("supports an IPv6 trusted peer without trusting a different peer", () => {
+    const resolver = new NodeRequestContextResolver({ trustedProxyAddresses: ["2001:db8::8"] });
+    resolver.run(request("2001:db8::8", { forwarded: "for=2001:db8::1" }), () => expect(resolver.resolve("ip")).toBe("2001:db8::1"));
+    resolver.run(request("2001:db8::9", { forwarded: "for=2001:db8::1" }), () => expect(resolver.resolve("ip")).toBe("2001:db8::9"));
+  });
+
+  it("trusts an IPv6 CIDR peer", () => {
+    const resolver = new NodeRequestContextResolver({ trustedProxyAddresses: ["2001:db8::/32"] });
+    resolver.run(request("2001:db8:1::8", { forwarded: "for=2001:db8::1" }), () => expect(resolver.resolve("ip")).toBe("2001:db8::1"));
+  });
+
   it("makes request context available through middleware", () => {
     const resolver = new NodeRequestContextResolver();
     resolver.middleware()(request("10.0.0.8"), undefined, () => {

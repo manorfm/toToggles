@@ -7,6 +7,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	totoggle "github.com/manorfm/toToggles/totoggle_go"
@@ -47,15 +48,14 @@ type contextKey struct{}
 
 func (r *Resolver) values(req *http.Request) map[string]string {
 	values := map[string]string{}
-	remote, _, _ := net.SplitHostPort(req.RemoteAddr)
-	if remote == "" {
-		remote = req.RemoteAddr
-	}
+	remote := remoteAddress(req.RemoteAddr)
 	if ip := net.ParseIP(remote); ip != nil {
 		values["ip"] = ip.String()
 	}
 	if r.trusted(remote) {
-		if ip := net.ParseIP(strings.TrimSpace(strings.Split(req.Header.Get("X-Forwarded-For"), ",")[0])); ip != nil {
+		if ip, ok := forwardedIP(req.Header.Get("Forwarded")); ok {
+			values["ip"] = ip
+		} else if ip, ok := xForwardedForIP(req.Header.Get("X-Forwarded-For")); ok {
 			values["ip"] = ip.String()
 		}
 		if country := strings.ToUpper(strings.TrimSpace(req.Header.Get(r.options.CountryHeader))); len(country) == 2 {
@@ -72,10 +72,69 @@ func (r *Resolver) values(req *http.Request) map[string]string {
 	return values
 }
 
+func remoteAddress(address string) string {
+	host, _, err := net.SplitHostPort(address)
+	if err == nil {
+		return host
+	}
+	return address
+}
+
+// forwardedIP returns the client address from the first RFC 7239 Forwarded element.
+// Obfuscated and malformed identifiers are intentionally ignored.
+func forwardedIP(header string) (string, bool) {
+	if header == "" {
+		return "", false
+	}
+	first := strings.TrimSpace(strings.SplitN(header, ",", 2)[0])
+	for _, parameter := range strings.Split(first, ";") {
+		name, value, found := strings.Cut(parameter, "=")
+		if !found || !strings.EqualFold(strings.TrimSpace(name), "for") {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if strings.HasPrefix(value, `"`) {
+			unquoted, err := strconv.Unquote(value)
+			if err != nil {
+				return "", false
+			}
+			value = unquoted
+		}
+		return parseForwardedAddress(value)
+	}
+	return "", false
+}
+
+func parseForwardedAddress(value string) (string, bool) {
+	if value == "" || strings.HasPrefix(value, "_") {
+		return "", false
+	}
+	if ip := net.ParseIP(value); ip != nil {
+		return ip.String(), true
+	}
+	if host, _, err := net.SplitHostPort(value); err == nil {
+		if ip := net.ParseIP(host); ip != nil {
+			return ip.String(), true
+		}
+	}
+	if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
+		if ip := net.ParseIP(strings.TrimSuffix(strings.TrimPrefix(value, "["), "]")); ip != nil {
+			return ip.String(), true
+		}
+	}
+	return "", false
+}
+
+func xForwardedForIP(header string) (net.IP, bool) {
+	first := strings.TrimSpace(strings.SplitN(header, ",", 2)[0])
+	ip := net.ParseIP(first)
+	return ip, ip != nil
+}
+
 func (r *Resolver) trusted(remote string) bool {
 	peer := net.ParseIP(remote)
 	for _, trusted := range r.options.TrustedProxyAddresses {
-		if remote == trusted {
+		if peer != nil && peer.Equal(net.ParseIP(trusted)) {
 			return true
 		}
 		if peer != nil {

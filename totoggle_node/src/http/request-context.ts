@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { IncomingMessage } from "node:http";
+import { isIP } from "node:net";
 import type { ToggleContextResolver } from "../context.js";
 
 export interface NodeRequestContextOptions {
@@ -46,7 +47,7 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
       const forwardedHeader = request.headers["forwarded"];
       const forwarded = firstForwardedAddress(Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader)
         ?? firstForwardedAddress(Array.isArray(request.headers["x-forwarded-for"]) ? request.headers["x-forwarded-for"][0] : request.headers["x-forwarded-for"]);
-      if (forwarded) values.set("ip", forwarded);
+      if (forwarded && isIP(forwarded) !== 0) values.set("ip", forwarded);
       const country = request.headers[this.countryHeader];
       const countryValue = Array.isArray(country) ? country[0] : country;
       if (countryValue && /^[A-Za-z]{2}$/.test(countryValue.trim())) values.set("country", countryValue.trim().toUpperCase());
@@ -60,8 +61,8 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
 
 function firstForwardedAddress(value: string | undefined): string | undefined {
   const first = value?.split(",", 1)[0]?.trim();
-  const match = /^for=(?:"?\[?([^;\]"]+)\]?")?$/i.exec(first ?? "");
-  return (match?.[1] ?? first) || undefined;
+  const match = /^for=(.+?)(?:;.*)?$/i.exec(first ?? "");
+  return (match?.[1]?.trim().replace(/^"|"$/g, "").replace(/^\[|\]$/g, "") ?? first) || undefined;
 }
 
 function normalizeAddress(value: string | undefined): string | undefined {
@@ -74,8 +75,23 @@ function isTrustedPeer(address: string, peers: ReadonlySet<string>): boolean {
     if (peer === address) return true;
     const [network, prefix] = peer.split("/");
     if (prefix !== undefined && matchesIpv4Cidr(address, network, Number(prefix))) return true;
+    if (prefix !== undefined && matchesIpv6Cidr(address, network, Number(prefix))) return true;
   }
   return false;
+}
+
+function matchesIpv6Cidr(address: string, network: string | undefined, prefix: number): boolean {
+  const parse = (value: string | undefined): bigint | undefined => {
+    if (!value || isIP(value) !== 6) return undefined;
+    const [left, right = ""] = value.split("::");
+    const leftParts = left ? left.split(":") : []; const rightParts = right ? right.split(":") : [];
+    const parts = [...leftParts, ...Array(8 - leftParts.length - rightParts.length).fill("0"), ...rightParts];
+    return parts.reduce((result, part) => (result << 16n) | BigInt(parseInt(part || "0", 16)), 0n);
+  };
+  const candidate = parse(address); const base = parse(network);
+  if (candidate === undefined || base === undefined || !Number.isInteger(prefix) || prefix < 0 || prefix > 128) return false;
+  const mask = prefix === 0 ? 0n : ((1n << BigInt(prefix)) - 1n) << BigInt(128 - prefix);
+  return (candidate & mask) === (base & mask);
 }
 
 function matchesIpv4Cidr(address: string, network: string | undefined, prefix: number): boolean {
