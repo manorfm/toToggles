@@ -214,22 +214,24 @@ func TestToggle_SetActivationRule(t *testing.T) {
 		{
 			name: "valid percentage rule",
 			rule: &ActivationRule{
-				Type:  ActivationRuleTypePercentage,
-				Value: "50",
+				Type:   ActivationRuleTypePercentage,
+				Value:  "50",
+				Config: json.RawMessage(`{"context_key":"rollout_key"}`),
 			},
 			expectError: false,
 		},
 		{
 			name: "valid parameter rule",
 			rule: &ActivationRule{
-				Type:  ActivationRuleTypeParameter,
-				Value: "premium",
+				Type:   ActivationRuleTypeParameter,
+				Value:  "premium",
+				Config: json.RawMessage(`{"context_key":"attributes.plan"}`),
 			},
 			expectError: false,
 		},
 		{
-			name: "nil rule",
-			rule: nil,
+			name:        "nil rule",
+			rule:        nil,
 			expectError: false,
 		},
 		{
@@ -309,8 +311,9 @@ func TestToggle_ClearActivationRule(t *testing.T) {
 
 	// First set a rule
 	rule := &ActivationRule{
-		Type:  ActivationRuleTypePercentage,
-		Value: "50",
+		Type:   ActivationRuleTypePercentage,
+		Value:  "50",
+		Config: json.RawMessage(`{"context_key":"rollout_key"}`),
 	}
 	err := toggle.SetActivationRule(rule)
 	if err != nil {
@@ -344,7 +347,7 @@ func TestToggle_JSONSerializationWithActivationRule(t *testing.T) {
 	rule := &ActivationRule{
 		Type:   ActivationRuleTypePercentage,
 		Value:  "75",
-		Config: json.RawMessage(`{"description": "75% activation"}`),
+		Config: json.RawMessage(`{"context_key":"rollout_key"}`),
 	}
 	err := toggle.SetActivationRule(rule)
 	if err != nil {
@@ -385,7 +388,7 @@ func TestToggle_JSONSerializationWithActivationRule(t *testing.T) {
 		if unmarshaled.ActivationRule.Value != rule.Value {
 			t.Errorf("Expected rule value %s, got %s", rule.Value, unmarshaled.ActivationRule.Value)
 		}
-		expectedConfig := `{"description":"75% activation"}`
+		expectedConfig := `{"context_key":"rollout_key"}`
 		actualConfig := string(unmarshaled.ActivationRule.Config)
 		if actualConfig != expectedConfig {
 			t.Errorf("Expected rule config %s, got %s", expectedConfig, actualConfig)

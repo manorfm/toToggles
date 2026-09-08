@@ -56,15 +56,20 @@ func (ar *ActivationRule) ValidateRule() error {
 	if ar.Type == ActivationRuleTypeTime {
 		return nil
 	}
+	if ar.Type == ActivationRuleTypeTime {
+		return nil
+	}
 	var rawConfig map[string]json.RawMessage
-	if len(ar.Config) > 0 && json.Unmarshal(ar.Config, &rawConfig) != nil {
+	if len(ar.Config) == 0 || json.Unmarshal(ar.Config, &rawConfig) != nil {
 		return fmt.Errorf("configuração context_key válida é obrigatória para regra %s", ar.Type)
 	}
-	if rawKey, ok := rawConfig["context_key"]; ok {
-		var config activationRuleConfig
-		if json.Unmarshal(rawKey, &config.ContextKey) != nil || !validContextKey(config.ContextKey) {
-			return fmt.Errorf("configuração context_key válida é obrigatória para regra %s", ar.Type)
-		}
+	rawKey, ok := rawConfig["context_key"]
+	if !ok {
+		return fmt.Errorf("configuração context_key válida é obrigatória para regra %s", ar.Type)
+	}
+	var config activationRuleConfig
+	if json.Unmarshal(rawKey, &config.ContextKey) != nil || !validContextKey(config.ContextKey) {
+		return fmt.Errorf("configuração context_key válida é obrigatória para regra %s", ar.Type)
 	}
 	if ar.Type == ActivationRuleTypeCohort {
 		for _, value := range strings.Split(ar.Value, ",") {
