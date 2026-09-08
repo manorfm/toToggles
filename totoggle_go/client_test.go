@@ -34,7 +34,7 @@ func toggleJSON(id, path, value string, enabled bool, level int, parentID string
 	}
 	rule := "null"
 	if hasRule {
-		contextKey := map[string]string{"percentage": "rollout_key", "parameter": "parameter", "user_id": "user_id", "ip": "ip", "country": "country", "cohort": "cohort"}[ruleType]
+		contextKey := map[string]string{"percentage": "rollout_key", "attribute": "attributes.plan", "user_id": "user_id", "ip": "ip", "country": "country", "cohort": "cohort"}[ruleType]
 		config := ""
 		if contextKey != "" {
 			config = `,"config":{"context_key":"` + contextKey + `"}`
@@ -65,9 +65,9 @@ func newTestClient(t *testing.T, serverURL string, opts ...Option) *Client {
 	return New(cfg)
 }
 
-type testContextProvider struct{ value *ToggleContext }
+type testContextResolver struct{ values map[string]string }
 
-func (p *testContextProvider) ToggleContext(context.Context) *ToggleContext { return p.value }
+func (p *testContextResolver) Resolve(_ context.Context, key string) (string, bool) { value, ok := p.values[key]; return value, ok }
 
 func TestClient_Start_FetchesInitialDataSynchronously(t *testing.T) {
 	srv, hits := jsonServer(t, applicationJSON(
@@ -146,7 +146,7 @@ func TestClient_IsActive_AllAncestorsEnabledNoRules_ReturnsTrue(t *testing.T) {
 
 func TestClient_AncestorRuleDoesNotAffectDescendant(t *testing.T) {
 	srv, _ := jsonServer(t, applicationJSON(
-		toggleJSON("1", "t1", "t1", true, 0, "", true, "parameter", "premium,enterprise"),
+		toggleJSON("1", "t1", "t1", true, 0, "", true, "attribute", "premium,enterprise"),
 		toggleJSON("2", "t1.t2", "t2", true, 1, "1", false, "", ""),
 	))
 	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour))
@@ -162,13 +162,13 @@ func TestClient_ContextProviderTargetsOwnRule(t *testing.T) {
 	srv, _ := jsonServer(t, applicationJSON(
 		toggleJSON("1", "user", "user", true, 0, "", true, "country", "BR,US"),
 	))
-	provider := &testContextProvider{value: &ToggleContext{Country: "BR"}}
-	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextProvider(provider))
+	provider := &testContextResolver{values: map[string]string{"country": "BR"}}
+	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextResolver(provider))
 	require.NoError(t, client.Start(context.Background()))
 	t.Cleanup(client.Shutdown)
 
 	assert.True(t, client.IsActive("user"))
-	provider.value = &ToggleContext{Country: "FR"}
+	provider.values["country"] = "FR"
 	assert.False(t, client.IsActive("user"))
 }
 
@@ -176,7 +176,7 @@ func TestClient_ContextProviderPercentageRuleIsDeterministicPerKey(t *testing.T)
 	srv, _ := jsonServer(t, applicationJSON(
 		toggleJSON("1", "rollout", "rollout", true, 0, "", true, "percentage", "50"),
 	))
-	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextProvider(&testContextProvider{value: &ToggleContext{RolloutKey: "user-42"}}))
+	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextResolver(&testContextResolver{values: map[string]string{"rollout_key": "user-42"}}))
 	require.NoError(t, client.Start(context.Background()))
 	t.Cleanup(client.Shutdown)
 

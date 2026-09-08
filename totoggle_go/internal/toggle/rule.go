@@ -9,7 +9,7 @@ type RuleType string
 
 const (
 	RuleTypePercentage RuleType = "percentage"
-	RuleTypeParameter  RuleType = "parameter"
+	RuleTypeAttribute  RuleType = "attribute"
 	RuleTypeUserID     RuleType = "user_id"
 	RuleTypeIP         RuleType = "ip"
 	RuleTypeCountry    RuleType = "country"

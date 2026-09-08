@@ -52,7 +52,7 @@ func newStrategyRegistry(zone *time.Location) *strategy.Registry {
 	reg := strategy.NewRegistry()
 
 	matchList := strategy.MatchListEvaluator{}
-	reg.Register(toggle.RuleTypeParameter, matchList)
+	reg.Register(toggle.RuleTypeAttribute, matchList)
 	reg.Register(toggle.RuleTypeUserID, matchList)
 	reg.Register(toggle.RuleTypeCountry, matchList)
 	reg.Register(toggle.RuleTypeCohort, matchList)
@@ -213,40 +213,19 @@ func (c *Client) evaluateRule(tg toggle.Toggle, requestContext context.Context) 
 }
 
 func (c *Client) contextKey(contextKey string, percentage bool, path string, requestContext context.Context) (string, bool) {
-	var ctx *ToggleContext
-	if c.cfg.ContextProvider != nil {
-		ctx = c.cfg.ContextProvider.ToggleContext(requestContext)
-	}
-	if ctx == nil {
-		log.Printf("totoggle: rule context %q requires ToggleContextProvider; evaluation fails closed", contextKey)
+	if c.cfg.ContextResolver == nil {
+		log.Printf("totoggle: rule context %q requires ToggleContextResolver; evaluation fails closed", contextKey)
 		return "", false
 	}
-	var value string
-	switch contextKey {
-	case "rollout_key":
-		value = ctx.RolloutKey
-	case "parameter":
-		value = ctx.Parameter
-	case "user_id":
-		value = ctx.UserID
-	case "ip":
-		value = ctx.IP
-	case "country":
-		value = ctx.Country
-	case "cohort":
-		value = ctx.Cohort
-	default:
-		if len(contextKey) > len("attributes.") && contextKey[:len("attributes.")] == "attributes." {
-			value = ctx.Attributes[contextKey[len("attributes."):]]
-		}
-	}
-	if value == "" {
+	value, ok := c.cfg.ContextResolver.Resolve(requestContext, contextKey)
+	if !ok || value == "" {
 		log.Printf("totoggle: rule context %q is absent; evaluation fails closed", contextKey)
+		return "", false
 	}
 	if percentage && value != "" {
 		value = path + ":" + value
 	}
-	return value, value != ""
+	return value, true
 }
 
 // IsHealthy reports whether the client is started, not shut down, has completed at least one
