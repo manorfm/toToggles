@@ -24,7 +24,7 @@ func TestCache_Update_StoresApplicationAndRecordsSuccess(t *testing.T) {
 	t1 := toggle.Toggle{ID: "1", Path: mustPath(t, "t1"), Enabled: true}
 
 	before := time.Now()
-	c.Update(toggle.NewApplication([]toggle.Toggle{t1}))
+	c.UpdateCatalog(toggle.NewApplication([]toggle.Toggle{t1}), `"catalog-v1"`, "revision-1")
 	after := time.Now()
 
 	stats := c.Stats()
@@ -32,13 +32,15 @@ func TestCache_Update_StoresApplicationAndRecordsSuccess(t *testing.T) {
 	assert.False(t, stats.LastSuccessAt.Before(before))
 	assert.False(t, stats.LastSuccessAt.After(after))
 	assert.Zero(t, stats.ConsecutiveFailures)
+	assert.Equal(t, `"catalog-v1"`, stats.ETag)
+	assert.Equal(t, "revision-1", stats.Revision)
 }
 
 func TestCache_Get_ReturnsTargetAndAncestors(t *testing.T) {
 	c := New()
 	t1 := toggle.Toggle{ID: "1", Path: mustPath(t, "t1"), Enabled: true}
 	t1t2 := toggle.Toggle{ID: "2", Path: mustPath(t, "t1.t2"), Enabled: false}
-	c.Update(toggle.NewApplication([]toggle.Toggle{t1, t1t2}))
+	c.UpdateCatalog(toggle.NewApplication([]toggle.Toggle{t1, t1t2}), "", "")
 
 	target, ancestors, ok := c.Get(mustPath(t, "t1.t2"))
 	require.True(t, ok)
@@ -49,7 +51,7 @@ func TestCache_Get_ReturnsTargetAndAncestors(t *testing.T) {
 
 func TestCache_Get_NotFound(t *testing.T) {
 	c := New()
-	c.Update(toggle.NewApplication(nil))
+	c.UpdateCatalog(toggle.NewApplication(nil), "", "")
 
 	_, _, ok := c.Get(mustPath(t, "missing"))
 	assert.False(t, ok)
@@ -66,7 +68,7 @@ func TestCache_Get_BeforeAnyUpdate(t *testing.T) {
 func TestCache_RecordFailure_KeepsPriorDataAndTracksFailure(t *testing.T) {
 	c := New()
 	t1 := toggle.Toggle{ID: "1", Path: mustPath(t, "t1"), Enabled: true}
-	c.Update(toggle.NewApplication([]toggle.Toggle{t1}))
+	c.UpdateCatalog(toggle.NewApplication([]toggle.Toggle{t1}), "", "")
 
 	failErr := errors.New("server unreachable")
 	c.RecordFailure(failErr)
@@ -87,7 +89,7 @@ func TestCache_Update_ResetsConsecutiveFailures(t *testing.T) {
 	c.RecordFailure(errors.New("boom"))
 	c.RecordFailure(errors.New("boom"))
 
-	c.Update(toggle.NewApplication(nil))
+	c.UpdateCatalog(toggle.NewApplication(nil), "", "")
 
 	assert.Zero(t, c.Stats().ConsecutiveFailures)
 }
@@ -95,7 +97,7 @@ func TestCache_Update_ResetsConsecutiveFailures(t *testing.T) {
 func TestCache_Clear_RemovesDataAndResetsStats(t *testing.T) {
 	c := New()
 	t1 := toggle.Toggle{ID: "1", Path: mustPath(t, "t1"), Enabled: true}
-	c.Update(toggle.NewApplication([]toggle.Toggle{t1}))
+	c.UpdateCatalog(toggle.NewApplication([]toggle.Toggle{t1}), "", "")
 	c.RecordFailure(errors.New("boom"))
 
 	c.Clear()
@@ -112,7 +114,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			c.Update(toggle.NewApplication([]toggle.Toggle{{ID: "1", Path: mustPath(t, "t1")}}))
+			c.UpdateCatalog(toggle.NewApplication([]toggle.Toggle{{ID: "1", Path: mustPath(t, "t1")}}), "", "")
 		}()
 		go func() {
 			defer wg.Done()
@@ -124,4 +126,29 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestCache_RecordFreshness_PreservesCatalogAndRevision(t *testing.T) {
+	c := New()
+	t1 := toggle.Toggle{ID: "1", Path: mustPath(t, "t1"), Enabled: true}
+	c.UpdateCatalog(toggle.NewApplication([]toggle.Toggle{t1}), `"catalog-v1"`, "revision-1")
+	c.RecordFailure(errors.New("temporary failure"))
+
+	c.RecordFreshness("")
+
+	target, _, ok := c.Get(mustPath(t, "t1"))
+	require.True(t, ok)
+	assert.Equal(t, t1, target)
+	stats := c.Stats()
+	assert.Equal(t, `"catalog-v1"`, stats.ETag)
+	assert.Equal(t, "revision-1", stats.Revision)
+	assert.Zero(t, stats.ConsecutiveFailures)
+	assert.False(t, stats.LastSuccessAt.IsZero())
+}
+
+func TestCache_RecordFreshness_Rejects304BeforeInitialSnapshot(t *testing.T) {
+	c := New()
+
+	assert.False(t, c.RecordFreshness(`"catalog-v1"`))
+	assert.True(t, c.Stats().LastSuccessAt.IsZero())
 }

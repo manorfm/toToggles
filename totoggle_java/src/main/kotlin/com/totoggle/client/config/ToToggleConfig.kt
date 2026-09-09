@@ -25,6 +25,7 @@ data class ToToggleConfig(
     val serverUrl: String,
     val secretKey: String,
     val refreshInterval: Duration = Duration.ofMinutes(5),
+    val refreshBackoffMax: Duration = Duration.ofMinutes(80),
     val connectionTimeout: Duration = Duration.ofSeconds(10),
     val readTimeout: Duration = Duration.ofSeconds(30),
     val enableOfflineMode: Boolean = true,
@@ -39,6 +40,7 @@ data class ToToggleConfig(
         require(secretKey.isNotBlank()) { "Secret key cannot be blank" }
         require(secretKey.startsWith("sk_")) { "Secret key must start with 'sk_'" }
         require(refreshInterval.toMillis() > 0) { "Refresh interval must be positive" }
+        require(refreshBackoffMax >= refreshInterval) { "Refresh backoff maximum must not be less than refresh interval" }
         require(connectionTimeout.toMillis() > 0) { "Connection timeout must be positive" }
         require(readTimeout.toMillis() > 0) { "Read timeout must be positive" }
     }
@@ -66,6 +68,7 @@ data class ToToggleConfig(
         private var serverUrl: String = ""
         private var secretKey: String = ""
         private var refreshInterval: Duration = Duration.ofMinutes(5)
+        private var refreshBackoffMax: Duration = Duration.ofMinutes(80)
         private var connectionTimeout: Duration = Duration.ofSeconds(10)
         private var readTimeout: Duration = Duration.ofSeconds(30)
         private var enableOfflineMode: Boolean = true
@@ -77,6 +80,7 @@ data class ToToggleConfig(
         fun serverUrl(serverUrl: String) = apply { this.serverUrl = serverUrl }
         fun secretKey(secretKey: String) = apply { this.secretKey = secretKey }
         fun refreshInterval(refreshInterval: Duration) = apply { this.refreshInterval = refreshInterval }
+        fun refreshBackoffMax(refreshBackoffMax: Duration) = apply { this.refreshBackoffMax = refreshBackoffMax }
         fun connectionTimeout(connectionTimeout: Duration) = apply { this.connectionTimeout = connectionTimeout }
         fun readTimeout(readTimeout: Duration) = apply { this.readTimeout = readTimeout }
         fun enableOfflineMode(enableOfflineMode: Boolean) = apply { this.enableOfflineMode = enableOfflineMode }
@@ -90,6 +94,7 @@ data class ToToggleConfig(
                 serverUrl = serverUrl,
                 secretKey = secretKey,
                 refreshInterval = refreshInterval,
+                refreshBackoffMax = refreshBackoffMax,
                 connectionTimeout = connectionTimeout,
                 readTimeout = readTimeout,
                 enableOfflineMode = enableOfflineMode,

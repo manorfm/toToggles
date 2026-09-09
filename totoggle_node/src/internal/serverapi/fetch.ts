@@ -6,7 +6,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseFetchResponse(body: unknown): Application {
+function safeRevision(value: unknown): string | undefined {
+  return typeof value === "string" && value.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(value)
+    ? value
+    : undefined;
+}
+
+function parseFetchResponse(body: unknown): { application: Application; revision?: string } {
   if (!isPlainObject(body) || !isPlainObject(body.application)) {
     throw new Error("totoggle: malformed response — missing \"application\" object");
   }
@@ -14,7 +20,19 @@ function parseFetchResponse(body: unknown): Application {
   if (!Array.isArray(toggles)) {
     throw new Error('totoggle: malformed response — "application.toggles" must be an array');
   }
-  return new Application(toggles.map((raw) => parseToggle(raw)));
+  const revision = safeRevision(body.application.revision);
+  return { application: new Application(toggles.map((raw) => parseToggle(raw))), revision };
+}
+
+export type ToggleFetchResult =
+  | { readonly status: "modified"; readonly application: Application; readonly etag?: string; readonly revision?: string }
+  | { readonly status: "not-modified"; readonly etag?: string };
+
+function responseEtag(response: Response): string | undefined {
+  const etag = response.headers.get("ETag");
+  // Values from headers are sent back on the next request. Do not retain control characters or
+  // unbounded values even when a compromised/misconfigured upstream emits them.
+  return etag !== null && etag.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(etag) ? etag : undefined;
 }
 
 /**
@@ -27,25 +45,33 @@ export async function fetchToggles(
   url: string,
   secretKey: string,
   timeoutMs: number,
-): Promise<Application> {
+  etag?: string,
+): Promise<ToggleFetchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
-      headers: { "X-API-Key": secretKey },
+      headers: {
+        "X-API-Key": secretKey,
+        ...(etag === undefined ? {} : { "If-None-Match": etag }),
+      },
       signal: controller.signal,
     });
 
     if (response.status === 401 || response.status === 404) {
       throw new TotoggleAuthenticationError();
     }
+    if (response.status === 304) {
+      return { status: "not-modified", etag: responseEtag(response) };
+    }
     if (!response.ok) {
       throw new Error(`totoggle: unexpected status ${response.status}`);
     }
 
     const body: unknown = await response.json();
-    return parseFetchResponse(body);
+    const parsed = parseFetchResponse(body);
+    return { status: "modified", ...parsed, etag: responseEtag(response) };
   } catch (err) {
     if (err instanceof TotoggleAuthenticationError) {
       throw err;

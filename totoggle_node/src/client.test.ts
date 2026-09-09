@@ -1,11 +1,42 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
-import { ToToggleClient } from "./client.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ToToggleClient, type RefreshScheduler } from "./client.js";
 import { createConfig } from "./config.js";
 import { TotoggleAuthenticationError } from "./errors.js";
 import type { ToToggleMetricsListener } from "./metrics.js";
 
 let server: Server | undefined;
+
+class ControlledRefreshScheduler implements RefreshScheduler {
+  private next: { readonly callback: () => void; readonly delayMs: number; cancelled: boolean } | undefined;
+  readonly delays: number[] = [];
+
+  schedule(callback: () => void, delayMs: number): unknown {
+    const task = { callback, delayMs, cancelled: false };
+    this.next = task;
+    this.delays.push(delayMs);
+    return task;
+  }
+
+  cancel(handle: unknown): void {
+    (handle as { cancelled: boolean }).cancelled = true;
+  }
+
+  async runNext(): Promise<void> {
+    const task = this.next;
+    if (!task || task.cancelled) throw new Error("expected a scheduled refresh");
+    this.next = undefined;
+    task.callback();
+    await waitUntil(() => this.next !== undefined);
+  }
+}
+
+function catalogResponse(etag: string): Response {
+  return new Response(JSON.stringify({ application: { id: "app-1", name: "x", revision: "1", toggles: [toggleJson("1", "user", true, 0, null, false)] } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json", ETag: etag },
+  });
+}
 
 function listen(handler: (req: IncomingMessage, res: ServerResponse) => void): Promise<string> {
   server = createServer(handler);
@@ -71,11 +102,112 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 1000): Promise<vo
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   server?.close();
   server = undefined;
 });
 
 describe("ToToggleClient", () => {
+  it("conditionally refreshes a cached snapshot and treats a bodyless 304 as fresh", async () => {
+    const scheduler = new ControlledRefreshScheduler();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogResponse('"catalog-v1"'))
+      .mockResolvedValueOnce(new Response(null, { status: 304, headers: { ETag: '"catalog-v1"' } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ToToggleClient(createConfig("test-app", "https://toggles.example", "sk_test", { refreshIntervalMs: 10 }), {
+      scheduler,
+      random: () => 0.5,
+    });
+
+    await client.start();
+    await scheduler.runNext();
+
+    expect(fetchMock.mock.calls[1]![1].headers).toMatchObject({ "If-None-Match": '"catalog-v1"' });
+    expect(client.isActive("user")).toBe(true);
+    expect(client.isHealthy()).toBe(true);
+    expect(scheduler.delays).toEqual([10, 10]);
+    client.shutdown();
+  });
+
+  it("uses deterministic bounded exponential backoff after failures and resets it on 304", async () => {
+    const scheduler = new ControlledRefreshScheduler();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogResponse('"catalog-v1"'))
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValueOnce(new Response(null, { status: 304 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ToToggleClient(createConfig("test-app", "https://toggles.example", "sk_test", { refreshIntervalMs: 10 }), {
+      scheduler,
+      random: () => 0.5,
+    });
+
+    await client.start();
+    await scheduler.runNext();
+    await scheduler.runNext();
+    await scheduler.runNext();
+
+    expect(scheduler.delays).toEqual([10, 10, 20, 10]);
+    expect(client.consecutiveFailureCount()).toBe(0);
+    client.shutdown();
+  });
+
+  it("fails closed when a server sends 304 before any catalog snapshot exists", async () => {
+    const scheduler = new ControlledRefreshScheduler();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 304 })));
+    const client = new ToToggleClient(createConfig("test-app", "https://toggles.example", "sk_test", { refreshIntervalMs: 10 }), {
+      scheduler,
+      random: () => 0.5,
+    });
+
+    await client.start();
+
+    expect(client.isHealthy()).toBe(false);
+    expect(client.isActive("user")).toBe(false);
+    expect(client.consecutiveFailureCount()).toBe(1);
+    client.shutdown();
+  });
+
+  it("coalesces concurrent forced refreshes so an older response cannot overwrite a newer snapshot", async () => {
+    let release: (() => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { release = () => resolve(catalogResponse('"catalog-v2"')); });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogResponse('"catalog-v1"'))
+      .mockReturnValueOnce(pending);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ToToggleClient(createConfig("test-app", "https://toggles.example", "sk_test"));
+
+    await client.start();
+    const first = client.refresh();
+    const second = client.refresh();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    release?.();
+    await Promise.all([first, second]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    client.shutdown();
+  });
+
+  it("coalesces a scheduled refresh with a manual refresh", async () => {
+    const scheduler = new ControlledRefreshScheduler();
+    let release: (() => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { release = () => resolve(catalogResponse('"catalog-v2"')); });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogResponse('"catalog-v1"'))
+      .mockReturnValueOnce(pending);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new ToToggleClient(createConfig("test-app", "https://toggles.example", "sk_test"), { scheduler });
+
+    await client.start();
+    const scheduled = scheduler.runNext();
+    await waitUntil(() => fetchMock.mock.calls.length === 2);
+    const manual = client.refresh();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    release?.();
+    await Promise.all([scheduled, manual]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    client.shutdown();
+  });
   it("fetches initial data synchronously during start", async () => {
     const { url, hits } = await fixedResponseServer([toggleJson("1", "user", true, 0, null, false)]);
     const client = new ToToggleClient(

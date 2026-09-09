@@ -1,7 +1,12 @@
 package handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/manorfm/totoogle/internal/app/domain/entity"
@@ -14,6 +19,123 @@ type SecretKeyHandler struct {
 	toggleUseCase      *usecase.ToggleUseCase
 	applicationUseCase *usecase.ApplicationUseCase
 	auditUseCase       *usecase.AuditUseCase
+}
+
+// publicToggle is the deliberately narrow representation exposed to SDKs. Keeping it separate
+// from entity.Toggle prevents persistence-only fields from accidentally becoming public API and
+// gives the catalogue revision one canonical input.
+type publicToggle struct {
+	ID                string                 `json:"id"`
+	Value             string                 `json:"value"`
+	Enabled           bool                   `json:"enabled"`
+	Path              string                 `json:"path"`
+	Level             int                    `json:"level"`
+	ParentID          *string                `json:"parent_id"`
+	AppID             string                 `json:"app_id"`
+	HasActivationRule bool                   `json:"has_activation_rule"`
+	ActivationRule    *entity.ActivationRule `json:"activation_rule"`
+}
+
+type publicCatalogueApplication struct {
+	ID       string         `json:"id"`
+	Name     string         `json:"name"`
+	Revision string         `json:"revision"`
+	Toggles  []publicToggle `json:"toggles"`
+}
+
+type publicCatalogueResponse struct {
+	Application publicCatalogueApplication `json:"application"`
+}
+
+// catalogueRevision is a content hash, not a database version. It changes precisely with the
+// authenticated caller's visible catalogue and never depends on key material, timestamps, or
+// incidental query ordering.
+func catalogueRevision(applicationID, applicationName string, toggles []publicToggle) (string, error) {
+	canonical := struct {
+		ApplicationID   string         `json:"application_id"`
+		ApplicationName string         `json:"application_name"`
+		Toggles         []publicToggle `json:"toggles"`
+	}{applicationID, applicationName, toggles}
+	payload, err := json.Marshal(canonical)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(payload)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func simplifyCatalogueToggles(toggles []*entity.Toggle) []publicToggle {
+	simplified := make([]publicToggle, 0, len(toggles))
+	for _, toggle := range toggles {
+		rule := toggle.ActivationRule
+		if !toggle.HasActivationRule {
+			rule = nil
+		}
+		simplified = append(simplified, publicToggle{
+			ID:                toggle.ID,
+			Value:             toggle.Value,
+			Enabled:           toggle.Enabled,
+			Path:              toggle.Path,
+			Level:             toggle.Level,
+			ParentID:          toggle.ParentID,
+			AppID:             toggle.AppID,
+			HasActivationRule: toggle.HasActivationRule,
+			ActivationRule:    rule,
+		})
+	}
+	// GetHierarchyByAppID orders for UI rendering, but level/value is not a total order. A stable
+	// total order makes the JSON and its hash deterministic even for identical leaf values.
+	sort.Slice(simplified, func(i, j int) bool {
+		if simplified[i].Path == simplified[j].Path {
+			return simplified[i].ID < simplified[j].ID
+		}
+		return simplified[i].Path < simplified[j].Path
+	})
+	return simplified
+}
+
+// ifNoneMatchMatches implements weak entity-tag comparison, which is the comparison required by
+// If-None-Match for GET. It accepts a correctly quoted tag, an optional W/ prefix, or a list.
+func ifNoneMatchMatches(header, currentETag string) bool {
+	header = strings.TrimSpace(header)
+	if header == "*" {
+		return true
+	}
+	for len(header) > 0 {
+		header = strings.TrimLeft(header, " \t")
+		if strings.HasPrefix(header, "W/") {
+			header = header[2:]
+		}
+		if len(header) == 0 || header[0] != '"' {
+			return false
+		}
+		end := 1
+		for end < len(header) {
+			if header[end] == '\\' && end+1 < len(header) {
+				end += 2
+				continue
+			}
+			if header[end] == '"' {
+				break
+			}
+			end++
+		}
+		if end == len(header) {
+			return false
+		}
+		if header[:end+1] == currentETag {
+			return true
+		}
+		header = strings.TrimLeft(header[end+1:], " \t")
+		if header == "" {
+			return false
+		}
+		if header[0] != ',' {
+			return false
+		}
+		header = header[1:]
+	}
+	return false
 }
 
 // auditUseCase: sem cobertura pro kill switch (DisableToggleBySecret) de propósito — essa rota
@@ -140,30 +262,34 @@ func (h *SecretKeyHandler) GetTogglesBySecret(c *gin.Context) {
 		return
 	}
 
-	// Simplificar toggles removendo children e parent
-	simplifiedToggles := make([]gin.H, 0, len(toggles))
-	for _, toggle := range toggles {
-		simplifiedToggle := gin.H{
-			"id":                  toggle.ID,
-			"value":               toggle.Value,
-			"enabled":             toggle.Enabled,
-			"path":                toggle.Path,
-			"level":               toggle.Level,
-			"parent_id":           toggle.ParentID,
-			"app_id":              toggle.AppID,
-			"has_activation_rule": toggle.HasActivationRule,
-			"activation_rule":     toggle.ActivationRule,
-		}
-		simplifiedToggles = append(simplifiedToggles, simplifiedToggle)
+	simplifiedToggles := simplifyCatalogueToggles(toggles)
+	revision, err := catalogueRevision(application.ID, application.Name, simplifiedToggles)
+	if err != nil {
+		// An invalid persisted rule config must not produce a partial catalogue or disclose
+		// internals. This should be unreachable through validated write APIs.
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to build toggle catalogue"})
+		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"application": gin.H{
-			"id":      application.ID,
-			"name":    application.Name,
-			"toggles": simplifiedToggles,
-		},
-	})
+	response := publicCatalogueResponse{Application: publicCatalogueApplication{
+		ID:       application.ID,
+		Name:     application.Name,
+		Revision: revision,
+		Toggles:  simplifiedToggles,
+	}}
+	etag := `"` + revision + `"`
+	c.Header("ETag", etag)
+
+	// Authentication intentionally precedes this check: an unauthenticated request must never
+	// use a known ETag as an oracle for another application's catalogue.
+	for _, ifNoneMatch := range c.Request.Header.Values("If-None-Match") {
+		if ifNoneMatchMatches(ifNoneMatch, etag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // DisableToggleRequest representa o request do kill switch

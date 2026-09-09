@@ -5,6 +5,8 @@ import com.totoggle.client.config.ToToggleConfig
 import com.totoggle.client.context.RequestContextResolver
 import com.totoggle.client.context.ToggleRequestContext
 import com.totoggle.client.metrics.ToToggleMetricsListener
+import com.totoggle.client.refresh.RefreshScheduler
+import com.totoggle.client.refresh.ScheduledRefresh
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.assertj.core.api.Assertions.assertThat
@@ -13,6 +15,10 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class ToToggleClientTest {
     
@@ -242,6 +248,148 @@ class ToToggleClientTest {
     }
 
     @Test
+    fun `conditional 304 keeps the known snapshot fresh and resets failure backoff`() {
+        val scheduler = RecordingScheduler()
+        val runtime = ToToggleClientRuntime(
+            now = { Instant.parse("2026-01-01T00:00:00Z") },
+            random = { 0.5 },
+            scheduler = scheduler,
+        )
+        val refreshInterval = Duration.ofSeconds(10)
+        val scheduledClient = ToToggleClient(config.copy(refreshInterval = refreshInterval), runtime)
+        try {
+            mockServer.enqueue(catalogResponse(etag = "\"catalog-v1\"", revision = "revision-1"))
+            scheduledClient.start()
+            assertThat(scheduledClient.isActive("user")).isTrue()
+            assertThat(scheduler.delays).containsExactly(refreshInterval)
+
+            mockServer.enqueue(MockResponse().setResponseCode(500))
+            scheduler.runNext()
+            assertThat(scheduledClient.getConsecutiveFailureCount()).isEqualTo(1)
+            assertThat(scheduler.delays.last()).isEqualTo(Duration.ofSeconds(10))
+
+            mockServer.enqueue(MockResponse().setResponseCode(304).setHeader("ETag", "\"catalog-v1\""))
+            scheduler.runNext()
+
+            assertThat(scheduledClient.isActive("user")).isTrue()
+            assertThat(scheduledClient.getConsecutiveFailureCount()).isZero()
+            assertThat(scheduler.delays.last()).isEqualTo(refreshInterval)
+            assertThat(mockServer.takeRequest().getHeader("If-None-Match")).isNull()
+            assertThat(mockServer.takeRequest().getHeader("If-None-Match")).isEqualTo("\"catalog-v1\"")
+            assertThat(mockServer.takeRequest().getHeader("If-None-Match")).isEqualTo("\"catalog-v1\"")
+        } finally {
+            scheduledClient.shutdown()
+        }
+    }
+
+    @Test
+    fun `initial 304 fails closed without creating a catalogue snapshot`() {
+        mockServer.enqueue(MockResponse().setResponseCode(304))
+        client.start()
+
+        assertThat(client.isHealthy()).isFalse()
+        assertThat(client.isActive("user")).isFalse()
+        assertThat(client.getConsecutiveFailureCount()).isEqualTo(1)
+    }
+
+    @Test
+    fun `concurrent manual refreshes do not overlap HTTP catalog requests`() {
+        mockSuccessfulResponse()
+        client.start()
+        assertThat(mockServer.takeRequest(1, TimeUnit.SECONDS)).isNotNull()
+
+        mockServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBodyDelay(300, TimeUnit.MILLISECONDS)
+                .setBody(catalogBody()),
+        )
+        mockSuccessfulResponse()
+
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val first = executor.submit { client.refresh() }
+            assertThat(mockServer.takeRequest(1, TimeUnit.SECONDS)).isNotNull()
+
+            val second = executor.submit { client.refresh() }
+            Thread.sleep(100)
+            assertThat(mockServer.requestCount).isEqualTo(2)
+
+            first.get(2, TimeUnit.SECONDS)
+            second.get(2, TimeUnit.SECONDS)
+            assertThat(mockServer.requestCount).isEqualTo(3)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `concurrent refreshes retain exactly one background schedule`() {
+        val scheduler = BlockingRefreshScheduler()
+        val scheduledClient = ToToggleClient(config, ToToggleClientRuntime(scheduler = scheduler))
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            mockSuccessfulResponse()
+            scheduledClient.start()
+            assertThat(mockServer.takeRequest(1, TimeUnit.SECONDS)).isNotNull()
+
+            mockSuccessfulResponse()
+            mockSuccessfulResponse()
+            val first = executor.submit { scheduledClient.refresh() }
+            assertThat(scheduler.firstRefreshScheduleEntered.await(1, TimeUnit.SECONDS)).isTrue()
+            assertThat(mockServer.takeRequest(1, TimeUnit.SECONDS)).isNotNull()
+
+            val second = executor.submit { scheduledClient.refresh() }
+            assertThat(mockServer.takeRequest(1, TimeUnit.SECONDS)).isNotNull()
+            assertThat(scheduler.secondRefreshScheduleEntered.await(200, TimeUnit.MILLISECONDS)).isFalse()
+
+            scheduler.releaseFirstRefreshSchedule.countDown()
+            first.get(2, TimeUnit.SECONDS)
+            second.get(2, TimeUnit.SECONDS)
+            assertThat(scheduler.activeSchedules()).isEqualTo(1)
+        } finally {
+            scheduler.releaseFirstRefreshSchedule.countDown()
+            executor.shutdownNow()
+            scheduledClient.shutdown()
+        }
+    }
+
+    @Test
+    fun `background failures use bounded exponential backoff with deterministic jitter`() {
+        val scheduler = RecordingScheduler()
+        val runtime = ToToggleClientRuntime(
+            random = { 0.0 },
+            scheduler = scheduler,
+        )
+        val scheduledClient = ToToggleClient(
+            config.copy(
+                refreshInterval = Duration.ofSeconds(10),
+                refreshBackoffMax = Duration.ofSeconds(25),
+            ),
+            runtime,
+        )
+        try {
+            mockServer.enqueue(catalogResponse(etag = "\"catalog-v1\"", revision = "revision-1"))
+            scheduledClient.start()
+            mockServer.enqueue(MockResponse().setResponseCode(500))
+            scheduler.runNext()
+            mockServer.enqueue(MockResponse().setResponseCode(500))
+            scheduler.runNext()
+            mockServer.enqueue(MockResponse().setResponseCode(500))
+            scheduler.runNext()
+
+            assertThat(scheduler.delays).containsExactly(
+                Duration.ofSeconds(10),
+                Duration.ofSeconds(8),
+                Duration.ofSeconds(16),
+                Duration.ofSeconds(20),
+            )
+        } finally {
+            scheduledClient.shutdown()
+        }
+    }
+
+    @Test
     fun `should not be stale right after a successful refresh, and isHealthy should be true`() {
         mockSuccessfulResponse()
         client.start()
@@ -399,7 +547,15 @@ class ToToggleClientTest {
     }
     
     private fun mockSuccessfulResponse() {
-        val responseBody = """
+        val responseBody = catalogBody()
+
+        mockServer.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setBody(responseBody)
+            .setHeader("Content-Type", "application/json"))
+    }
+
+    private fun catalogBody(): String = """
             {
                 "application": {
                     "id": "app-123",
@@ -442,11 +598,66 @@ class ToToggleClientTest {
                 }
             }
         """.trimIndent()
-        
-        mockServer.enqueue(MockResponse()
-            .setResponseCode(200)
-            .setBody(responseBody)
-            .setHeader("Content-Type", "application/json"))
+
+    private fun catalogResponse(etag: String, revision: String): MockResponse = MockResponse()
+        .setResponseCode(200)
+        .setHeader("ETag", etag)
+        .setBody(
+            """{"application":{"id":"app-123","name":"Test App","revision":"$revision","toggles":[{"id":"toggle-1","path":"user","value":"user","enabled":true,"level":0,"parent_id":null,"app_id":"app-123","has_activation_rule":false,"activation_rule":null}]}}"""
+        )
+
+    private class RecordingScheduler : RefreshScheduler {
+        val delays = mutableListOf<Duration>()
+        private val callbacks = ArrayDeque<() -> Unit>()
+
+        override fun schedule(task: () -> Unit, delay: Duration): ScheduledRefresh {
+            delays += delay
+            callbacks += task
+            return object : ScheduledRefresh {
+                override fun cancel() {
+                    callbacks.remove(task)
+                }
+            }
+        }
+
+        fun runNext() {
+            callbacks.removeFirst().invoke()
+        }
+
+        override fun close() = Unit
+    }
+
+    private class BlockingRefreshScheduler : RefreshScheduler {
+        private val monitor = Any()
+        private val tasks = mutableListOf<Task>()
+        private var scheduleCalls = 0
+        val firstRefreshScheduleEntered = CountDownLatch(1)
+        val releaseFirstRefreshSchedule = CountDownLatch(1)
+        val secondRefreshScheduleEntered = CountDownLatch(1)
+
+        override fun schedule(task: () -> Unit, delay: Duration): ScheduledRefresh {
+            val call = synchronized(monitor) { ++scheduleCalls }
+            if (call == 2) {
+                firstRefreshScheduleEntered.countDown()
+                releaseFirstRefreshSchedule.await(1, TimeUnit.SECONDS)
+            } else if (call == 3) {
+                secondRefreshScheduleEntered.countDown()
+            }
+            val scheduled = Task()
+            synchronized(monitor) { tasks += scheduled }
+            return scheduled
+        }
+
+        fun activeSchedules(): Int = synchronized(monitor) { tasks.count { !it.cancelled } }
+
+        override fun close() = Unit
+
+        private class Task : ScheduledRefresh {
+            @Volatile var cancelled = false
+            override fun cancel() {
+                cancelled = true
+            }
+        }
     }
     
     private fun mockResponseWithDisabledToggle() {

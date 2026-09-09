@@ -33,11 +33,11 @@ class ToggleCacheTest {
             createToggle(path = "user.payments", level = 1),
             createToggle(path = "user.payments.view-table", level = 2)
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
         
         val beforeUpdate = Instant.now()
-        cache.updateCache(response)
+        cache.updateCache(response, "\"catalog-v1\"")
         val afterUpdate = Instant.now()
         
         assertThat(cache.hasData()).isTrue()
@@ -53,9 +53,9 @@ class ToggleCacheTest {
             createToggle(path = "user.payments"),
             createToggle(path = "user.payments.view-table")
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
-        cache.updateCache(response)
+        cache.updateCache(response, "\"catalog-v1\"")
         
         val found = cache.getToggle("user.payments")
         val notFound = cache.getToggle("nonexistent")
@@ -68,9 +68,9 @@ class ToggleCacheTest {
     @Test
     fun `should check if toggle exists`() {
         val toggles = listOf(createToggle(path = "user.payments"))
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
-        cache.updateCache(response)
+        cache.updateCache(response, "\"catalog-v1\"")
         
         assertThat(cache.hasToggle("user.payments")).isTrue()
         assertThat(cache.hasToggle("nonexistent")).isFalse()
@@ -84,9 +84,9 @@ class ToggleCacheTest {
             createToggle(path = "user.payments.view-table", level = 2),
             createToggle(path = "admin", level = 0)
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
-        cache.updateCache(response)
+        cache.updateCache(response, "\"catalog-v1\"")
         
         val ancestors = cache.getAncestors("user.payments.view-table")
         
@@ -101,9 +101,9 @@ class ToggleCacheTest {
             createToggle(path = "user"),
             createToggle(path = "admin")
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
-        cache.updateCache(response)
+        cache.updateCache(response, "\"catalog-v1\"")
         
         val stats = cache.getStats()
         
@@ -116,9 +116,9 @@ class ToggleCacheTest {
     @Test
     fun `should clear cache`() {
         val toggles = listOf(createToggle(path = "user"))
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
-        cache.updateCache(response)
+        cache.updateCache(response, "\"catalog-v1\"")
         
         assertThat(cache.hasData()).isTrue()
         
@@ -133,14 +133,14 @@ class ToggleCacheTest {
     @Test
     fun `should be thread safe`() {
         val toggles = listOf(createToggle(path = "user"))
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         val response = ServerResponse(app)
         
         // Simulate concurrent access
         val threads = (1..10).map { threadId ->
             Thread {
                 repeat(100) {
-                    cache.updateCache(response)
+                    cache.updateCache(response, "\"catalog-v1\"")
                     cache.getToggle("user")
                     cache.hasToggle("user")
                     cache.getStats()

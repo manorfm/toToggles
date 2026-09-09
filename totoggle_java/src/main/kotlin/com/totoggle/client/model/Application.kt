@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
  * @property id Unique identifier for the application
  * @property name Display name of the application
  * @property toggles List of toggles belonging to this application
+ * @property revision Opaque, deterministic catalogue revision returned by the server
  */
 data class Application(
     @JsonProperty("id")
@@ -17,7 +18,10 @@ data class Application(
     val name: String,
     
     @JsonProperty("toggles")
-    val toggles: List<Toggle>
+    val toggles: List<Toggle>,
+
+    @JsonProperty("revision")
+    val revision: String = ""
 ) {
     
     /**

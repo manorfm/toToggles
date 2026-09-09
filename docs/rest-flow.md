@@ -1022,13 +1022,16 @@ X-API-Key: sk_9f1c...
 
 `404` if the key is unknown; otherwise returns the owning application plus a simplified toggle list (no nested
 `parent`/`children` objects — just `id`, `value`, `enabled`, `path`, `level`, `parent_id`, `app_id`,
-`has_activation_rule`, `activation_rule`):
+`has_activation_rule`, `activation_rule`). `application.revision` is a deterministic opaque catalogue revision;
+the same revision is returned as a quoted `ETag` response header. It is safe for SDK polling to retain, but is
+not a secret and must be treated as opaque:
 
 ```json
 {
   "application": {
     "id": "01APP0000000000000000001",
     "name": "Checkout Web",
+    "revision": "7c5c5f3e...",
     "toggles": [
       {
         "id": "01TGL0000000000000000001",
@@ -1045,6 +1048,15 @@ X-API-Key: sk_9f1c...
   }
 }
 ```
+
+Clients may send the previously received tag in `If-None-Match` (quoted, weak, or as one member of an
+entity-tag list). After successful secret-key authentication, a matching revision returns `304 Not Modified`
+with the same `ETag` and no JSON body. A missing or invalid secret key is still evaluated before the conditional
+request and never receives an `ETag` or `304` response.
+
+Catalogue synchronization uses authenticated conditional polling. SSE was evaluated but is not exposed by
+this secret-header API: a browser-style event stream cannot safely preserve the same credential boundary, so
+SDKs retain bounded-backoff polling as the portable fallback.
 
 Note this endpoint returns each toggle's own `enabled` value, not the hierarchy-resolved effective value —
 consumers that need cascading behavior must apply it client-side (parent disabled ⇒ treat descendants as

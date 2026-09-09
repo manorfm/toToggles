@@ -356,6 +356,7 @@ val config = ToToggleConfig.builder()
     .serverUrl("https://your-server.com")
     .secretKey("sk_your_secret_key")
     .refreshInterval(Duration.ofMinutes(5))
+    .refreshBackoffMax(Duration.ofMinutes(80))
     .connectionTimeout(Duration.ofSeconds(10))
     .enableOfflineMode(true)
     .logLevel(LogLevel.INFO)
@@ -365,6 +366,18 @@ val config = ToToggleConfig.builder()
     .timeZone(ZoneId.of("America/Sao_Paulo"))
     .build()
 ```
+
+### Efficient catalogue synchronization
+
+The client retains the HTTP `ETag` returned for a catalogue and sends it as `If-None-Match` on
+the next refresh. A bodyless `304 Not Modified` keeps the current snapshot and revision, updates
+freshness, and resets the retry sequence. A `200` replaces the snapshot; its optional
+`application.revision` is diagnostic metadata only. `ETag` and revision values are never logged.
+
+Background refresh uses bounded exponential backoff with jitter after failures and returns to the
+configured base interval after `200` or `304`. Polling is the supported synchronization transport:
+SSE is intentionally not enabled because the public SDK authentication contract uses the secret
+header and must retain the same authenticated polling fallback.
 
 ### Observability
 

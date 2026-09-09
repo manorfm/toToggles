@@ -47,7 +47,7 @@ resolver.
 | 3 | Trusted IP and country extraction | Complete |
 | 4 | Non-HTTP identity, cohort, and attributes | Complete |
 | 5 | Remove legacy APIs and dead code | Complete |
-| 6 | Efficient catalog synchronization | Planned |
+| 6 | Efficient catalog synchronization | Complete |
 | 7 | E2E coverage and final documentation | Planned |
 
 ## Tasks
@@ -94,9 +94,10 @@ resolver.
 
 ### Wave 6 — Catalog synchronization
 
-- [ ] Add catalog `revision` and `ETag`.
-- [ ] Implement `If-None-Match`/`304`, jitter, and exponential backoff in every SDK.
-- [ ] Evaluate SSE with polling fallback.
+- [x] Add catalog `revision` and `ETag`.
+- [x] Implement `If-None-Match`/`304`, jitter, and exponential backoff in every SDK.
+- [x] Evaluate SSE with polling fallback; retained authenticated conditional polling because this
+  secret-header API cannot offer an equivalent portable SSE credential boundary.
 
 ### Wave 7 — Verification and docs
 

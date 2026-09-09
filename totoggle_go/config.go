@@ -9,8 +9,10 @@ import (
 
 const (
 	defaultRefreshInterval   = 5 * time.Minute
+	defaultBackoffMultiplier = 16
 	defaultHTTPTimeout       = 10 * time.Second
 	defaultEnableOfflineMode = true
+	maxDuration              = time.Duration(1<<63 - 1)
 )
 
 // Config is the validated configuration for a Client. Build one with NewConfig — its fields are
@@ -21,6 +23,7 @@ type Config struct {
 	ServerURL         string
 	SecretKey         string
 	RefreshInterval   time.Duration
+	RefreshBackoffMax time.Duration
 	HTTPTimeout       time.Duration
 	EnableOfflineMode bool
 	TimeZone          *time.Location
@@ -39,6 +42,12 @@ type Option func(*Config)
 // WithRefreshInterval sets how often the client re-fetches toggles from the server. Default: 5m.
 func WithRefreshInterval(d time.Duration) Option {
 	return func(c *Config) { c.RefreshInterval = d }
+}
+
+// WithRefreshBackoffMax caps background retry delays after failed refreshes. Retry delays use
+// exponential backoff with bounded jitter and reset to RefreshInterval after a 200 or 304.
+func WithRefreshBackoffMax(d time.Duration) Option {
+	return func(c *Config) { c.RefreshBackoffMax = d }
 }
 
 // WithHTTPTimeout sets the HTTP client's request timeout, when no HTTPClient is supplied via
@@ -102,11 +111,24 @@ func NewConfig(applicationName, serverURL, secretKey string, opts ...Option) (*C
 	if cfg.RefreshInterval <= 0 {
 		return nil, fmt.Errorf("%w: refresh interval must be positive", ErrInvalidConfig)
 	}
+	if cfg.RefreshBackoffMax == 0 {
+		cfg.RefreshBackoffMax = multipliedDuration(cfg.RefreshInterval, defaultBackoffMultiplier)
+	}
+	if cfg.RefreshBackoffMax < cfg.RefreshInterval {
+		return nil, fmt.Errorf("%w: refresh backoff maximum must not be less than refresh interval", ErrInvalidConfig)
+	}
 	if cfg.HTTPTimeout <= 0 {
 		return nil, fmt.Errorf("%w: HTTP timeout must be positive", ErrInvalidConfig)
 	}
 
 	return cfg, nil
+}
+
+func multipliedDuration(d time.Duration, multiplier int) time.Duration {
+	if d > maxDuration/time.Duration(multiplier) {
+		return maxDuration
+	}
+	return d * time.Duration(multiplier)
 }
 
 // apiURL is the full toggles endpoint derived from ServerURL.

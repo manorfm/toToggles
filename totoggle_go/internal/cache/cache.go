@@ -16,14 +16,17 @@ type Stats struct {
 	LastErrorAt         time.Time
 	LastError           error
 	ConsecutiveFailures int
+	ETag                string
+	Revision            string
 }
 
 // Cache is a thread-safe holder of the latest successfully fetched Application plus refresh
 // health. A failed refresh is recorded but never replaces the data a prior success stored.
 type Cache struct {
-	mu    sync.RWMutex
-	app   toggle.Application
-	stats Stats
+	mu         sync.RWMutex
+	app        toggle.Application
+	stats      Stats
+	hasCatalog bool
 }
 
 // New returns an empty Cache — no data until the first Update.
@@ -31,14 +34,34 @@ func New() *Cache {
 	return &Cache{}
 }
 
-// Update replaces the cached Application after a successful fetch and resets the failure streak.
-func (c *Cache) Update(app toggle.Application) {
+// UpdateCatalog replaces the cached Application and records the validator metadata returned
+// with its representation. An absent ETag means a later request is intentionally unconditional.
+func (c *Cache) UpdateCatalog(app toggle.Application, etag, revision string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.app = app
+	c.hasCatalog = true
 	c.stats.ToggleCount = len(app.Toggles)
 	c.stats.LastSuccessAt = time.Now()
 	c.stats.ConsecutiveFailures = 0
+	c.stats.ETag = etag
+	c.stats.Revision = revision
+}
+
+// RecordFreshness records a successful 304 revalidation without replacing the cached snapshot.
+// A 304 is allowed to omit ETag; in that case the prior validator remains valid.
+func (c *Cache) RecordFreshness(etag string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.hasCatalog {
+		return false
+	}
+	c.stats.LastSuccessAt = time.Now()
+	c.stats.ConsecutiveFailures = 0
+	if etag != "" {
+		c.stats.ETag = etag
+	}
+	return true
 }
 
 // RecordFailure tracks a failed refresh attempt without touching the cached data.
@@ -75,4 +98,5 @@ func (c *Cache) Clear() {
 	defer c.mu.Unlock()
 	c.app = toggle.Application{}
 	c.stats = Stats{}
+	c.hasCatalog = false
 }

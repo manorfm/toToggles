@@ -2,7 +2,10 @@ package totoggle
 
 import (
 	"context"
+	"errors"
 	"log"
+	"math/rand/v2"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,11 +25,13 @@ const staleThresholdIntervals = 2
 // a secret key, caches it in memory, and evaluates IsActive/IsActiveContext entirely from that cache
 // — no network access on the evaluation hot path.
 type Client struct {
-	cfg      *Config
-	fetcher  *serverapi.Fetcher
-	cache    *cache.Cache
-	registry *strategy.Registry
-	metrics  *metricsRegistry
+	cfg       *Config
+	fetcher   *serverapi.Fetcher
+	cache     *cache.Cache
+	registry  *strategy.Registry
+	metrics   *metricsRegistry
+	timing    refreshTiming
+	refreshMu sync.Mutex
 
 	started  atomic.Bool
 	shutdown atomic.Bool
@@ -35,16 +40,57 @@ type Client struct {
 	refreshDone chan struct{}
 }
 
+// refreshTiming keeps scheduling and jitter at the client boundary so the refresh algorithm can
+// be tested deterministically without sleeping. It is intentionally not request context and
+// cannot expose headers, secrets, or evaluated values.
+type refreshTiming struct {
+	wait   func(stop <-chan struct{}, delay time.Duration) bool
+	jitter func(spread time.Duration) time.Duration
+}
+
 // New builds a Client from an already-validated Config (see NewConfig). Call Start before using
 // it — IsActive/IsActiveContext fail closed to false until then.
 func New(cfg *Config) *Client {
+	return newClientWithRefreshTiming(cfg, defaultRefreshTiming())
+}
+
+func newClientWithRefreshTiming(cfg *Config, timing refreshTiming) *Client {
+	if timing.wait == nil {
+		timing.wait = waitForRefresh
+	}
+	if timing.jitter == nil {
+		timing.jitter = randomJitter
+	}
 	return &Client{
 		cfg:      cfg,
 		fetcher:  serverapi.NewFetcher(cfg.httpClient(), cfg.apiURL(), cfg.SecretKey),
 		cache:    cache.New(),
 		registry: newStrategyRegistry(cfg.TimeZone),
 		metrics:  newMetricsRegistry(),
+		timing:   timing,
 	}
+}
+
+func defaultRefreshTiming() refreshTiming {
+	return refreshTiming{wait: waitForRefresh, jitter: randomJitter}
+}
+
+func waitForRefresh(stop <-chan struct{}, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-stop:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func randomJitter(spread time.Duration) time.Duration {
+	if spread <= 0 {
+		return 0
+	}
+	return time.Duration((rand.Float64()*2 - 1) * float64(spread))
 }
 
 // newStrategyRegistry registers one Evaluator per activation-rule type the server supports.
@@ -91,29 +137,73 @@ func (c *Client) Start(ctx context.Context) error {
 
 func (c *Client) refreshLoop() {
 	defer close(c.refreshDone)
-	ticker := time.NewTicker(c.cfg.RefreshInterval)
-	defer ticker.Stop()
+	delay := c.cfg.RefreshInterval
 	for {
-		select {
-		case <-c.stopRefresh:
+		if !c.timing.wait(c.stopRefresh, delay) {
 			return
-		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), c.cfg.HTTPTimeout)
-			_ = c.refreshOnce(ctx)
-			cancel()
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), c.cfg.HTTPTimeout)
+		err := c.refreshOnce(ctx)
+		cancel()
+		if err == nil {
+			delay = c.cfg.RefreshInterval
+			continue
+		}
+		delay = c.backoffDelay(c.cache.Stats().ConsecutiveFailures)
 	}
 }
 
+func (c *Client) backoffDelay(failures int) time.Duration {
+	delay := c.cfg.RefreshInterval
+	for attempt := 1; attempt < failures && delay < c.cfg.RefreshBackoffMax; attempt++ {
+		if delay > c.cfg.RefreshBackoffMax/2 {
+			delay = c.cfg.RefreshBackoffMax
+		} else {
+			delay *= 2
+		}
+	}
+	if delay > c.cfg.RefreshBackoffMax {
+		delay = c.cfg.RefreshBackoffMax
+	}
+
+	spread := delay / 5
+	offset := c.timing.jitter(spread)
+	if offset > spread {
+		offset = spread
+	} else if offset < -spread {
+		offset = -spread
+	}
+	if offset > 0 && delay > c.cfg.RefreshBackoffMax-offset {
+		return c.cfg.RefreshBackoffMax
+	}
+	if delay+offset > c.cfg.RefreshBackoffMax {
+		return c.cfg.RefreshBackoffMax
+	}
+	return delay + offset
+}
+
 func (c *Client) refreshOnce(ctx context.Context) error {
-	app, err := c.fetcher.Fetch(ctx)
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	stats := c.cache.Stats()
+	result, err := c.fetcher.Fetch(ctx, stats.ETag)
 	if err != nil {
 		c.cache.RecordFailure(err)
 		c.metrics.notifyRefreshFailure(err, c.cache.Stats().ConsecutiveFailures)
 		return err
 	}
-	c.cache.Update(app)
-	c.metrics.notifyRefreshSuccess(len(app.Toggles))
+	if result.NotModified {
+		if !c.cache.RecordFreshness(result.ETag) {
+			err := errors.New("totoggle: received 304 before an initial catalog snapshot")
+			c.cache.RecordFailure(err)
+			c.metrics.notifyRefreshFailure(err, c.cache.Stats().ConsecutiveFailures)
+			return err
+		}
+		c.metrics.notifyRefreshSuccess(stats.ToggleCount)
+		return nil
+	}
+	c.cache.UpdateCatalog(result.Application, result.ETag, result.Revision)
+	c.metrics.notifyRefreshSuccess(len(result.Application.Toggles))
 	return nil
 }
 

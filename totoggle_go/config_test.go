@@ -18,6 +18,7 @@ func TestNewConfig_ValidMinimalConfig_AppliesDefaults(t *testing.T) {
 	assert.Equal(t, "https://toggles.example.com", cfg.ServerURL)
 	assert.Equal(t, "sk_abc123", cfg.SecretKey)
 	assert.Equal(t, 5*time.Minute, cfg.RefreshInterval)
+	assert.Equal(t, 80*time.Minute, cfg.RefreshBackoffMax)
 	assert.Equal(t, 10*time.Second, cfg.HTTPTimeout)
 	assert.True(t, cfg.EnableOfflineMode)
 	assert.Equal(t, time.Local, cfg.TimeZone)
@@ -57,6 +58,14 @@ func TestNewConfig_NonPositiveRefreshInterval_Fails(t *testing.T) {
 	_, err := NewConfig("app", "https://toggles.example.com", "sk_abc123", WithRefreshInterval(0))
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrInvalidConfig))
+}
+
+func TestNewConfig_RefreshBackoffMaxMustNotBeLessThanRefreshInterval(t *testing.T) {
+	_, err := NewConfig("app", "https://toggles.example.com", "sk_abc123",
+		WithRefreshInterval(time.Minute),
+		WithRefreshBackoffMax(30*time.Second),
+	)
+	require.ErrorIs(t, err, ErrInvalidConfig)
 }
 
 func TestNewConfig_WithHTTPTimeout(t *testing.T) {

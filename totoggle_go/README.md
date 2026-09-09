@@ -62,6 +62,7 @@ wrong — a blank field, a secret key not starting with `sk_`, or a non-positive
 | Option | Default | |
 |---|---|---|
 | `WithRefreshInterval(time.Duration)` | `5m` | How often to re-fetch toggles from the server. |
+| `WithRefreshBackoffMax(time.Duration)` | `16 × RefreshInterval` | Upper bound for exponential retry delays after failed background refreshes. Each delay has bounded ±20% jitter. |
 | `WithHTTPTimeout(time.Duration)` | `10s` | Timeout for the whole fetch request. Ignored if `WithHTTPClient` is set. |
 | `WithHTTPClient(*http.Client)` | — | Use your own client (shared connection pooling/instrumentation) instead of one built from `WithHTTPTimeout`. |
 | `WithOfflineMode(bool)` | `true` | Keep serving the last successfully fetched data when the server becomes unreachable. |
@@ -201,6 +202,23 @@ refresh, and that data isn't stale), `client.IsStale()`, `client.LastError()`,
 `client.Refresh(ctx)` forces an immediate fetch outside the configured interval and returns
 whatever error it hit — unlike the background refresh loop (which only records failures for the
 getters above), a caller explicitly asking for fresh data now gets a real answer.
+
+## Catalog synchronization
+
+After its first successful catalog response, the SDK retains its HTTP `ETag` and sends it as
+`If-None-Match` on later fetches. A `304 Not Modified` response is a successful freshness update:
+the existing immutable catalog remains in use and the failure streak resets. A `200` response
+replaces the catalog and may include the server's optional `application.revision` for diagnostics.
+Neither the ETag nor revision is logged by the SDK.
+
+Background refreshes wait for `RefreshInterval` following a `200` or `304`. Consecutive failures
+use exponential backoff up to `WithRefreshBackoffMax`, with bounded jitter; a manual `Refresh`
+still executes immediately. This protects the toggle service during an outage while preserving
+the last known-good catalog for local evaluation.
+
+Polling is the supported synchronization transport. SSE was evaluated but is not exposed by this
+secret-header API because it cannot preserve the same authenticated credential boundary with a
+portable client fallback.
 
 ## Testing
 

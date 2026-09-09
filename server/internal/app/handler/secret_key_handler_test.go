@@ -349,6 +349,190 @@ func TestGetTogglesBySecret_ValidSecret(t *testing.T) {
 	}
 }
 
+func TestGetTogglesBySecret_ExposesCanonicalRevisionWithoutSecretMaterial(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+	plainKey := createCatalogueFixture(t, db)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+	req.Header.Set("X-API-Key", plainKey)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	etag := w.Header().Get("ETag")
+	if len(etag) < 3 || etag[0] != '"' || etag[len(etag)-1] != '"' {
+		t.Fatalf("expected a quoted ETag, got %q", etag)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	application, ok := response["application"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected application object, got %#v", response["application"])
+	}
+	revision, ok := application["revision"].(string)
+	if !ok || revision == "" {
+		t.Fatalf("expected a non-empty application revision, got %#v", application["revision"])
+	}
+	if etag != `"`+revision+`"` {
+		t.Fatalf("expected ETag to contain response revision, got %q and %q", etag, revision)
+	}
+	if strings.Contains(w.Body.String(), plainKey) {
+		t.Fatal("catalogue response must never contain secret key material")
+	}
+}
+
+func TestGetTogglesBySecret_ReturnsNotModifiedForMatchingWeakOrListedETag(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+	plainKey := createCatalogueFixture(t, db)
+
+	first := httptest.NewRecorder()
+	initialRequest := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+	initialRequest.Header.Set("X-API-Key", plainKey)
+	router.ServeHTTP(first, initialRequest)
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected initial status 200, got %d", first.Code)
+	}
+
+	for _, ifNoneMatch := range []string{first.Header().Get("ETag"), "W/" + first.Header().Get("ETag"), `"other", ` + first.Header().Get("ETag"), "*"} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+		req.Header.Set("X-API-Key", plainKey)
+		req.Header.Set("If-None-Match", ifNoneMatch)
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotModified {
+			t.Errorf("If-None-Match %q: expected status 304, got %d", ifNoneMatch, w.Code)
+		}
+		if w.Body.Len() != 0 {
+			t.Errorf("If-None-Match %q: expected empty 304 body, got %q", ifNoneMatch, w.Body.String())
+		}
+		if w.Header().Get("ETag") != first.Header().Get("ETag") {
+			t.Errorf("If-None-Match %q: expected response ETag %q, got %q", ifNoneMatch, first.Header().Get("ETag"), w.Header().Get("ETag"))
+		}
+	}
+}
+
+func TestGetTogglesBySecret_RevisionChangesOnlyWhenVisibleCatalogueChanges(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+	plainKey := createCatalogueFixture(t, db)
+
+	readRevision := func() string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+		req.Header.Set("X-API-Key", plainKey)
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", w.Code)
+		}
+		var response struct {
+			Application struct {
+				Revision string `json:"revision"`
+			} `json:"application"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		return response.Application.Revision
+	}
+
+	initial := readRevision()
+	if same := readRevision(); same != initial {
+		t.Fatalf("revision must be stable when catalogue is unchanged: %q != %q", same, initial)
+	}
+
+	var toggle entity.Toggle
+	if err := db.Where("id = ?", "catalogue-toggle").First(&toggle).Error; err != nil {
+		t.Fatalf("load fixture toggle: %v", err)
+	}
+	toggle.Enabled = false
+	if err := db.Save(&toggle).Error; err != nil {
+		t.Fatalf("disable fixture toggle: %v", err)
+	}
+	afterState := readRevision()
+	if afterState == initial {
+		t.Fatal("revision must change when a visible toggle state changes")
+	}
+
+	toggle.ActivationRule = &entity.ActivationRule{
+		Type:   entity.ActivationRuleTypeAttribute,
+		Value:  "premium",
+		Config: json.RawMessage(`{"context_key":"attributes.plan"}`),
+	}
+	toggle.HasActivationRule = true
+	if err := db.Save(&toggle).Error; err != nil {
+		t.Fatalf("set fixture rule: %v", err)
+	}
+	afterRule := readRevision()
+	if afterRule == afterState {
+		t.Fatal("revision must change when visible rule context configuration changes")
+	}
+
+	if err := db.Model(&entity.Application{}).Where("id = ?", "catalogue-app").Update("name", "Renamed Catalogue").Error; err != nil {
+		t.Fatalf("rename application: %v", err)
+	}
+	if afterApplicationChange := readRevision(); afterApplicationChange == afterRule {
+		t.Fatal("revision must change when a visible application field changes")
+	}
+}
+
+func TestGetTogglesBySecret_DoesNotEvaluateConditionalRequestBeforeAuthentication(t *testing.T) {
+	router, db := setupSecretKeyTestRouter()
+	plainKey := createCatalogueFixture(t, db)
+
+	valid := httptest.NewRecorder()
+	validRequest := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+	validRequest.Header.Set("X-API-Key", plainKey)
+	router.ServeHTTP(valid, validRequest)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+	req.Header.Set("If-None-Match", valid.Header().Get("ETag"))
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated conditional request to return 401, got %d", w.Code)
+	}
+	if w.Header().Get("ETag") != "" {
+		t.Fatalf("unauthenticated response must not expose catalogue revision, got %q", w.Header().Get("ETag"))
+	}
+
+	invalid := httptest.NewRecorder()
+	invalidRequest := httptest.NewRequest(http.MethodGet, "/api/toggles", nil)
+	invalidRequest.Header.Set("X-API-Key", "not-a-valid-key")
+	invalidRequest.Header.Set("If-None-Match", valid.Header().Get("ETag"))
+	router.ServeHTTP(invalid, invalidRequest)
+	if invalid.Code != http.StatusNotFound {
+		t.Fatalf("expected invalid conditional request to return 404, got %d", invalid.Code)
+	}
+	if invalid.Header().Get("ETag") != "" {
+		t.Fatalf("invalid-key response must not expose catalogue revision, got %q", invalid.Header().Get("ETag"))
+	}
+}
+
+func createCatalogueFixture(t *testing.T, db *gorm.DB) string {
+	t.Helper()
+	if err := db.Create(&entity.Application{ID: "catalogue-app", Name: "Catalogue App"}).Error; err != nil {
+		t.Fatalf("create application: %v", err)
+	}
+	secretKey := &entity.SecretKey{ID: "catalogue-key", Name: "Catalogue Key", ApplicationID: "catalogue-app", CreatedBy: "test-user-id", Active: true}
+	plainKey, err := secretKey.SetSecretKey()
+	if err != nil {
+		t.Fatalf("create secret: %v", err)
+	}
+	if err := db.Create(secretKey).Error; err != nil {
+		t.Fatalf("persist secret: %v", err)
+	}
+	if err := db.Create(&entity.Toggle{ID: "catalogue-toggle", Path: "catalogue.feature", Enabled: true, AppID: "catalogue-app", Value: "feature", Level: 1}).Error; err != nil {
+		t.Fatalf("create toggle: %v", err)
+	}
+	return plainKey
+}
+
 func TestSecretKeyRegeneration(t *testing.T) {
 	// Create separate router for this test to avoid database conflicts
 	gin.SetMode(gin.TestMode)

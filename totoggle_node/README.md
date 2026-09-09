@@ -52,7 +52,7 @@ throws `TotoggleConfigError` if something's wrong — a blank field, a secret ke
 
 | Option | Default | |
 |---|---|---|
-| `refreshIntervalMs` | `300_000` (5m) | How often to re-fetch toggles from the server. |
+| `refreshIntervalMs` | `300_000` (5m) | Base delay for a background catalog refresh. Successful refreshes use this delay; failures use bounded exponential backoff with jitter. |
 | `httpTimeoutMs` | `10_000` (10s) | Timeout for a single fetch request. |
 | `enableOfflineMode` | `true` | Keep serving the last successfully fetched data when the server becomes unreachable. |
 | `timeZone` | the runtime's own zone | IANA zone (e.g. `"America/Sao_Paulo"`) `time` activation rules (`"09:00-18:00"` windows) are evaluated in — the rule is documented as "24h window in server timezone," and a client has no way to know that zone on its own. |
@@ -155,6 +155,24 @@ refresh, and that data isn't stale), `client.isStale()`, `client.lastError()`,
 `client.refresh()` forces an immediate fetch outside the configured interval and rejects with
 whatever error it hit — unlike the background refresh loop (which only records failures for the
 getters above), a caller explicitly asking for fresh data now gets a real answer.
+
+## Efficient catalog synchronization
+
+After a successful catalog response, the client retains its HTTP `ETag` and sends it as
+`If-None-Match` on the next refresh. A bodyless `304 Not Modified` is a successful refresh: the
+last known-good snapshot remains in place, its freshness timestamp is updated, and the failure
+backoff resets. A `200` response replaces the snapshot and may include the optional
+`application.revision` field for catalog diagnostics; refresh correctness relies on the standard
+HTTP `ETag`, not on that revision.
+
+The server must return `ETag` on `200` responses and honor `If-None-Match` with `304` when the
+catalog is unchanged. Transient failures never replace cached flags. Instead, they retry with
+bounded exponential backoff plus jitter; the normal base delay is restored after either `200` or
+`304`.
+
+Polling is the supported synchronization transport. SSE was evaluated but is not exposed by this
+secret-header API, because it cannot preserve the same authenticated credential boundary with a
+portable client fallback.
 
 ## Testing
 

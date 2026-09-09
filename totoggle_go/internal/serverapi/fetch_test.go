@@ -44,13 +44,13 @@ func TestFetcher_Fetch_SendsSecretKeyHeaderAndParsesToggles(t *testing.T) {
 	defer srv.Close()
 
 	fetcher := NewFetcher(nil, srv.URL, "sk_test123")
-	app, err := fetcher.Fetch(context.Background())
+	result, err := fetcher.Fetch(context.Background(), "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "sk_test123", gotHeader)
-	require.Len(t, app.Toggles, 2)
+	require.Len(t, result.Application.Toggles, 2)
 
-	t2, ok := app.ByPath(mustPath(t, "user.payments"))
+	t2, ok := result.Application.ByPath(mustPath(t, "user.payments"))
 	require.True(t, ok)
 	require.NotNil(t, t2.ActivationRule)
 	assert.Equal(t, "50", t2.ActivationRule.Value)
@@ -63,7 +63,7 @@ func TestFetcher_Fetch_UnauthorizedReturnsErrAuthentication(t *testing.T) {
 	defer srv.Close()
 
 	fetcher := NewFetcher(nil, srv.URL, "sk_bad")
-	_, err := fetcher.Fetch(context.Background())
+	_, err := fetcher.Fetch(context.Background(), "")
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrAuthentication))
@@ -78,7 +78,7 @@ func TestFetcher_Fetch_ErrorNeverLeaksTheSecretKey(t *testing.T) {
 	defer srv.Close()
 
 	fetcher := NewFetcher(nil, srv.URL, "sk_supersecret")
-	_, err := fetcher.Fetch(context.Background())
+	_, err := fetcher.Fetch(context.Background(), "")
 
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "sk_supersecret")
@@ -91,7 +91,7 @@ func TestFetcher_Fetch_ServerErrorStatus(t *testing.T) {
 	defer srv.Close()
 
 	fetcher := NewFetcher(nil, srv.URL, "sk_test")
-	_, err := fetcher.Fetch(context.Background())
+	_, err := fetcher.Fetch(context.Background(), "")
 	require.Error(t, err)
 }
 
@@ -102,7 +102,7 @@ func TestFetcher_Fetch_MalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	fetcher := NewFetcher(nil, srv.URL, "sk_test")
-	_, err := fetcher.Fetch(context.Background())
+	_, err := fetcher.Fetch(context.Background(), "")
 	require.Error(t, err)
 }
 
@@ -116,6 +116,42 @@ func TestFetcher_Fetch_RespectsContextCancellation(t *testing.T) {
 	defer cancel()
 
 	fetcher := NewFetcher(nil, srv.URL, "sk_test")
-	_, err := fetcher.Fetch(ctx)
+	_, err := fetcher.Fetch(ctx, "")
 	require.Error(t, err)
+}
+
+func TestFetcher_Fetch_UsesETagForConditionalNotModifiedResponse(t *testing.T) {
+	var gotIfNoneMatch string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotIfNoneMatch = r.Header.Get("If-None-Match")
+		w.Header().Set("ETag", `"catalog-v1"`)
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer srv.Close()
+
+	fetcher := NewFetcher(nil, srv.URL, "sk_test")
+	result, err := fetcher.Fetch(context.Background(), `"catalog-v1"`)
+
+	require.NoError(t, err)
+	assert.Equal(t, `"catalog-v1"`, gotIfNoneMatch)
+	assert.True(t, result.NotModified)
+	assert.Equal(t, `"catalog-v1"`, result.ETag)
+	assert.Empty(t, result.Application.Toggles)
+}
+
+func TestFetcher_Fetch_RecordsETagAndCatalogRevisionFrom200Response(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"catalog-v2"`)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"application":{"revision":"2","toggles":[]}}`))
+	}))
+	defer srv.Close()
+
+	fetcher := NewFetcher(nil, srv.URL, "sk_test")
+	result, err := fetcher.Fetch(context.Background(), "")
+
+	require.NoError(t, err)
+	assert.False(t, result.NotModified)
+	assert.Equal(t, `"catalog-v2"`, result.ETag)
+	assert.Equal(t, "2", result.Revision)
 }

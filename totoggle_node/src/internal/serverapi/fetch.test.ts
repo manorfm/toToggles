@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TotoggleAuthenticationError } from "../../errors.js";
 import { Path } from "../toggle/path.js";
 import { fetchToggles } from "./fetch.js";
@@ -20,6 +20,7 @@ function listen(handler: (req: IncomingMessage, res: ServerResponse) => void): P
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   server?.close();
   server = undefined;
 });
@@ -64,12 +65,39 @@ describe("fetchToggles", () => {
       );
     });
 
-    const app = await fetchToggles(`${url}/api/toggles`, "sk_test123", 1000);
+    const result = await fetchToggles(`${url}/api/toggles`, "sk_test123", 1000);
 
     expect(receivedKey).toBe("sk_test123");
-    expect(app.toggles).toHaveLength(2);
-    const t2 = app.byPath(Path.parse("user.payments"));
+    expect(result.status).toBe("modified");
+    if (result.status !== "modified") throw new Error("expected modified result");
+    expect(result.application.toggles).toHaveLength(2);
+    const t2 = result.application.byPath(Path.parse("user.payments"));
     expect(t2?.activationRule).toEqual({ type: "percentage", value: "50" });
+  });
+
+  it("sends the last ETag as If-None-Match and returns the response revision", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ application: { id: "app-1", name: "x", revision: "v2", toggles: [] } }),
+      { status: 200, headers: { "Content-Type": "application/json", ETag: '"catalog-v2"' } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchToggles("https://toggles.example/api/toggles", "sk_test", 1000, '"catalog-v1"');
+
+    expect(fetchMock.mock.calls[0]![1].headers).toMatchObject({ "If-None-Match": '"catalog-v1"' });
+    expect(result).toMatchObject({ status: "modified", etag: '"catalog-v2"', revision: "v2" });
+  });
+
+  it("accepts a bodyless 304 as a successful not-modified response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, {
+      status: 304,
+      headers: { ETag: '"catalog-v1"' },
+    })));
+
+    await expect(fetchToggles("https://toggles.example/api/toggles", "sk_test", 1000, '"catalog-v1"')).resolves.toEqual({
+      status: "not-modified",
+      etag: '"catalog-v1"',
+    });
   });
 
   it("throws TotoggleAuthenticationError on 404", async () => {

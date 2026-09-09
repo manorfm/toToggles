@@ -15,6 +15,15 @@ import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+/** The result of a conditional catalogue request. */
+sealed interface ToggleFetchResult {
+    /** A new immutable catalogue representation returned by HTTP 200. */
+    data class Modified(val response: ServerResponse, val etag: String?) : ToggleFetchResult
+
+    /** HTTP 304: retain the current snapshot; the validator is optional on this response. */
+    data class NotModified(val etag: String?) : ToggleFetchResult
+}
+
 /**
  * HTTP client for communicating with the ToToggle server.
  * Handles authentication, requests, and response parsing.
@@ -42,13 +51,16 @@ class HttpClient(private val config: ToToggleConfig) {
      * @throws AuthenticationException if authentication fails
      * @throws ParseException if the response cannot be parsed
      */
-    fun fetchToggles(): ServerResponse {
+    fun fetchToggles(ifNoneMatch: String? = null): ToggleFetchResult {
         logger.debug("Fetching toggle catalogue")
         
         val request = Request.Builder()
             .url(config.getApiUrl())
             .addHeader("X-API-Key", config.secretKey)
             .addHeader("User-Agent", "ToToggle-Java-Client/1.0.0 (${config.applicationName})")
+            .apply {
+                if (ifNoneMatch != null) addHeader("If-None-Match", ifNoneMatch)
+            }
             .get()
             .build()
         
@@ -65,10 +77,10 @@ class HttpClient(private val config: ToToggleConfig) {
     /**
      * Handles the HTTP response and parses it into a ServerResponse.
      */
-    private fun handleResponse(response: Response): ServerResponse {
+    private fun handleResponse(response: Response): ToggleFetchResult {
         logger.debug("Received response: status={}, contentLength={}", response.code, response.body?.contentLength())
         
-        when (response.code) {
+        return when (response.code) {
             200 -> {
                 val responseBody = response.body?.string()
                     ?: throw ParseException("Empty response body")
@@ -80,12 +92,17 @@ class HttpClient(private val config: ToToggleConfig) {
                 logger.debug("Received a toggle catalogue response body of {} characters", responseBody.length)
                 
                 return try {
-                    objectMapper.readValue<ServerResponse>(responseBody)
+                    val parsed = objectMapper.readValue<ServerResponse>(responseBody)
+                    val etag = response.header("ETag")?.takeIf(::isSafeQuotedETag)
+                    ToggleFetchResult.Modified(parsed, etag)
                 } catch (e: Exception) {
+                    if (e is ParseException) throw e
                     logger.error("Failed to parse server response")
                     throw ParseException("Failed to parse server response", e)
                 }
             }
+
+            304 -> ToggleFetchResult.NotModified(response.header("ETag")?.takeIf(::isSafeQuotedETag))
             
             401 -> {
                 logger.error("Authentication failed - invalid secret key")
@@ -117,4 +134,11 @@ class HttpClient(private val config: ToToggleConfig) {
         httpClient.connectionPool.evictAll()
         logger.debug("HTTP client closed")
     }
+
+    private fun isSafeQuotedETag(value: String): Boolean =
+        value.length in 2..1024 &&
+            value.first() == '"' &&
+            value.last() == '"' &&
+            value.none { it.code in 0..31 || it.code == 127 }
+
 }

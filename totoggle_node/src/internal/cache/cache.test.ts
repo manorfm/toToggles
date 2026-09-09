@@ -20,6 +20,15 @@ function toggle(path: string, overrides: Partial<Toggle> = {}): Toggle {
 }
 
 describe("Cache", () => {
+  it("uses the injected clock for deterministic refresh timestamps", () => {
+    const now = new Date("2026-01-02T03:04:05.000Z");
+    const cache = new Cache(() => now);
+
+    cache.update(new Application([]));
+
+    expect(cache.stats().lastSuccessAt).toEqual(now);
+  });
+
   it("stores an Application and records success stats on update", () => {
     const cache = new Cache();
     const before = Date.now();
@@ -31,6 +40,36 @@ describe("Cache", () => {
     expect(stats.lastSuccessAt).not.toBeNull();
     expect(stats.lastSuccessAt!.getTime()).toBeGreaterThanOrEqual(before);
     expect(stats.consecutiveFailures).toBe(0);
+  });
+
+  it("keeps the ETag and revision with the current snapshot", () => {
+    const cache = new Cache();
+
+    cache.update(new Application([toggle("t1")]), { etag: '"catalog-v1"', revision: "1" });
+
+    expect(cache.catalog()).toEqual({ etag: '"catalog-v1"', revision: "1" });
+  });
+
+  it("treats a 304 as success without replacing the cached snapshot", () => {
+    const cache = new Cache();
+    const app = new Application([toggle("t1")]);
+    cache.update(app, { etag: '"catalog-v1"', revision: "1" });
+    cache.recordFailure(new Error("temporary failure"));
+
+    cache.markNotModified({ etag: '"catalog-v1"' });
+
+    expect(cache.get(Path.parse("t1"))?.target.id).toBe("t1");
+    expect(cache.catalog()).toEqual({ etag: '"catalog-v1"', revision: "1" });
+    expect(cache.stats().consecutiveFailures).toBe(0);
+  });
+
+  it("keeps the prior ETag when a 304 omits an ETag header", () => {
+    const cache = new Cache();
+    cache.update(new Application([toggle("t1")]), { etag: '"catalog-v1"' });
+
+    cache.markNotModified({ etag: undefined });
+
+    expect(cache.catalog()).toEqual({ etag: '"catalog-v1"' });
   });
 
   it("get returns the target and its ancestors", () => {

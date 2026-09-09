@@ -10,6 +10,11 @@ export interface CacheStats {
   readonly consecutiveFailures: number;
 }
 
+export interface CatalogVersion {
+  readonly etag?: string;
+  readonly revision?: string;
+}
+
 export interface CacheLookup {
   readonly target: Toggle;
   readonly ancestors: readonly Toggle[];
@@ -32,14 +37,33 @@ const EMPTY_STATS: CacheStats = {
 export class Cache {
   private app: Application = new Application([]);
   private currentStats: CacheStats = EMPTY_STATS;
+  private currentCatalog: CatalogVersion = {};
+
+  constructor(private readonly now: () => Date = () => new Date()) {}
 
   /** Replaces the cached Application after a successful fetch and resets the failure streak. */
-  update(app: Application): void {
+  update(app: Application, catalog: CatalogVersion = {}): void {
     this.app = app;
+    this.currentCatalog = catalog;
     this.currentStats = {
       ...this.currentStats,
       toggleCount: app.toggles.length,
-      lastSuccessAt: new Date(),
+      lastSuccessAt: this.now(),
+      consecutiveFailures: 0,
+    };
+  }
+
+  /** Records a successful conditional fetch without disturbing the known-good snapshot. */
+  markNotModified(catalog: Pick<CatalogVersion, "etag"> = {}): void {
+    if (this.currentStats.lastSuccessAt === null) {
+      throw new Error("totoggle: received 304 before an initial catalog snapshot");
+    }
+    if (catalog.etag !== undefined) {
+      this.currentCatalog = { ...this.currentCatalog, etag: catalog.etag };
+    }
+    this.currentStats = {
+      ...this.currentStats,
+      lastSuccessAt: this.now(),
       consecutiveFailures: 0,
     };
   }
@@ -48,7 +72,7 @@ export class Cache {
   recordFailure(error: Error): void {
     this.currentStats = {
       ...this.currentStats,
-      lastErrorAt: new Date(),
+      lastErrorAt: this.now(),
       lastError: error,
       consecutiveFailures: this.currentStats.consecutiveFailures + 1,
     };
@@ -68,10 +92,16 @@ export class Cache {
     return this.currentStats;
   }
 
+  /** The HTTP validator and optional server revision for the current snapshot. */
+  catalog(): CatalogVersion {
+    return this.currentCatalog;
+  }
+
   /** Discards all cached data and health stats, returning the Cache to its just-constructed
    * state. */
   clear(): void {
     this.app = new Application([]);
     this.currentStats = EMPTY_STATS;
+    this.currentCatalog = {};
   }
 }

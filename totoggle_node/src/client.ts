@@ -10,6 +10,22 @@ import { PercentageEvaluator } from "./internal/strategy/percentage.js";
 import { IpEvaluator } from "./internal/strategy/ip.js";
 import { TimeWindowEvaluator } from "./internal/strategy/timewindow.js";
 
+export interface RefreshScheduler {
+  schedule(callback: () => void, delayMs: number): unknown;
+  cancel(handle: unknown): void;
+}
+
+export interface ToToggleClientRuntime {
+  /** Test seam for deterministic refresh health timestamps. */
+  readonly now?: () => Date;
+  /** Test seam for deterministic bounded refresh jitter. Must return a value in [0, 1). */
+  readonly random?: () => number;
+  /** Test seam for deterministic delayed background work. */
+  readonly scheduler?: RefreshScheduler;
+}
+
+const DEFAULT_MAX_REFRESH_BACKOFF_MS = 60 * 60 * 1000;
+
 /** The cache is considered stale once this many refresh intervals have passed with no
  * successful update — e.g. with the default 5-minute interval, no successful refresh in 10
  * minutes. Only actually reachable under enableOfflineMode, since otherwise a failing refresh
@@ -38,18 +54,33 @@ function buildRegistry(timeZone: string | undefined): Registry {
  * network access on the evaluation hot path.
  */
 export class ToToggleClient {
-  private readonly cache = new Cache();
+  private readonly cache: Cache;
   private readonly registry: Registry;
   private readonly metrics = new MetricsDispatcher();
   private readonly apiUrl: string;
 
   private started = false;
   private shutdownFlag = false;
-  private refreshTimer: NodeJS.Timeout | undefined;
+  private refreshTimer: unknown;
+  private refreshInFlight: Promise<void> | undefined;
+  private readonly now: () => Date;
+  private readonly random: () => number;
+  private readonly scheduler: RefreshScheduler;
 
-  constructor(private readonly config: Config) {
+  constructor(private readonly config: Config, runtime: ToToggleClientRuntime = {}) {
     this.apiUrl = toApiUrl(config);
     this.registry = buildRegistry(config.timeZone);
+    this.now = runtime.now ?? (() => new Date());
+    this.random = runtime.random ?? Math.random;
+    this.scheduler = runtime.scheduler ?? {
+      schedule: (callback, delayMs) => {
+        const timer = setTimeout(callback, delayMs);
+        timer.unref();
+        return timer;
+      },
+      cancel: (handle) => clearTimeout(handle as NodeJS.Timeout),
+    };
+    this.cache = new Cache(this.now);
   }
 
   /**
@@ -77,22 +108,63 @@ export class ToToggleClient {
       return;
     }
 
-    this.refreshTimer = setInterval(() => {
-      void this.refreshOnce().catch(() => {
-        // The background loop only records into cache.stats(); it never propagates.
-      });
-    }, this.config.refreshIntervalMs);
-    this.refreshTimer.unref(); // don't keep the process alive just for this timer
+    this.scheduleRefresh();
+  }
+
+  private scheduleRefresh(): void {
+    if (this.shutdownFlag || !this.started) return;
+    if (this.refreshTimer !== undefined) this.scheduler.cancel(this.refreshTimer);
+    this.refreshTimer = this.scheduler.schedule(() => {
+      this.refreshTimer = undefined;
+      void this.refreshOnce()
+        .catch(() => {
+          // The background loop records failures for observability but never propagates.
+        })
+        .finally(() => this.scheduleRefresh());
+    }, this.nextRefreshDelay());
+  }
+
+  private nextRefreshDelay(): number {
+    const failures = this.cache.stats().consecutiveFailures;
+    if (failures === 0) return this.config.refreshIntervalMs;
+    const maxDelay = Math.max(this.config.refreshIntervalMs, DEFAULT_MAX_REFRESH_BACKOFF_MS);
+    const exponentialDelay = Math.min(
+      maxDelay,
+      this.config.refreshIntervalMs * 2 ** Math.min(failures - 1, 30),
+    );
+    const randomValue = this.random();
+    const sampled = Number.isFinite(randomValue) ? randomValue : 0.5;
+    return Math.max(1, Math.min(maxDelay, Math.floor(exponentialDelay * (0.5 + Math.max(0, Math.min(sampled, 0.999999))))));
   }
 
   private async refreshOnce(): Promise<void> {
+    if (this.refreshInFlight !== undefined) return this.refreshInFlight;
+    const refresh = this.performRefreshOnce();
+    this.refreshInFlight = refresh;
     try {
-      const app = await fetchToggles(this.apiUrl, this.config.secretKey, this.config.httpTimeoutMs);
+      await refresh;
+    } finally {
+      if (this.refreshInFlight === refresh) this.refreshInFlight = undefined;
+    }
+  }
+
+  private async performRefreshOnce(): Promise<void> {
+    try {
+      const result = await fetchToggles(
+        this.apiUrl,
+        this.config.secretKey,
+        this.config.httpTimeoutMs,
+        this.cache.catalog().etag,
+      );
       if (this.shutdownFlag) {
         return;
       }
-      this.cache.update(app);
-      this.metrics.notifyRefreshSuccess(app.toggles.length);
+      if (result.status === "not-modified") {
+        this.cache.markNotModified({ etag: result.etag });
+      } else {
+        this.cache.update(result.application, { etag: result.etag, revision: result.revision });
+      }
+      this.metrics.notifyRefreshSuccess(this.cache.stats().toggleCount);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       if (!this.shutdownFlag) {
@@ -115,7 +187,13 @@ export class ToToggleClient {
     if (!this.started) {
       throw new Error("totoggle: client must be started before use");
     }
-    await this.refreshOnce();
+    try {
+      await this.refreshOnce();
+    } finally {
+      // A caller-triggered failure participates in the same retry policy as background work.
+      // Replacing the pending timer avoids a fixed-rate retry racing a backed-off refresh.
+      this.scheduleRefresh();
+    }
   }
 
   /**
@@ -217,7 +295,7 @@ export class ToToggleClient {
       return true;
     }
     const thresholdMs = this.config.refreshIntervalMs * STALE_THRESHOLD_INTERVALS;
-    return Date.now() - stats.lastSuccessAt.getTime() > thresholdMs;
+    return this.now().getTime() - stats.lastSuccessAt.getTime() > thresholdMs;
   }
 
   /** The error from the most recent failed refresh, or null if there hasn't been one (yet). */
@@ -249,8 +327,9 @@ export class ToToggleClient {
       return;
     }
     this.shutdownFlag = true;
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
+    if (this.refreshTimer !== undefined) {
+      this.scheduler.cancel(this.refreshTimer);
+      this.refreshTimer = undefined;
     }
     this.cache.clear();
   }

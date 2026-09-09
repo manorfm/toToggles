@@ -26,17 +26,21 @@ class ToggleCache {
     
     @Volatile
     private var togglesByPath: Map<String, Toggle> = emptyMap()
+
+    @Volatile
+    private var catalogue: CatalogueVersion? = null
     
     /**
      * Updates the cache with new data from the server.
      * 
      * @param response The server response containing application and toggles
      */
-    fun updateCache(response: ServerResponse) {
+    fun updateCache(response: ServerResponse, etag: String?, updatedAt: Instant = Instant.now()) {
         lock.write {
             try {
                 cachedApplication = response.application
-                lastUpdateTime = Instant.now()
+                lastUpdateTime = updatedAt
+                catalogue = etag?.let { CatalogueVersion(etag = it, revision = response.application.revision) }
                 
                 // Build a quick lookup map for toggles by path
                 togglesByPath = response.application.toggles.associateBy { it.path }
@@ -56,6 +60,20 @@ class ToggleCache {
             }
         }
     }
+
+    /** Records a successful 304 without replacing the last known-good snapshot or revision. */
+    fun markFresh(etag: String?, updatedAt: Instant = Instant.now()) {
+        lock.write {
+            check(cachedApplication != null) { "Cannot revalidate an empty cache" }
+            lastUpdateTime = updatedAt
+            if (etag != null) {
+                catalogue = catalogue?.copy(etag = etag)
+            }
+        }
+    }
+
+    /** Returns a stable copy of the HTTP validator and server revision for the current snapshot. */
+    fun getCatalogueVersion(): CatalogueVersion? = lock.read { catalogue }
     
     /**
      * Gets a toggle by its path.
@@ -161,10 +179,17 @@ class ToggleCache {
             cachedApplication = null
             lastUpdateTime = null
             togglesByPath = emptyMap()
+            catalogue = null
             logger.info("Cache cleared")
         }
     }
 }
+
+/** HTTP validator metadata bound to one immutable cached catalogue representation. */
+data class CatalogueVersion(
+    val etag: String,
+    val revision: String,
+)
 
 /**
  * Cache statistics for monitoring.

@@ -12,7 +12,7 @@ class ApplicationTest {
             createToggle(path = "user.payments"),
             createToggle(path = "user.payments.view-table")
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         
         val found = app.findToggleByPath("user.payments")
         val notFound = app.findToggleByPath("nonexistent")
@@ -31,7 +31,7 @@ class ApplicationTest {
             createToggle(path = "admin", level = 0),
             createToggle(path = "admin.users", level = 1)
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         
         val ancestors = app.getAncestorsOf("user.payments.view-table")
         
@@ -45,7 +45,7 @@ class ApplicationTest {
         val toggles = listOf(
             createToggle(path = "user", level = 0)
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         
         val ancestors = app.getAncestorsOf("user")
         
@@ -61,7 +61,7 @@ class ApplicationTest {
             createToggle(path = "user.payments.view-table", level = 2),
             createToggle(path = "admin", level = 0)
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         
         val children = app.getChildrenOf("user")
         
@@ -76,7 +76,7 @@ class ApplicationTest {
             createToggle(path = "admin", level = 0),
             createToggle(path = "user.payments", level = 1)
         )
-        val app = Application("app-id", "Test App", toggles)
+        val app = Application("app-id", "Test App", toggles, "revision-1")
         
         val rootToggles = app.getRootToggles()
         

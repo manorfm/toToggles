@@ -4,19 +4,20 @@ import com.totoggle.client.cache.ToggleCache
 import com.totoggle.client.config.ToToggleConfig
 import com.totoggle.client.exception.NetworkException
 import com.totoggle.client.http.HttpClient
+import com.totoggle.client.http.ToggleFetchResult
 import com.totoggle.client.metrics.ToToggleMetricsListener
 import com.totoggle.client.model.Toggle
+import com.totoggle.client.refresh.ScheduledRefresh
 import com.totoggle.client.strategy.StrategyFactory
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * Main client class for interacting with the ToToggle feature flag service.
@@ -44,7 +45,10 @@ import java.util.concurrent.atomic.AtomicReference
  * client.shutdown()
  * ```
  */
-class ToToggleClient(private val config: ToToggleConfig) {
+class ToToggleClient(
+    private val config: ToToggleConfig,
+    private val runtime: ToToggleClientRuntime = ToToggleClientRuntime.production(config.applicationName),
+) {
 
     companion object {
         // A cache is considered stale once this many refresh intervals have passed with no
@@ -61,17 +65,17 @@ class ToToggleClient(private val config: ToToggleConfig) {
     private val strategyFactory = StrategyFactory(config.timeZone)
     private val metricsListeners = CopyOnWriteArrayList<ToToggleMetricsListener>()
 
-    private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "ToToggle-Refresh-${config.applicationName}").apply {
-            isDaemon = true
-        }
-    }
+    private val scheduler = runtime.scheduler
+    @Volatile private var scheduledRefresh: ScheduledRefresh? = null
+    private val schedulingLock = ReentrantLock()
+    private var refreshScheduleGeneration = 0L
 
     private val isStarted = AtomicBoolean(false)
     private val isShutdown = AtomicBoolean(false)
     private val lastError = AtomicReference<Exception?>()
     private val lastErrorTime = AtomicReference<Instant?>()
     private val consecutiveFailureCount = AtomicInteger(0)
+    private val refreshLock = ReentrantLock()
     
     /**
      * Starts the ToToggle client.
@@ -92,13 +96,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
         // Initial fetch
         refreshToggles()
         
-        // Schedule periodic refresh
-        scheduler.scheduleAtFixedRate(
-            { refreshToggles() },
-            config.refreshInterval.toMillis(),
-            config.refreshInterval.toMillis(),
-            TimeUnit.MILLISECONDS
-        )
+        scheduleRefresh()
         
         logger.info("ToToggle client started successfully. Refresh interval: {}", config.refreshInterval)
     }
@@ -230,6 +228,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
     fun refresh() {
         validateStarted()
         refreshToggles()
+        scheduleRefresh()
     }
     
     /**
@@ -268,7 +267,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
     fun isStale(): Boolean {
         val lastUpdate = cache.getLastUpdateTime() ?: return true
         val staleThreshold = config.refreshInterval.multipliedBy(STALE_THRESHOLD_INTERVALS.toLong())
-        return Duration.between(lastUpdate, Instant.now()) > staleThreshold
+        return Duration.between(lastUpdate, runtime.now()) > staleThreshold
     }
 
     /**
@@ -292,15 +291,12 @@ class ToToggleClient(private val config: ToToggleConfig) {
         
         logger.info("Shutting down ToToggle client")
         
-        try {
-            scheduler.shutdown()
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow()
-            }
-        } catch (e: InterruptedException) {
-            scheduler.shutdownNow()
-            Thread.currentThread().interrupt()
+        schedulingLock.withLock {
+            refreshScheduleGeneration++
+            scheduledRefresh?.cancel()
+            scheduledRefresh = null
         }
+        scheduler.close()
         
         httpClient.close()
         cache.clear()
@@ -311,18 +307,61 @@ class ToToggleClient(private val config: ToToggleConfig) {
     /**
      * Refreshes toggle data from the server.
      */
-    private fun refreshToggles() {
+    private fun scheduleRefresh() {
+        schedulingLock.withLock {
+            if (!isStarted.get() || isShutdown.get()) return
+            scheduledRefresh?.cancel()
+            val generation = ++refreshScheduleGeneration
+            scheduledRefresh = scheduler.schedule(
+                { runScheduledRefresh(generation) },
+                nextRefreshDelay(),
+            )
+        }
+    }
+
+    private fun runScheduledRefresh(generation: Long) {
+        val shouldRefresh = schedulingLock.withLock {
+            if (generation != refreshScheduleGeneration || isShutdown.get()) {
+                false
+            } else {
+                scheduledRefresh = null
+                true
+            }
+        }
+        if (!shouldRefresh) return
+        refreshToggles()
+        scheduleRefresh()
+    }
+
+    private fun nextRefreshDelay(): Duration {
+        if (consecutiveFailureCount.get() == 0) return config.refreshInterval
+        var delay = config.refreshInterval
+        repeat((consecutiveFailureCount.get() - 1).coerceAtMost(30)) {
+            delay = delay.multipliedBy(2).coerceAtMost(config.refreshBackoffMax)
+        }
+        val sampled = runtime.random().takeIf { it.isFinite() }?.coerceIn(0.0, 0.999999) ?: 0.5
+        val factorMicros = ((0.8 + 0.4 * sampled) * 1_000_000).toLong()
+        return delay.multipliedBy(factorMicros).dividedBy(1_000_000).coerceAtMost(config.refreshBackoffMax)
+    }
+
+    private fun refreshToggles(): Boolean = refreshLock.withLock {
         try {
             logger.debug("Refreshing toggles from server")
-            val response = httpClient.fetchToggles()
-            cache.updateCache(response)
+            when (val response = httpClient.fetchToggles(cache.getCatalogueVersion()?.etag)) {
+                is ToggleFetchResult.Modified -> cache.updateCache(response.response, response.etag, runtime.now())
+                is ToggleFetchResult.NotModified -> {
+                    if (!cache.hasData()) throw NetworkException("Received 304 before an initial catalogue")
+                    cache.markFresh(response.etag, runtime.now())
+                }
+            }
             lastError.set(null)
             consecutiveFailureCount.set(0)
-            notifyRefreshSuccess(response.application.toggles.size)
+            notifyRefreshSuccess(cache.getStats().toggleCount)
+            return true
 
         } catch (e: NetworkException) {
             lastError.set(e)
-            lastErrorTime.set(Instant.now())
+            lastErrorTime.set(runtime.now())
             val failures = consecutiveFailureCount.incrementAndGet()
 
             if (config.enableOfflineMode && cache.hasData()) {
@@ -331,13 +370,15 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 logger.error("Network error during refresh and no cached data available", e)
             }
             notifyRefreshFailure(e, failures)
+            return false
 
         } catch (e: Exception) {
             lastError.set(e)
-            lastErrorTime.set(Instant.now())
+            lastErrorTime.set(runtime.now())
             val failures = consecutiveFailureCount.incrementAndGet()
             logger.error("Unexpected error during refresh", e)
             notifyRefreshFailure(e, failures)
+            return false
         }
     }
 

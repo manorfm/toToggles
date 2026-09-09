@@ -5,6 +5,8 @@ import com.totoggle.client.config.ToToggleConfig
 import com.totoggle.client.exception.AuthenticationException
 import com.totoggle.client.exception.NetworkException
 import com.totoggle.client.exception.ParseException
+import com.totoggle.client.http.ToggleFetchResult.Modified
+import com.totoggle.client.http.ToggleFetchResult.NotModified
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.core.read.ListAppender
@@ -76,18 +78,56 @@ class HttpClientTest {
             .setBody(responseBody)
             .setHeader("Content-Type", "application/json"))
         
-        val response = httpClient.fetchToggles()
+        val response = httpClient.fetchToggles() as Modified
         
-        assertThat(response.application.id).isEqualTo("app-123")
-        assertThat(response.application.name).isEqualTo("Test App")
-        assertThat(response.application.toggles).hasSize(1)
-        assertThat(response.application.toggles[0].path).isEqualTo("user.payments")
+        assertThat(response.response.application.id).isEqualTo("app-123")
+        assertThat(response.response.application.name).isEqualTo("Test App")
+        assertThat(response.response.application.toggles).hasSize(1)
+        assertThat(response.response.application.toggles[0].path).isEqualTo("user.payments")
         
         val request = mockServer.takeRequest()
         assertThat(request.path).isEqualTo("/api/toggles")
         assertThat(request.getHeader("X-API-Key")).isEqualTo("sk_test_key")
         assertThat(request.getHeader("User-Agent")).contains("ToToggle-Java-Client/1.0.0")
         assertThat(request.getHeader("User-Agent")).contains("test-app")
+    }
+
+    @Test
+    fun `should retain the quoted ETag and catalogue revision returned by a 200 response`() {
+        mockServer.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setHeader("ETag", "\"catalog-v7\"")
+            .setBody("""{"application":{"id":"app-123","name":"Test App","revision":"revision-7","toggles":[]}}"""))
+
+        val result = httpClient.fetchToggles()
+
+        assertThat(result).isInstanceOf(Modified::class.java)
+        val modified = result as Modified
+        assertThat(modified.etag).isEqualTo("\"catalog-v7\"")
+        assertThat(modified.response.application.revision).isEqualTo("revision-7")
+    }
+
+    @Test
+    fun `should send a prior ETag and treat an empty 304 response as successful revalidation`() {
+        mockServer.enqueue(MockResponse()
+            .setResponseCode(304)
+            .setHeader("ETag", "\"catalog-v7\""))
+
+        val result = httpClient.fetchToggles("\"catalog-v7\"")
+
+        assertThat(result).isInstanceOf(NotModified::class.java)
+        assertThat((result as NotModified).etag).isEqualTo("\"catalog-v7\"")
+        assertThat(mockServer.takeRequest().getHeader("If-None-Match")).isEqualTo("\"catalog-v7\"")
+    }
+
+    @Test
+    fun `should accept a 200 response without a catalogue validator`() {
+        mockServer.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setBody("""{"application":{"id":"app-123","name":"Test App","revision":"revision-7","toggles":[]}}"""))
+
+        val result = httpClient.fetchToggles() as Modified
+        assertThat(result.etag).isNull()
     }
     
     @Test
@@ -144,11 +184,11 @@ class HttpClientTest {
             .setBody(responseBody)
             .setHeader("Content-Type", "application/json"))
 
-        val response = httpClient.fetchToggles()
+        val response = httpClient.fetchToggles() as Modified
 
-        assertThat(response.application.toggles).hasSize(2)
-        assertThat(response.application.toggles[0].activationRule).isNull()
-        assertThat(response.application.toggles[1].activationRule?.type).isEqualTo("percentage")
+        assertThat(response.response.application.toggles).hasSize(2)
+        assertThat(response.response.application.toggles[0].activationRule).isNull()
+        assertThat(response.response.application.toggles[1].activationRule?.type).isEqualTo("percentage")
     }
 
     @Test

@@ -67,7 +67,10 @@ func newTestClient(t *testing.T, serverURL string, opts ...Option) *Client {
 
 type testContextResolver struct{ values map[string]string }
 
-func (p *testContextResolver) Resolve(_ context.Context, key string) (string, bool) { value, ok := p.values[key]; return value, ok }
+func (p *testContextResolver) Resolve(_ context.Context, key string) (string, bool) {
+	value, ok := p.values[key]
+	return value, ok
+}
 
 func TestClient_Start_FetchesInitialDataSynchronously(t *testing.T) {
 	srv, hits := jsonServer(t, applicationJSON(
@@ -194,6 +197,112 @@ func TestClient_Refresh_ForcesAnImmediateFetch(t *testing.T) {
 
 	require.NoError(t, client.Refresh(context.Background()))
 	assert.Equal(t, int32(2), atomic.LoadInt32(hits))
+}
+
+func TestClient_Refresh_NotModifiedKeepsCacheAndResetsFailures(t *testing.T) {
+	var requests int32
+	var gotIfNoneMatch string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&requests, 1) == 1 {
+			w.Header().Set("ETag", `"catalog-v1"`)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(applicationJSON(toggleJSON("1", "user", "user", true, 0, "", false, "", ""))))
+			return
+		}
+		gotIfNoneMatch = r.Header.Get("If-None-Match")
+		if atomic.LoadInt32(&requests) == 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("ETag", `"catalog-v1"`)
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour))
+	require.NoError(t, client.Start(context.Background()))
+	t.Cleanup(client.Shutdown)
+	require.Error(t, client.Refresh(context.Background()))
+	require.Equal(t, 1, client.ConsecutiveFailureCount())
+
+	require.NoError(t, client.Refresh(context.Background()))
+	assert.Equal(t, `"catalog-v1"`, gotIfNoneMatch)
+	assert.Zero(t, client.ConsecutiveFailureCount())
+	assert.True(t, client.IsActive("user"))
+}
+
+func TestClient_BackoffDelay_IsBoundedAndUsesInjectedJitter(t *testing.T) {
+	cfg, err := NewConfig("test-app", "https://example.test", "sk_test123",
+		WithRefreshInterval(100*time.Millisecond),
+		WithRefreshBackoffMax(250*time.Millisecond),
+	)
+	require.NoError(t, err)
+	client := newClientWithRefreshTiming(cfg, refreshTiming{
+		wait:   func(<-chan struct{}, time.Duration) bool { return false },
+		jitter: func(spread time.Duration) time.Duration { return spread },
+	})
+
+	assert.Equal(t, 120*time.Millisecond, client.backoffDelay(1))
+	assert.Equal(t, 240*time.Millisecond, client.backoffDelay(2))
+	assert.Equal(t, 250*time.Millisecond, client.backoffDelay(3))
+}
+
+func TestClient_BackgroundRefresh_BackoffResetsAfterNotModified(t *testing.T) {
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch atomic.AddInt32(&requests, 1) {
+		case 1:
+			w.Header().Set("ETag", `"catalog-v1"`)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(applicationJSON(toggleJSON("1", "user", "user", true, 0, "", false, "", ""))))
+		case 2, 3:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case 4:
+			w.Header().Set("ETag", `"catalog-v1"`)
+			w.WriteHeader(http.StatusNotModified)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	ready := make(chan time.Duration, 5)
+	continueRefresh := make(chan struct{})
+	timing := refreshTiming{
+		wait: func(stop <-chan struct{}, delay time.Duration) bool {
+			select {
+			case ready <- delay:
+			case <-stop:
+				return false
+			}
+			select {
+			case <-continueRefresh:
+				return true
+			case <-stop:
+				return false
+			}
+		},
+		jitter: func(time.Duration) time.Duration { return 0 },
+	}
+	cfg, err := NewConfig("test-app", srv.URL, "sk_test123",
+		WithRefreshInterval(100*time.Millisecond),
+		WithRefreshBackoffMax(400*time.Millisecond),
+	)
+	require.NoError(t, err)
+	client := newClientWithRefreshTiming(cfg, timing)
+	require.NoError(t, client.Start(context.Background()))
+	t.Cleanup(client.Shutdown)
+
+	for index, expectedDelay := range []time.Duration{
+		100 * time.Millisecond, // normal cadence after initial 200
+		100 * time.Millisecond, // first bounded retry delay
+		200 * time.Millisecond, // exponential delay after a second consecutive failure
+		100 * time.Millisecond, // normal cadence restored by 304
+	} {
+		require.Equal(t, expectedDelay, <-ready)
+		if index < 3 {
+			continueRefresh <- struct{}{}
+		}
+	}
+	assert.Zero(t, client.ConsecutiveFailureCount())
 }
 
 func TestClient_Refresh_BeforeStart_ReturnsErrNotStarted(t *testing.T) {
