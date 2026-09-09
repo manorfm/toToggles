@@ -9,7 +9,7 @@ import java.time.ZoneId
 class ToToggleConfigTest {
     
     @Test
-    fun `should create valid config with required parameters`() {
+    fun `should create valid config with required inputs`() {
         val config = ToToggleConfig(
             applicationName = "test-app",
             serverUrl = "https://example.com",

@@ -227,7 +227,7 @@ user or network data at each call site. The resolver exposes only the configured
 
 The SDK has no Servlet dependency. In an application using Jakarta Servlet, bind the context in a
 filter around the complete synchronous chain. The example obtains identity and attributes from
-application authentication services—not request headers or query parameters.
+application authentication services—not request headers or query-string data.
 
 ```kotlin
 class ToToggleContextFilter(

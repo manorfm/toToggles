@@ -259,7 +259,7 @@ func (h *ToggleHandler) UpdateToggle(c *gin.Context) {
 	if req.HasActivationRule && req.ActivationRule != nil {
 		// Confirmado no protótipo real (app.jsx#saveDrawer): "Set <b>{type}</b> rule" pra
 		// qualquer tipo, com um sufixo " to <b>{value}%</b>" só quando o tipo é percentage —
-		// os outros 6 tipos (parameter/user_id/canary/ip/country/time) não têm esse sufixo. O
+		// os outros 6 tipos (attribute/user_id/cohort/ip/country/time) não têm esse sufixo. O
 		// `<b>` é o marcador literal que lib/auditEvents.tsx#renderAuditText reconhece pra
 		// negrito real (nunca dangerouslySetInnerHTML) — não uma tag HTML de verdade sendo
 		// injetada.

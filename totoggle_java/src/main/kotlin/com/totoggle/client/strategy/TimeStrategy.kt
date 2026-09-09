@@ -10,7 +10,7 @@ import java.time.format.DateTimeParseException
 /**
  * Strategy for evaluating time-window activation rules.
  * The rule value is a "HH:mm-HH:mm" 24h window (confirmed hint: "24h time window in server
- * timezone", placeholder "09:00-18:00"). Needs no caller-supplied parameter — it compares
+ * timezone", placeholder "09:00-18:00"). Needs no request context — it compares
  * against the current time on [clock] (see ToToggleConfig#timeZone, threaded in via
  * StrategyFactory). An overnight window (start > end, e.g. "22:00-06:00") wraps past midnight.
  *
@@ -24,7 +24,7 @@ class TimeStrategy(private val clock: Clock = Clock.systemDefaultZone()) : Activ
 
     override fun evaluate(rule: ActivationRule): Boolean = evaluate(rule, null)
 
-    override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
+    override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean {
         val window = rule.value.split("-", limit = 2)
         if (window.size != 2) {
             logger.warn("Time strategy received an invalid window format")

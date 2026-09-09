@@ -16,22 +16,22 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 		mockToggleRepo := NewMockToggleRepository()
 		mockUserRepo := NewMockUserRepository()
 		mockTeamRepo := NewMockTeamRepository()
-		
+
 		// Create test application and toggles
 		appID := "test-app-123"
 		app := &entity.Application{ID: appID, Name: "Test App"}
 		mockAppRepo.Applications[appID] = app
-		
+
 		toggle1 := &entity.Toggle{ID: "toggle1", Path: "feature", AppID: appID}
 		toggle2 := &entity.Toggle{ID: "toggle2", Path: "feature.sub", AppID: appID}
 		mockToggleRepo.Toggles["toggle1"] = toggle1
 		mockToggleRepo.Toggles["toggle2"] = toggle2
-		
+
 		// Create use cases
 		teamUseCase := NewTeamUseCase(mockTeamRepo, mockUserRepo, mockAppRepo)
 		toggleUseCase := NewToggleUseCase(mockToggleRepo, mockAppRepo)
 		applicationUseCase := NewApplicationUseCase(mockAppRepo, mockToggleRepo)
-		
+
 		// Create a minimal ApprovalUseCase using only required dependencies
 		approvalUseCase := &ApprovalUseCase{
 			applicationRepo:    mockAppRepo,
@@ -42,7 +42,7 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 			toggleUseCase:      toggleUseCase,
 			applicationUseCase: applicationUseCase,
 		}
-		
+
 		// Create approval request for application deletion
 		request := &entity.ApprovalRequest{
 			ID:            "request-123",
@@ -53,23 +53,23 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 			ApplicationID: &appID,
 			Status:        entity.ApprovalStatusApproved,
 		}
-		
+
 		ctx := context.Background()
-		
+
 		// Execute the specific method that was modified
 		err := approvalUseCase.executeApplicationDeleteAction(ctx, request)
-		
+
 		// Verify
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
-		
+
 		// Check application was deleted
 		_, exists := mockAppRepo.Applications[appID]
 		if exists {
 			t.Error("Expected application to be deleted through approval")
 		}
-		
+
 		// v2.6 §4.1: Delete virou soft-delete — a linha continua no mapa (DeletedAt setado), a
 		// checagem que importa é a de baixo (GetByAppID já ignora soft-deletados).
 
@@ -82,30 +82,30 @@ func TestApprovalUseCase_ExecuteApplicationDeleteAction_Integration(t *testing.T
 			t.Errorf("Expected no toggles associated with deleted app, but found %d", len(togglesInApp))
 		}
 	})
-	
+
 	t.Run("should return error if application ID is missing", func(t *testing.T) {
 		// Setup minimal ApprovalUseCase
 		approvalUseCase := &ApprovalUseCase{
 			applicationUseCase: NewApplicationUseCase(NewMockApplicationRepository(), NewMockToggleRepository()),
 		}
-		
+
 		// Create approval request without application ID
 		request := &entity.ApprovalRequest{
 			ID:            "request-456",
 			ActionType:    entity.ApprovalActionApplicationDelete,
 			ApplicationID: nil, // Missing application ID
 		}
-		
+
 		ctx := context.Background()
-		
+
 		// Execute
 		err := approvalUseCase.executeApplicationDeleteAction(ctx, request)
-		
+
 		// Verify error
 		if err == nil {
 			t.Error("Expected error when application ID is missing")
 		}
-		
+
 		if err.Error() != "application ID is required for application deletion" {
 			t.Errorf("Expected specific error message, got: %s", err.Error())
 		}
@@ -171,16 +171,16 @@ func TestApprovalUseCase_NewConstructorWithApplicationUseCase(t *testing.T) {
 		mockToggleRepo := NewMockToggleRepository()
 		mockUserRepo := NewMockUserRepository()
 		mockTeamRepo := NewMockTeamRepository()
-		
+
 		teamUseCase := NewTeamUseCase(mockTeamRepo, mockUserRepo, mockAppRepo)
 		toggleUseCase := NewToggleUseCase(mockToggleRepo, mockAppRepo)
 		applicationUseCase := NewApplicationUseCase(mockAppRepo, mockToggleRepo)
-		
+
 		// This tests the new constructor signature with ApplicationUseCase and SecretKeyUseCase
 		// We use nil for missing approval-specific repositories since we're only testing the constructor
 		approvalUseCase := NewApprovalUseCase(
 			nil, // approvalRequestRepo - not relevant for this test
-			nil, // approvalSettingsRepo - not relevant for this test  
+			nil, // approvalSettingsRepo - not relevant for this test
 			nil, // teamApproverRepo - not relevant for this test
 			mockUserRepo,
 			mockTeamRepo,
@@ -188,24 +188,24 @@ func TestApprovalUseCase_NewConstructorWithApplicationUseCase(t *testing.T) {
 			mockToggleRepo,
 			teamUseCase,
 			toggleUseCase,
-			applicationUseCase, // This is the new parameter we added
-			nil, // secretKeyUseCase - not relevant for this test
-			nil, // auditUseCase - not relevant for this test
+			applicationUseCase, // Application use case dependency
+			nil,                // secretKeyUseCase - not relevant for this test
+			nil,                // auditUseCase - not relevant for this test
 		)
-		
+
 		// Verify
 		if approvalUseCase == nil {
 			t.Error("Expected ApprovalUseCase to be created")
 		}
-		
+
 		if approvalUseCase.applicationUseCase != applicationUseCase {
 			t.Error("Expected ApplicationUseCase to be set correctly")
 		}
-		
+
 		if approvalUseCase.teamUseCase != teamUseCase {
 			t.Error("Expected TeamUseCase to be set correctly")
 		}
-		
+
 		if approvalUseCase.toggleUseCase != toggleUseCase {
 			t.Error("Expected ToggleUseCase to be set correctly")
 		}

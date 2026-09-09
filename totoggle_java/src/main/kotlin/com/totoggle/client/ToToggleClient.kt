@@ -138,7 +138,7 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 // WARN, not debug: this always resolves to false and is almost always a caller
                 // mistake (a typo in the path, or asking before the first successful refresh
                 // completed) — the same class of "silent always-false" issue as evaluating a
-                // rule with a missing parameter (see StrategyFactory#evaluate).
+                // rule with missing request context (see StrategyFactory#evaluate).
                 logger.warn(
                     "Toggle not found: '{}' — isActive() returns false. Check for a typo, or " +
                         "that the toggle exists in the configured application ({} toggles currently cached).",

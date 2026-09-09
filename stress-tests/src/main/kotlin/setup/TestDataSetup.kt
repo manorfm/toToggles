@@ -157,9 +157,9 @@ object TestDataSetup {
                 value = listOf(10, 25, 50, 75, 90).random().toString()
             )
         } else {
-            // Parameter rule
+            // Attribute rule
             ActivationRule(
-                type = "parameter",
+                type = "attribute",
                 value = listOf("premium", "enterprise", "beta", "alpha", "vip").random()
             )
         }

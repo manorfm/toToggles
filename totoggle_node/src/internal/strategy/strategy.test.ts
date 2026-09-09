@@ -15,8 +15,8 @@ describe("Registry", () => {
     expect(stub.evaluate).toHaveBeenCalledWith({ type: "percentage", value: "50" }, "user-1");
   });
 
-  // undefined ("no parameter at all") must reach the evaluator distinct from an explicit empty
-  // string — the caller-facing difference between isActive() and isActiveFor(path, "").
+  // An unavailable context value must reach the evaluator distinct from an explicit empty
+  // string so evaluators can fail closed without conflating the two cases.
   it("propagates undefined distinct from an empty-string key", () => {
     const registry = new Registry();
     const stub: Evaluator = { evaluate: vi.fn(() => false) };

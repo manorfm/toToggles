@@ -46,7 +46,7 @@ resolver.
 | 2 | Request-local HTTP adapters | Complete |
 | 3 | Trusted IP and country extraction | Complete |
 | 4 | Non-HTTP identity, cohort, and attributes | Complete |
-| 5 | Remove legacy APIs and dead code | In progress |
+| 5 | Remove legacy APIs and dead code | Complete |
 | 6 | Efficient catalog synchronization | Planned |
 | 7 | E2E coverage and final documentation | Planned |
 
@@ -88,7 +88,8 @@ resolver.
 ### Wave 5 — Remove legacy code
 
 - [x] Removed Node `isActiveFor` and Java parameter overload.
-- [ ] Remove remaining `parameter`/`canary` names, files, tests, comments, and docs.
+- [x] Remove legacy rule-type/API names, files, tests, comments, and docs; retain only explicit
+  rejection coverage and textual cohort values such as `canary`.
 - [x] Complete Go API/documentation migration and run its full suite.
 
 ### Wave 6 — Catalog synchronization

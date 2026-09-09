@@ -4,10 +4,8 @@ package com.totoggle.client.strategy
  * Shared matching logic for rule types whose value is a comma-separated allowlist checked for
  * an exact (case-sensitive, trimmed) match against a caller-supplied context value.
  *
- * Per the confirmed rule-type hints (lib/activationRuleTypes.ts in the frontend, ported from the
- * real prototype), "parameter", "user_id", "country", and "canary" all share this exact shape:
- * "Comma-separated values/user IDs/country codes matched against ..." / "Activates for the
- * canary cohort only" (a single-value allowlist is the degenerate case of the same rule).
+ * Attribute, user ID, country, and cohort rules share this exact shape. A single cohort value is
+ * simply an allowlist with one entry.
  */
 internal fun matchesCommaSeparatedList(ruleValue: String, candidate: String?): Boolean {
     if (candidate == null) return false

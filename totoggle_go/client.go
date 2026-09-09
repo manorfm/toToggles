@@ -137,7 +137,7 @@ func (c *Client) requireUsable() error {
 	return nil
 }
 
-// IsActive reports whether the toggle at path is active, with no parameter for rule evaluation.
+// IsActive reports whether the toggle at path is active without caller-supplied rule context.
 // Implements cascading validation: every ancestor on the path from root to target must be
 // enabled; only the target's activation rule is evaluated. A toggle that doesn't exist, or a client that isn't started (or
 // has been shut down), fails closed to false.

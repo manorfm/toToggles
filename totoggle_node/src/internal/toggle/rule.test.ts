@@ -16,8 +16,8 @@ describe("ActivationRule", () => {
   });
 
   it.each([
-    ["both set", { type: "parameter", value: "premium" }, true],
-    ["type only", { type: "parameter", value: "" }, false],
+    ["both set", { type: "attribute", value: "premium" }, true],
+    ["type only", { type: "attribute", value: "" }, false],
     ["value only", { type: "", value: "premium" }, false],
     ["neither", { type: "", value: "" }, false],
   ] as const)("isValid: %s", (_label, rule, expected) => {
@@ -37,10 +37,5 @@ describe("ActivationRule", () => {
       "time",
       "cohort",
     ]);
-  });
-
-  it("does not retain the removed parameter rule type", () => {
-    expect(RULE_TYPES).not.toContain("parameter");
-    expect(RULE_TYPES).toContain("attribute");
   });
 });

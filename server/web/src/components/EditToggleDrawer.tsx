@@ -244,7 +244,7 @@ export function EditToggleDrawer({
                               placeholder={selectedRuleMeta.contextKeyEditable ? "rollout_key or attributes.account_id" : undefined}
                               onChange={(e) => setContextKey(e.target.value)}
                             />
-                            <div className="field-hint">The SDK resolves this value through its ToggleContextProvider.</div>
+                            <div className="field-hint">The SDK resolves this value through its request context resolver.</div>
                           </>
                         )}
                       </div>

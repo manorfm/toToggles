@@ -66,7 +66,7 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid canary rule",
+			name: "valid cohort rule",
 			rule: ActivationRule{
 				Type:   ActivationRuleTypeCohort,
 				Value:  "v2.0",
@@ -129,7 +129,7 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 			errorMsg:    "valor do tempo é obrigatório",
 		},
 		{
-			name: "empty canary value",
+			name: "empty cohort value",
 			rule: ActivationRule{
 				Type:  ActivationRuleTypeCohort,
 				Value: "",

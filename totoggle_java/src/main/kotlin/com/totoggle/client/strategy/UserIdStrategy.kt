@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory
 /**
  * Strategy for evaluating user-ID-based activation rules.
  * The rule value is a comma-separated allowlist of user IDs (confirmed hint: "Comma-separated
- * user IDs"); the caller passes the current user's ID as the `parameter`.
+ * user IDs"); the resolver supplies the current user's ID as a context value.
  */
 class UserIdStrategy : ActivationStrategy {
 
@@ -17,8 +17,8 @@ class UserIdStrategy : ActivationStrategy {
         return false
     }
 
-    override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
-        val result = matchesCommaSeparatedList(rule.value, parameter)
+    override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean {
+        val result = matchesCommaSeparatedList(rule.value, contextValue)
         logger.debug("User ID strategy evaluated: result={}", result)
         return result
     }

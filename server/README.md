@@ -10,8 +10,8 @@ A comprehensive feature toggle management platform built with Go and modern web 
 - **Hierarchical Feature Toggles**: Manage complex toggle hierarchies with parent-child relationships
 - **Conditional Activation Rules**: Advanced rule-based toggle activation with support for:
   - Percentage-based rollouts
-  - Canary releases
-  - Parameter-based targeting
+  - Cohort targeting
+  - Named attribute targeting
   - User ID targeting
   - IP address filtering
   - Country-based activation
@@ -192,7 +192,7 @@ The application follows Clean Architecture and Hexagonal Architecture principles
    - Edit toggles to access activation rules
    - Set conditional activation based on:
      - Percentage rollouts (e.g., 25% of users)
-     - Parameter values
+     - Named attribute values
      - User IDs, IP addresses, countries
      - Time-based activation
    - Combine rules for complex targeting
@@ -703,4 +703,4 @@ For questions, issues, or contributions, please open an issue on GitHub.
 - `GET    /change-password`            → Change password page (public)
 - `GET    /`                           → Serve frontend (protected)
 
---- 
+---

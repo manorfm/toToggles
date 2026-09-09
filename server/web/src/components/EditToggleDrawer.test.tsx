@@ -122,6 +122,20 @@ describe("EditToggleDrawer", () => {
     expect(screen.getByText("Cohort")).toBeInTheDocument();
   });
 
+  it("describes canonical request-context resolution for attribute rules", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
+    const user = userEvent.setup();
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    await screen.findByText("Status");
+
+    await user.click(screen.getByRole("button", { name: /activation rule/i }));
+    await user.click(screen.getByText("Attribute"));
+
+    expect(screen.getByText("The SDK resolves this value through its request context resolver.")).toBeInTheDocument();
+    expect(screen.queryByText(/ToggleContextProvider/)).not.toBeInTheDocument();
+  });
+
   it("saves enabled + activation rule and calls onSaved", async () => {
     const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
       if (init?.method === "PUT") {

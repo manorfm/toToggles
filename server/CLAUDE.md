@@ -85,12 +85,12 @@ ToToogle é uma plataforma completa de gerenciamento de feature toggles (feature
 - **Localização**: `internal/app/domain/entity/activation_rule.go`
 - **Tipos Suportados**:
   - `percentage`: Rollout percentual
-  - `parameter`: Baseado em parâmetros
+  - `attribute`: Baseado em atributo nomeado do contexto
   - `user_id`: Usuários específicos
   - `ip`: Endereços IP
   - `country`: Países específicos
   - `time`: Horários específicos
-  - `canary`: Releases canário
+  - `cohort`: Coortes/rings de deploy
 
 ### 6. SecretKey (Chaves de API)
 - **Localização**: `internal/app/domain/entity/secret_key.go`
@@ -774,15 +774,15 @@ substituíram um badge estático fictício ("build: passing" hardcoded, nunca li
     hint em português pros 7 tipos de regra porque, na época, `get_full_jsx("EditDrawer")` só
     mostrava a REFERÊNCIA a `RULE_TYPES` (o array em si vinha de `data.js`, um arquivo
     diferente, nunca puxado). Corrigido em `lib/activationRuleTypes.ts` pro texto real (inglês,
-    confirmado): nomes/descrições/placeholders/hints exatos, e a ORDEM real — **canary é o 4º
-    item, não o último** (`percentage, parameter, user_id, canary, ip, country, time`). Também
+    confirmado): nomes/descrições/placeholders/hints exatos, e a ORDEM real — **cohort é o 4º
+    item, não o último** (`percentage, attribute, user_id, cohort, ip, country, time`). Também
     achado: os cards de tipo de regra usavam o mesmo ícone genérico `"settings"` pros 7 — cada
     tipo tem um ícone confirmado próprio (`percent`, `sliders`, `user`, `rocket`, `globe`, `map`,
     `clock`), adicionados a `Icon.tsx` e ligados via um novo campo `icon` em `RuleTypeMeta`. O
     formato de UI em si (um único input de texto genérico rotulado "{Nome} value", cujo
     placeholder/hint mudam por tipo, em vez de campos estruturados por tipo) já batia com o
-    confirmado — o backend também só valida "não vazio" pra qualquer tipo
-    (`entity.ActivationRule.ValidateRule`), então não há formato obrigatório por trás.
+    confirmado — o backend valida o `config.context_key` canônico por tipo
+    (`entity.ActivationRule.ValidateRule`), então a UI não deve inventar uma alternativa legada.
 - ✅ **Toasts** (`components/ToastProvider.tsx`, montado uma vez em `App.tsx` envolvendo todas as
   rotas) — sistema de feedback transitório, achado ausente numa auditoria pedida pelo usuário
   ("o sistema atual não dá nenhum sinal, alerta quando cria, remove, etc"): antes, criar/apagar/

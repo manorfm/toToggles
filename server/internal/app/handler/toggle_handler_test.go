@@ -919,14 +919,14 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 			expectedError:  "",
 		},
 		{
-			name:     "successful_update_with_parameter_rule",
+			name:     "successful_update_with_attribute_rule",
 			appID:    "app123",
 			toggleID: "toggle123",
 			body: `{
 				"enabled": true,
 				"has_activation_rule": true,
 				"activation_rule": {
-					"type": "parameter",
+					"type": "attribute",
 					"value": "premium",
 					"config": {"context_key":"attributes.plan"}
 				}
@@ -944,6 +944,27 @@ func TestToggleHandler_UpdateToggleWithActivationRules(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedError:  "",
+		},
+		{
+			name:     "removed_parameter_rule_is_rejected",
+			appID:    "app123",
+			toggleID: "toggle123",
+			body: `{
+				"enabled": true,
+				"has_activation_rule": true,
+				"activation_rule": {
+					"type": "parameter",
+					"value": "premium",
+					"config": {"context_key":"attributes.plan"}
+				}
+			}`,
+			setupMock: func(toggleMock *usecase.MockToggleRepository, appMock *usecase.MockApplicationRepository) {
+				toggleMock.Toggles["toggle123"] = &entity.Toggle{
+					ID: "toggle123", Value: "test", Enabled: false, Path: "test.feature", Level: 0, AppID: "app123",
+				}
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "tipo de regra inválido: parameter",
 		},
 		{
 			name:     "successful_update_clear_activation_rule",

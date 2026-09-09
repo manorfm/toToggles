@@ -45,7 +45,7 @@ Main vocabulary:
 - Toggle: a node in a hierarchical, dot-separated path (e.g. `user.payments.view-table`). Children inherit
   only their parent's enabled state — a disabled parent makes every descendant effectively disabled even if the
   descendant's own `enabled` flag is `true`. Activation rules never inherit: only the exact toggle queried by an SDK evaluates its rule.
-- Activation rule: an optional extra condition attached to a toggle (`percentage`, `parameter`, `user_id`,
+- Activation rule: an optional extra condition attached to a toggle (`percentage`, `attribute`, `user_id`,
   `ip`, `country`, `time`, `cohort`) layered on top of the enabled/disabled state.
 - Team: a group of users. Owns applications through a permission (`read`, `write`, `admin`) and can have
   members marked as approvers for the approval workflow.
@@ -814,14 +814,19 @@ Approval-aware, minimum role `admin`. Full replace of the toggle's own `enabled`
   "activation_rule": {
     "type": "percentage",
     "value": "25",
-    "config": null
+    "config": { "context_key": "rollout_key" }
   }
 }
 ```
 
-Activation rule types (`type`) and their required `value` semantics: `percentage` (0–100 rollout of the population identified by a required SDK `rolloutKey`; it always means the matching percentage is on), `parameter`
-(match against SDK context), `user_id`, `ip`, `country`, `time`, `cohort` (a comma-separated cohort/ring list such as `canary,beta`, not a boolean) — every type requires a
-non-empty `value`; `config` is a free-form JSON blob for type-specific extra settings. When
+Activation rule types (`type`) and their required `value` semantics: `percentage` (0–100 rollout
+of the population identified by `rollout_key` or a named `attributes.<name>` key), `attribute`
+(match against a named `attributes.<name>` context value), `user_id`, `ip`, `country`, `time`,
+and `cohort` (a comma-separated cohort/ring list such as `canary,beta`, not a boolean). Every
+type requires a non-empty `value`. `config.context_key` is required for every rule except `time`:
+`percentage` accepts `rollout_key` or `attributes.<name>`; `attribute` requires
+`attributes.<name>`; `user_id`, `ip`, `country`, and `cohort` require their matching canonical
+key. `time` must not include `config.context_key`. When
 `has_activation_rule` is `false`, any `activation_rule` in the body is ignored and the toggle's rule is
 cleared.
 

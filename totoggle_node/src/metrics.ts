@@ -11,7 +11,7 @@ export interface ToToggleMetricsListener {
   /** Called after a failed refresh attempt, with the running count of consecutive failures
    * (reset to 0 on the next success). */
   onRefreshFailure?(error: Error, consecutiveFailures: number): void;
-  /** Called after every isActive/isActiveFor call that completed (including ones that resolved
+  /** Called after every completed flag evaluation (including ones that resolved
    * to false because the toggle wasn't found, or the client wasn't started). */
   onEvaluation?(path: string, result: boolean): void;
 }

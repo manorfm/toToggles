@@ -12,9 +12,7 @@ import java.time.ZoneId
  * handle different types of activation rules.
  *
  * Registers a strategy for all 7 rule types the server supports
- * (server/internal/app/domain/entity/activation_rule.go#GetRuleTypeOptions) — a previous
- * version only registered percentage/parameter, silently failing closed (always `false`) for
- * user_id/ip/country/time/canary.
+ * (server/internal/app/domain/entity/activation_rule.go#GetRuleTypeOptions).
  */
 class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
 
@@ -22,13 +20,9 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
     private val strategies = mutableMapOf<String, ActivationStrategy>()
 
     companion object {
-        // Rule types whose evaluation is a match against a caller-supplied value (see
-        // strategy/CommaListMatch.kt) — these can NEVER pass with no parameter, unlike
-        // "percentage" (which is supplied from ToggleContext.rolloutKey) or "time"
-        // (doesn't use a parameter at all). A null parameter here is never a valid, deliberate
-        // choice — it can only mean the caller forgot to pass one, whether the rule lives on the
-        // toggle being asked about or on one of its ancestors in the path.
-        private val TYPES_REQUIRING_PARAMETER = setOf(
+        // Match-based rule types cannot pass without a context value. Percentage uses a stable
+        // rollout key and time uses the configured clock instead.
+        private val TYPES_REQUIRING_CONTEXT = setOf(
             ActivationRule.TYPE_ATTRIBUTE,
             ActivationRule.TYPE_USER_ID,
             ActivationRule.TYPE_IP,
@@ -93,15 +87,15 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
     /**
      * Evaluates an activation rule using the appropriate strategy.
      *
-     * Never throws for missing resolved context — it degrades to a failed rule. [parameter] is an
-     * internal strategy input supplied by [com.totoggle.client.ToToggleClient] after consulting
-     * its configured context resolver; callers use `isActive(path)` without context parameters.
+     * Never throws for missing resolved context — it degrades to a failed rule. [contextValue]
+     * is an internal strategy input supplied by [com.totoggle.client.ToToggleClient] after
+     * consulting its configured context resolver; callers use `isActive(path)`.
      *
      * @param rule The activation rule to evaluate
-     * @param parameter Optional parameter for rule evaluation
+     * @param contextValue Optional value resolved from request context for rule evaluation
      * @return true if the rule passes, false otherwise
      */
-    fun evaluate(rule: ActivationRule, parameter: String? = null): Boolean {
+    fun evaluate(rule: ActivationRule, contextValue: String? = null): Boolean {
         if (rule.isEmpty()) {
             logger.debug("Empty activation rule, returning true")
             return true
@@ -112,7 +106,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
             return false
         }
 
-        if (parameter == null && rule.type in TYPES_REQUIRING_PARAMETER) {
+        if (contextValue == null && rule.type in TYPES_REQUIRING_CONTEXT) {
             logger.error(
                 "Activation rule requires context but no value was resolved; returning false"
             )
@@ -120,7 +114,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
 
         return try {
             val strategy = getStrategy(rule.type)
-            strategy.evaluate(rule, parameter)
+            strategy.evaluate(rule, contextValue)
         } catch (_: StrategyNotFoundException) {
             logger.warn("Strategy not found for rule type '{}', returning false", rule.type)
             false

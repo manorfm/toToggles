@@ -79,7 +79,7 @@ class PercentageStrategyTest {
     }
     
     @Test
-    fun `should return a valid boolean whether or not a parameter is given`() {
+    fun `should return a valid boolean whether or not a context value is resolved`() {
         val rule = ActivationRule("percentage", "50")
 
         val result1 = strategy.evaluate(rule, "some-param")
@@ -90,7 +90,7 @@ class PercentageStrategyTest {
     }
 
     @Test
-    fun `should return the same result for the same parameter every time (consistent hashing)`() {
+    fun `should return the same result for the same context value every time (consistent hashing)`() {
         val rule = ActivationRule("percentage", "50")
 
         val results = (1..20).map { strategy.evaluate(rule, "user-42") }
@@ -99,7 +99,7 @@ class PercentageStrategyTest {
     }
 
     @Test
-    fun `should return different results for different parameters, statistically matching the threshold`() {
+    fun `should return different results for different context values, statistically matching the threshold`() {
         val rule = ActivationRule("percentage", "25")
 
         val trueCount = (1..1000).count { strategy.evaluate(rule, "user-$it") }
@@ -110,7 +110,7 @@ class PercentageStrategyTest {
     }
 
     @Test
-    fun `should still vary across repeated calls when there is no parameter to key on`() {
+    fun `should still vary across repeated calls when there is no context value to key on`() {
         val rule = ActivationRule("percentage", "50")
 
         val results = (1..30).map { strategy.evaluate(rule, null) }.toSet()

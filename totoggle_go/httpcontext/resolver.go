@@ -167,8 +167,8 @@ func forwardedIP(header string) (string, bool) {
 		return "", false
 	}
 	first := strings.TrimSpace(strings.SplitN(header, ",", 2)[0])
-	for _, parameter := range strings.Split(first, ";") {
-		name, value, found := strings.Cut(parameter, "=")
+	for _, directive := range strings.Split(first, ";") {
+		name, value, found := strings.Cut(directive, "=")
 		if !found || !strings.EqualFold(strings.TrimSpace(name), "for") {
 			continue
 		}

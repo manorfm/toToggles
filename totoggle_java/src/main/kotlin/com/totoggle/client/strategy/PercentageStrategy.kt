@@ -10,12 +10,12 @@ import java.nio.charset.StandardCharsets
  * This strategy activates toggles based on a configured percentage of requests.
  *
  * The confirmed rule hint promises "Consistent hashing — same user always gets the same
- * result." When a `parameter` (typically a stable user/session ID) is provided, this bucket is
- * deterministic: the same `parameter` + rule value always evaluates the same way, using Java's
+ * result." When a stable rollout context value (typically a user/session ID) is provided, this bucket is
+ * deterministic: the same context value + rule value always evaluates the same way, using Java's
  * specified (stable across JVMs/runs) `String.hashCode()` algorithm rather than a fresh random
- * draw. The bucket is keyed on `rule.value + parameter` rather than the toggle's own path/ID
+ * draw. The bucket is keyed on `rule.value + context value` rather than the toggle's own path/ID
  * (which this strategy never receives), so two DIFFERENT toggles that happen to share the exact
- * same threshold will correlate for a given key — pass a sufficiently unique parameter (e.g.
+ * same threshold will correlate for a given key — configure a sufficiently unique context value (e.g.
  * combining a user ID with the toggle path) if independence across same-percentage toggles
  * matters for a given use case.
  *
@@ -31,7 +31,7 @@ class PercentageStrategy : ActivationStrategy {
         return evaluate(rule, null)
     }
 
-    override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
+    override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean {
         return try {
             val percentage = rule.value.toDoubleOrNull()
             if (percentage == null) {
@@ -44,8 +44,8 @@ class PercentageStrategy : ActivationStrategy {
                 return false
             }
 
-            val bucket = if (parameter != null) {
-                consistentBucket(rule.value, parameter)
+            val bucket = if (contextValue != null) {
+                consistentBucket(rule.value, contextValue)
             } else {
                 random.nextDouble(0.0, 100.0)
             }

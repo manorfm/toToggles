@@ -158,7 +158,7 @@ class ToToggleClientTest {
     
     @Test
     fun `should evaluate attribute activation rules`() {
-        mockResponseWithParameterRule()
+        mockResponseWithAttributeRule()
         client.start()
         
         contextValues["attributes.plan"] = "premium"
@@ -166,11 +166,11 @@ class ToToggleClientTest {
         contextValues["attributes.plan"] = "basic"
         val resultWithoutMatch = client.isActive("user.payments.view-table")
         contextValues.remove("attributes.plan")
-        val resultWithoutParam = client.isActive("user.payments.view-table")
+        val resultWithoutContext = client.isActive("user.payments.view-table")
         
         assertThat(resultWithMatch).isTrue()
         assertThat(resultWithoutMatch).isFalse()
-        assertThat(resultWithoutParam).isFalse()
+        assertThat(resultWithoutContext).isFalse()
     }
 
     @Test
@@ -186,12 +186,12 @@ class ToToggleClientTest {
     }
 
     @Test
-    fun `should evaluate contextual rules from the request resolver without call-site parameters`() {
+    fun `should evaluate contextual rules from the request resolver without call-site context`() {
         val resolver = RequestContextResolver()
         val scopedClient = ToToggleClient(config.copy(contextResolver = resolver))
 
         try {
-            mockResponseWithParameterRule()
+            mockResponseWithAttributeRule()
             scopedClient.start()
 
             assertThat(scopedClient.isActive("user.payments.view-table")).isFalse()
@@ -653,7 +653,7 @@ class ToToggleClientTest {
             .setHeader("Content-Type", "application/json"))
     }
     
-    private fun mockResponseWithParameterRule() {
+    private fun mockResponseWithAttributeRule() {
         val responseBody = """
             {
                 "application": {

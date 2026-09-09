@@ -221,7 +221,7 @@ func TestToggle_SetActivationRule(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid parameter rule",
+			name: "valid attribute rule",
 			rule: &ActivationRule{
 				Type:   ActivationRuleTypeAttribute,
 				Value:  "premium",

@@ -53,8 +53,8 @@ describe("PercentageEvaluator", () => {
     expect(evaluator.evaluate({ type: "percentage", value: "-1" }, "user-1")).toBe(false);
   });
 
-  // With no key at all (Client.isActive, no parameter), there's nothing to key a deterministic
-  // bucket on — falls back to the injected random source instead.
+  // With no resolved key, there's nothing to key a deterministic bucket on — falls back to the
+  // injected random source instead.
   it("uses the injected random source when there is no key", () => {
     const low = new PercentageEvaluator(() => 0.1); // -> bucket 10
     const rule: ActivationRule = { type: "percentage", value: "50" };

@@ -119,7 +119,7 @@ O sistema automaticamente cria:
 - **20 aplicações** com secret keys únicos
 - **20 toggles por aplicação** (até 400 toggles total)
 - **Hierarquia de toggles** (ex: `user.payments.view-table`)
-- **Activation rules** variadas (percentage, parameter)
+- **Activation rules** variadas (percentage, attribute)
 
 Exemplo de estrutura criada:
 ```

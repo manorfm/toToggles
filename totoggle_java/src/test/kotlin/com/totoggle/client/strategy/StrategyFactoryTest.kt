@@ -34,7 +34,7 @@ class StrategyFactoryTest {
     }
     
     @Test
-    fun `should get correct strategy for parameter rule`() {
+    fun `should get correct strategy for attribute rule`() {
         val strategy = factory.getStrategy("attribute")
         
         assertThat(strategy).isInstanceOf(AttributeStrategy::class.java)
@@ -59,7 +59,7 @@ class StrategyFactoryTest {
     fun `should register custom strategy`() {
         val customStrategy = object : ActivationStrategy {
             override fun evaluate(rule: ActivationRule): Boolean = true
-            override fun evaluate(rule: ActivationRule, parameter: String?): Boolean = true
+            override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean = true
             override fun getRuleType(): String = "custom"
         }
         
@@ -98,16 +98,16 @@ class StrategyFactoryTest {
     }
     
     @Test
-    fun `should evaluate valid parameter rule`() {
+    fun `should evaluate a valid attribute rule`() {
         val rule = ActivationRule("attribute", "premium")
         
         val resultWithMatch = factory.evaluate(rule, "premium")
         val resultWithoutMatch = factory.evaluate(rule, "basic")
-        val resultWithoutParam = factory.evaluate(rule)
+        val resultWithoutContext = factory.evaluate(rule)
         
         assertThat(resultWithMatch).isTrue()
         assertThat(resultWithoutMatch).isFalse()
-        assertThat(resultWithoutParam).isFalse()
+        assertThat(resultWithoutContext).isFalse()
     }
     
     @Test
@@ -125,7 +125,7 @@ class StrategyFactoryTest {
             override fun evaluate(rule: ActivationRule): Boolean {
                 throw RuntimeException("Test exception")
             }
-            override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
+            override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean {
                 throw RuntimeException("Test exception")
             }
             override fun getRuleType(): String = "faulty"
@@ -139,13 +139,13 @@ class StrategyFactoryTest {
         assertThat(result).isFalse()
     }
 
-    // A missing parameter for a match-based rule type (parameter/user_id/country/canary) can
-    // only mean the caller forgot to pass one — evaluate() logs an ERROR for this instead of
+    // Missing request context for a match-based rule can only mean that the resolver did not
+    // provide the configured key — evaluate() logs an ERROR for this instead of
     // throwing, so a caller mistake degrades to "rule doesn't match" rather than crashing the
     // request. These tests only pin down the non-throwing, false-returning behavior; the log
     // itself isn't asserted (no log-capture harness in this project).
     @Test
-    fun `should not throw for a parameter-requiring type given no parameter — degrades to false`() {
+    fun `should not throw for a context-dependent type with no context — degrades to false`() {
         for (type in listOf(
             ActivationRule.TYPE_ATTRIBUTE,
             ActivationRule.TYPE_USER_ID,
@@ -159,19 +159,19 @@ class StrategyFactoryTest {
     }
 
     @Test
-    fun `should not log the missing-parameter error for percentage (legitimate random fallback)`() {
-        // percentage has a real, intentional meaning for "no parameter" (random draw) — it must
+    fun `should evaluate percentage without resolved context`() {
+        // Percentage retains a valid random fallback without context — it must
         // not be treated the same as the four match-based types above. This test only checks it
         // still evaluates normally (doesn't throw, returns a valid boolean); there's nothing to
         // assert about logs without a log-capture harness, but the behavioral distinction is the
-        // point: 100% must still deterministically return true even with no parameter.
+        // point: 100% must still deterministically return true without context.
         val rule = ActivationRule(ActivationRule.TYPE_PERCENTAGE, "100")
         assertThat(factory.evaluate(rule)).isTrue()
         assertThat(factory.evaluate(rule, null)).isTrue()
     }
 
     @Test
-    fun `should not require a parameter for time (never uses one)`() {
+    fun `should not require context for time (never uses it)`() {
         val rule = ActivationRule(ActivationRule.TYPE_TIME, "00:00-23:59")
         assertThat(factory.evaluate(rule)).isTrue()
         assertThat(factory.evaluate(rule, null)).isTrue()

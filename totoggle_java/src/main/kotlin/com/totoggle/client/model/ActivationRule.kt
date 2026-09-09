@@ -8,8 +8,8 @@ import com.fasterxml.jackson.databind.JsonNode
  * Activation rules determine additional conditions that must be met
  * for a toggle to be considered active beyond just being enabled.
  * 
- * @property type The type of activation rule (e.g., "percentage", "parameter", "user_id")
- * @property value The value/configuration for the rule (e.g., "25" for percentage, "premium" for parameter)
+ * @property type The type of activation rule (e.g., "percentage", "attribute", "user_id")
+ * @property value The value/configuration for the rule (e.g., "25" for percentage, "premium" for an attribute)
  */
 data class ActivationRule(
     @JsonProperty("type")

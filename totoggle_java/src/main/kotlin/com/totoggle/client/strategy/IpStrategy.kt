@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory
  * Strategy for evaluating IP-address-based activation rules.
  * The rule value is a comma-separated allowlist of exact IPv4 addresses and/or CIDR ranges
  * (confirmed hint: "Comma-separated IPs or CIDR ranges", e.g. "10.0.0.0/24"); the caller passes
- * the current request's IP address as the `parameter`.
+ * the current request's IP address as its resolved context value.
  *
  * IPv4 only — the confirmed placeholder ("10.0.0.0/24") and hint only ever show IPv4 examples,
  * so this deliberately doesn't take on IPv6 CIDR matching without a confirmed spec for it.
@@ -23,11 +23,11 @@ class IpStrategy : ActivationStrategy {
         return false
     }
 
-    override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
-        if (parameter == null) return false
+    override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean {
+        if (contextValue == null) return false
         if (rule.value.isBlank()) return false
 
-        val candidate = parseIpv4(parameter)
+        val candidate = parseIpv4(contextValue)
         if (candidate == null) {
             logger.warn("IP strategy received an invalid candidate address")
             return false

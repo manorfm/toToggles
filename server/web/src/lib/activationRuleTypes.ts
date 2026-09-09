@@ -17,9 +17,8 @@ export interface RuleTypeMeta {
 // ver o header de lib/toggleLeaves.ts pro método). Uma fase anterior tinha inventado texto
 // em português aqui porque, na época, get_full_jsx("EditDrawer") só mostrava a REFERÊNCIA a
 // RULE_TYPES, não os dados — decodificar o bundle revelou os 7 valores reais (em inglês) e a
-// ORDEM real (canary é o 4º item, não o último). O backend não valida formato além de "valor
-// não pode ser vazio" (entity.ActivationRule.ValidateRule), então placeholder/hint aqui são
-// só orientação de UI, sem sintaxe obrigatória.
+// ORDEM real (cohort é o 4º item, não o último). O backend valida a chave de contexto canônica
+// por tipo (entity.ActivationRule.ValidateRule); placeholder/hint aqui são só orientação de UI.
 export const RULE_TYPES: RuleTypeMeta[] = [
   {
     type: "percentage",

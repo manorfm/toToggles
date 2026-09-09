@@ -484,7 +484,7 @@ if (client.isActive("${tp}")) {
     // feature active — run the new behaviour
 }
 
-// With a parameter (for targeting rules)
+// With contextual targeting rules
 if (client.isActive("${tp}")) {
     // active only for the value configured in the rule
 }

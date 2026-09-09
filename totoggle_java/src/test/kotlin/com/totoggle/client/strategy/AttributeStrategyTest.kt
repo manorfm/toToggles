@@ -14,7 +14,7 @@ class AttributeStrategyTest {
     }
     
     @Test
-    fun `should return false when no parameter provided`() {
+    fun `should return false when no context value is resolved`() {
         val rule = ActivationRule("attribute", "premium")
         
         assertThat(strategy.evaluate(rule)).isFalse()
@@ -29,14 +29,14 @@ class AttributeStrategyTest {
     }
     
     @Test
-    fun `should return true when parameter matches rule value exactly`() {
+    fun `should return true when context value matches rule value exactly`() {
         val rule = ActivationRule("attribute", "premium")
         
         assertThat(strategy.evaluate(rule, "premium")).isTrue()
     }
     
     @Test
-    fun `should return false when parameter does not match rule value`() {
+    fun `should return false when context value does not match rule value`() {
         val rule = ActivationRule("attribute", "premium")
         
         assertThat(strategy.evaluate(rule, "basic")).isFalse()
@@ -70,7 +70,7 @@ class AttributeStrategyTest {
     }
     
     @Test
-    fun `should handle empty parameter vs empty rule`() {
+    fun `should handle an empty context value with an empty rule`() {
         val rule = ActivationRule("attribute", "")
 
         assertThat(strategy.evaluate(rule, "")).isFalse() // blank rule value returns false

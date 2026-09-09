@@ -119,7 +119,8 @@ export class ToToggleClient {
   }
 
   /**
-   * Reports whether the toggle at path is active, with no parameter for rule evaluation.
+   * Reports whether the toggle at path is active. Rule inputs are resolved from the configured
+   * request context rather than supplied by the caller.
    * Implements cascading validation: every ancestor on the path must be enabled. Activation
    * rules are intentionally local to the requested toggle and never cascade. A toggle that
    * doesn't exist, or a client that isn't started

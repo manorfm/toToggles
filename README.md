@@ -17,8 +17,8 @@ them with cascading validation and 7 activation rule types.
 **Server capabilities:**
 - **Hierarchical toggles** (`service.feature.flag`) with cascading validation — a disabled parent
   disables every descendant, regardless of the child's own state
-- **7 activation rule types**: percentage rollout (consistent per-key hashing), parameter,
-  user ID, IP/CIDR, country, time window, and cohort
+- **7 activation rule types**: percentage rollout (consistent per-key hashing), named context
+  attribute, user ID, IP/CIDR, country, time window, and cohort
 - **Role-based access control**: `root`/`admin`/`user`, with teams scoping which applications an
   admin can manage
 - **Optional approval workflow**: gate selected mutation types (toggle delete, rule changes,
@@ -161,14 +161,15 @@ If `user` or `payments` is disabled, `view-table` will automatically be inactive
 ```
 Activates for ~25% of requests using consistent hashing.
 
-**Parameter Strategy:**
+**Attribute Strategy:**
 ```json
 {
   "type": "attribute",
-  "value": "premium,enterprise"
+  "value": "premium,enterprise",
+  "config": { "context_key": "attributes.plan" }
 }
 ```
-Activates when the provided parameter matches the configured values.
+Activates when the named context attribute matches the configured values.
 
 ### 🛡️ Resilience & Performance
 
@@ -253,7 +254,9 @@ Extend activation strategies by implementing the `ActivationStrategy` interface:
 
 ```kotlin
 class CustomStrategy : ActivationStrategy {
-    override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
+    override fun evaluate(rule: ActivationRule): Boolean = false
+
+    override fun evaluate(rule: ActivationRule, contextValue: String?): Boolean {
         // Your custom logic here
         return true
     }
@@ -356,9 +359,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Rules are evaluated by SDKs, not by the server. A hierarchical ancestor contributes only its
 `enabled` state; its rule never affects a child query. For rules that need request or deployment
-information, configure the SDK's optional `ToggleContextProvider` in application middleware.
-It supplies `rolloutKey`, `userId`, `ip`, `country`, `cohort`, or a generic parameter. SDKs never
-guess headers, proxy IPs, authentication data, or geolocation. A missing provider/field (or a
-provider failure) logs a warning and evaluates to `false`; `isActive` always fails closed and
-never propagates an exception. `percentage: 25` enables 25% of the keyed population; `cohort`
-matches named cohorts such as `canary` or `beta`, not `true`/`false`.
+information, configure the SDK's request-context resolver in application middleware. It supplies
+`rollout_key`, `user_id`, `ip`, `country`, `cohort`, and named `attributes.<name>` values.
+Network fields come only from the SDK's trusted HTTP adapter/resolver configuration; application
+values cannot overwrite them. A missing field or resolver failure evaluates to `false`;
+`isActive` always fails closed and never propagates an exception. `percentage: 25` enables 25%
+of the keyed population; `cohort` matches named cohorts such as `canary` or `beta`, not
+`true`/`false`.

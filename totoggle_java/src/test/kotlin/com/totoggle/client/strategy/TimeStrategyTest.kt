@@ -56,7 +56,7 @@ class TimeStrategyTest {
     }
 
     @Test
-    fun `should ignore the parameter argument`() {
+    fun `should ignore a context value`() {
         val rule = ActivationRule("time", "09:00-18:00")
 
         assertThat(strategyAt("12:00").evaluate(rule, "anything")).isTrue()
