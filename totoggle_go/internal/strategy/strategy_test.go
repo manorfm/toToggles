@@ -38,8 +38,8 @@ func TestRegistry_Evaluate_DispatchesToRegisteredType(t *testing.T) {
 	assert.True(t, stub.gotHasKey)
 }
 
-// hasKey must reach the evaluator faithfully — IsActive (no parameter) and IsActiveFor("")
-// (an explicit empty parameter) are different callers and must stay distinguishable downstream.
+// hasKey must reach the evaluator faithfully, distinguishing absent request context from a
+// context key that resolved to an empty value.
 func TestRegistry_Evaluate_PropagatesNoKeyDistinctFromEmptyKey(t *testing.T) {
 	reg := NewRegistry()
 	stub := &stubEvaluator{result: false}

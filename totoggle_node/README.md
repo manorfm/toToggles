@@ -3,7 +3,7 @@
 [![totoggle-node](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml)
 
 Node.js/TypeScript client library for [ToToggle](../README.md): fetches an application's toggle
-set from the server via a secret key, caches it in memory, and evaluates `isActive`/`isActiveFor`
+set from the server via a secret key, caches it in memory, and evaluates `isActive`
 entirely from that cache — no network access on the evaluation hot path. Same product semantics
 as [`totoggle_java`](../totoggle_java) and [`totoggle_go`](../totoggle_go), expressed in native
 TypeScript/Node idioms (`Promise` instead of exceptions/error returns, typed `Error` subclasses
@@ -38,12 +38,6 @@ if (client.isActive("user.payments.view-table")) {
   // new behavior
 }
 
-// Forward a parameter to every activation rule in the path — the target's own rule AND every
-// ancestor's, not just the leaf's.
-if (client.isActiveFor("user.premium.features", "premium")) {
-  // premium-only behavior
-}
-
 client.shutdown();
 ```
 
@@ -65,7 +59,7 @@ throws `TotoggleConfigError` if something's wrong — a blank field, a secret ke
 
 ## Cascading validation
 
-`isActive`/`isActiveFor` walk every ancestor from the root down to the requested path — each one
+`isActive` walks every ancestor from the root down to the requested path — each one
 must be enabled before the target toggle's own state is checked. Activation rules are evaluated
 only for the exact requested toggle:
 
@@ -84,35 +78,47 @@ All 7 server-defined rule types are supported:
 
 | Type | Rule value | Matched against |
 |---|---|---|
-| `percentage` | `"0"`-`"100"` | `ToggleContext.rolloutKey`; stable, toggle-specific cohort. Missing key fails closed. |
-| `parameter` | comma-separated allowlist | `ToggleContext.parameter`. |
-| `user_id` | comma-separated allowlist | `ToggleContext.userId`. |
-| `country` | comma-separated allowlist | `ToggleContext.country`, typically an ISO country code. |
-| `canary` | comma-separated allowlist | `ToggleContext.cohort`, e.g. `canary` or `beta` (not boolean). |
-| `ip` | comma-separated IPv4 addresses and/or CIDR ranges (e.g. `"10.0.0.0/24"`) | `ToggleContext.ip`. |
-| `time` | `"HH:mm-HH:mm"`, 24h, overnight-aware | The current time in the configured `timeZone`. Needs no parameter. |
+| `percentage` | `"0"`-`"100"` | `rollout_key`; stable, toggle-specific cohort. Missing key fails closed. |
+| `attribute` | comma-separated allowlist | A configured `attributes.<name>` key. |
+| `user_id` | comma-separated allowlist | `user_id`. |
+| `country` | comma-separated allowlist | `country`, an ISO alpha-2 code. |
+| `cohort` | comma-separated allowlist | `cohort`, e.g. `canary` or `beta` (not boolean). |
+| `ip` | comma-separated IPv4/IPv6 addresses and CIDR ranges | `ip`. |
+| `time` | `"HH:mm-HH:mm"`, 24h, overnight-aware | The current time in the configured `timeZone`; no context is needed. |
 
 A rule with no context supplied when it needs one, an out-of-range percentage, an
 unparseable IP, or a malformed time window all fail closed to `false` rather than throwing — a
 feature-flag check should never be able to crash a caller's request path.
 
-## ToggleContextProvider
+## Request context
 
 Contextual rules are local to the requested toggle; ancestor rules never cascade. Configure a
-provider from your application's request middleware rather than trusting headers in the SDK:
+request-local resolver once, then call only `client.isActive(path)` in application code:
 
 ```ts
-const config = createConfig("checkout", "https://toggles.example", "sk_...", {
-  contextProvider: {
-    getContext: () => ({ rolloutKey: request.user.id, country: request.geo.country, cohort: process.env.DEPLOY_RING }),
-  },
+import { createConfig, NodeRequestContextResolver } from "totoggle-node";
+
+const requestContext = new NodeRequestContextResolver({
+  trustedProxyAddresses: ["10.0.0.0/24", "2001:db8::/32"],
+  countryResolver: localGeoIpLookup,
+  values: (request) => ({
+    user_id: request.user?.id,
+    rollout_key: request.user?.id,
+    cohort: process.env.DEPLOY_RING,
+    "attributes.plan": request.account?.plan,
+  }),
 });
+const config = createConfig("checkout", "https://toggles.example", "sk_...", {
+  contextResolver: requestContext,
+});
+app.use(requestContext.middleware());
 ```
 
-`percentage` requires `rolloutKey` and enables the configured percentage of that stable,
-toggle-specific population. `canary` matches a textual `cohort` such as `canary` or `beta`.
-`ip`, `country`, `user_id`, and `parameter` use their corresponding context fields. Missing
-context or a provider error logs a warning and returns `false`; `isActive` never throws.
+`country` uses a valid country header only from a trusted peer. Otherwise, or if that header is
+missing or invalid, the optional local GeoIP resolver receives the effective client IP. The socket
+peer is used directly; `Forwarded` and `X-Forwarded-For` are used only for trusted peers. With no
+country source, malformed data, or a resolver error, country rules fail closed. Domain `values`
+cannot override `ip` or `country`.
 
 ## Observability
 

@@ -19,7 +19,7 @@ import (
 const staleThresholdIntervals = 2
 
 // Client is the ToToggle feature-flag client: it fetches the toggle set for one application via
-// a secret key, caches it in memory, and evaluates IsActive/IsActiveFor entirely from that cache
+// a secret key, caches it in memory, and evaluates IsActive/IsActiveContext entirely from that cache
 // — no network access on the evaluation hot path.
 type Client struct {
 	cfg      *Config
@@ -36,7 +36,7 @@ type Client struct {
 }
 
 // New builds a Client from an already-validated Config (see NewConfig). Call Start before using
-// it — IsActive/IsActiveFor fail closed to false until then.
+// it — IsActive/IsActiveContext fail closed to false until then.
 func New(cfg *Config) *Client {
 	return &Client{
 		cfg:      cfg,
@@ -139,8 +139,7 @@ func (c *Client) requireUsable() error {
 
 // IsActive reports whether the toggle at path is active, with no parameter for rule evaluation.
 // Implements cascading validation: every ancestor on the path from root to target must be
-// enabled and pass its own activation rule (if any), then the target itself must be enabled and
-// pass its own rule (if any). A toggle that doesn't exist, or a client that isn't started (or
+// enabled; only the target's activation rule is evaluated. A toggle that doesn't exist, or a client that isn't started (or
 // has been shut down), fails closed to false.
 func (c *Client) IsActive(path string) (active bool) {
 	return c.IsActiveContext(context.Background(), path)

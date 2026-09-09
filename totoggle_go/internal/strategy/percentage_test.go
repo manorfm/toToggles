@@ -62,8 +62,8 @@ func TestPercentageEvaluator_OutOfRangeValueNeverActivates(t *testing.T) {
 	assert.False(t, e.Evaluate(toggle.ActivationRule{Value: "-1"}, "user-1", true))
 }
 
-// With no key at all (Client.IsActive, no parameter), the evaluator has nothing to key a
-// deterministic bucket on — it falls back to the injected random source instead.
+// With no key at all, the evaluator has nothing to key a deterministic bucket on — it falls
+// back to the injected random source instead.
 func TestPercentageEvaluator_NoKeyUsesInjectedRandomSource(t *testing.T) {
 	e := NewPercentageEvaluator(func() float64 { return 0.1 }) // -> bucket 10
 	rule := toggle.ActivationRule{Value: "50"}

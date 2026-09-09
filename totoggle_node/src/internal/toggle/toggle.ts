@@ -57,7 +57,13 @@ export function parseToggle(raw: unknown): Toggle {
     appId: app_id,
     hasActivationRule: has_activation_rule,
     activationRule: activation_rule
-      ? { type: String(activation_rule.type), value: String(activation_rule.value), config: isPlainObject(activation_rule.config) ? { context_key: typeof activation_rule.config.context_key === "string" ? activation_rule.config.context_key : undefined } : null }
+      ? {
+          type: String(activation_rule.type),
+          value: String(activation_rule.value),
+          ...(isPlainObject(activation_rule.config)
+            ? { config: { context_key: typeof activation_rule.config.context_key === "string" ? activation_rule.config.context_key : undefined } }
+            : {}),
+        }
       : null,
   };
 }

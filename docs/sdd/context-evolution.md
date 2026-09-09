@@ -44,7 +44,7 @@ resolver.
 |---|---|---|
 | 1 | Canonical rule and lazy resolver contract | Complete |
 | 2 | Request-local HTTP adapters | Complete |
-| 3 | Trusted IP and country extraction | In progress |
+| 3 | Trusted IP and country extraction | Complete |
 | 4 | Non-HTTP identity, cohort, and attributes | Planned |
 | 5 | Remove legacy APIs and dead code | In progress |
 | 6 | Efficient catalog synchronization | Planned |
@@ -74,9 +74,9 @@ resolver.
 
 - [x] Node and Go default to socket IP and require explicit trusted peers for forwarded headers.
 - [x] Node and Go test spoofed forwarded headers and trusted-proxy behavior.
-- [ ] Support trusted-proxy CIDR allowlists, IPv6, and RFC 7239 `Forwarded` parsing.
-- [ ] Implement Java trusted-proxy IP/country extraction and tests.
-- [ ] Add configurable country sources: trusted header, local GeoIP resolver, disabled.
+- [x] Support trusted-proxy CIDR allowlists, IPv6, and RFC 7239 `Forwarded` parsing.
+- [x] Implement Java trusted-proxy IP/country extraction and tests.
+- [x] Add configurable country sources: trusted header, local GeoIP resolver, disabled.
 
 ### Wave 4 — Domain context
 
@@ -89,7 +89,7 @@ resolver.
 
 - [x] Removed Node `isActiveFor` and Java parameter overload.
 - [ ] Remove remaining `parameter`/`canary` names, files, tests, comments, and docs.
-- [ ] Complete Go API/documentation migration and run its full suite.
+- [x] Complete Go API/documentation migration and run its full suite.
 
 ### Wave 6 — Catalog synchronization
 

@@ -37,7 +37,7 @@ describe("parseToggle", () => {
       parent_id: "toggle-2",
       app_id: "app-123",
       has_activation_rule: true,
-      activation_rule: { type: "percentage", value: "25" },
+      activation_rule: { type: "percentage", value: "25", config: null },
     });
 
     expect(toggle.path.toString()).toBe("user.payments.view-table");

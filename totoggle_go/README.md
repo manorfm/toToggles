@@ -3,7 +3,7 @@
 [![totoggle-go](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml)
 
 Go client library for [ToToggle](../README.md): fetches an application's toggle set from the
-server via a secret key, caches it in memory, and evaluates `IsActive`/`IsActiveFor` entirely from
+server via a secret key, caches it in memory, and evaluates `IsActive`/`IsActiveContext` entirely from
 that cache — no network access on the evaluation hot path. Same product semantics as
 [`totoggle_java`](../totoggle_java), expressed in native Go idioms (`error` returns instead of
 exceptions, functional options instead of a builder, `context.Context` on network operations,
@@ -47,10 +47,6 @@ func main() {
 		// new behavior
 	}
 
-	// Request context is resolved by the configured ToggleContextProvider.
-	if client.IsActiveContext(request.Context(), "user.premium.features") {
-		// premium-only behavior
-	}
 }
 ```
 
@@ -92,36 +88,63 @@ All 7 server-defined rule types are supported:
 
 | Type | Rule value | Matched against |
 |---|---|---|
-| `percentage` | `"0"`-`"100"` | `ToggleContext.RolloutKey`; stable, toggle-specific cohort. Missing key fails closed. |
-| `parameter` | comma-separated allowlist | `ToggleContext.Parameter`. |
-| `user_id` | comma-separated allowlist | `ToggleContext.UserID`. |
-| `country` | comma-separated allowlist | `ToggleContext.Country`, typically an ISO country code. |
-| `canary` | comma-separated allowlist | `ToggleContext.Cohort`, e.g. `canary` or `beta` (not boolean). |
-| `ip` | comma-separated IPv4 addresses and/or CIDR ranges (e.g. `"10.0.0.0/24"`) | `ToggleContext.IP`. |
-| `time` | `"HH:mm-HH:mm"`, 24h, overnight-aware | The current time in the configured `WithTimeZone`. Needs no parameter. |
+| `percentage` | `"0"`-`"100"` | `rollout_key`; stable, toggle-specific cohort. Missing key fails closed. |
+| `attribute` | comma-separated allowlist | `attributes.<name>`, declared by the rule. |
+| `user_id` | comma-separated allowlist | `user_id`. |
+| `country` | comma-separated allowlist | `country`, a normalized ISO 3166-1 alpha-2 code. |
+| `cohort` | comma-separated allowlist | `cohort`, e.g. `canary` or `beta` (not boolean). |
+| `ip` | comma-separated IPv4/IPv6 addresses and/or CIDR ranges (e.g. `"10.0.0.0/24"`) | `ip`. |
+| `time` | `"HH:mm-HH:mm"`, 24h, overnight-aware | The current time in the configured `WithTimeZone`. It needs no context key. |
 
 A rule with no context supplied when it needs one, an out-of-range percentage, an
 unparseable IP, or a malformed time window all fail closed to `false` rather than erroring — a
 feature-flag check should never be able to panic a caller's request path.
 
-## ToggleContextProvider
+## ToggleContextResolver and HTTP middleware
 
-Contextual rules are local to the requested toggle; ancestor rules never cascade. Populate this
-provider from your HTTP/framework middleware (the SDK does not trust forwarded headers itself):
+Contextual rules are local to the requested toggle; ancestor rules never cascade. Resolve only
+the context key requested by the rule. The included `httpcontext` package reads the socket IP by
+default; it honors forwarding and country headers only from configured trusted proxies. It also
+accepts an optional local GeoIP resolver, which receives the effective client IP.
 
 ```go
-type provider struct{}
-func (provider) ToggleContext(ctx context.Context) *totoggle.ToggleContext {
-    return &totoggle.ToggleContext{RolloutKey: userID, Country: country, Cohort: deployRing}
+// In the HTTP bootstrap; import net, net/http, and the httpcontext package.
+resolver := httpcontext.New(httpcontext.Options{
+    TrustedProxyAddresses: []string{"10.0.0.0/24"},
+    CountryResolver: func(ip net.IP) (string, bool) {
+        return localGeoIP.CountryCode(ip) // no network I/O on the request path
+    },
+    Values: func(r *http.Request) map[string]string {
+        return map[string]string{
+            "user_id":         authenticatedUserID(r),
+            "rollout_key":     authenticatedUserID(r),
+            "cohort":          deploymentCohort,
+            "attributes.plan": accountPlan(r),
+        }
+    },
+})
+
+cfg, err := totoggle.NewConfig("my-app", "https://your-toggle-server.example.com", "sk_your_secret_key_here",
+    totoggle.WithToggleContextResolver(resolver),
+)
+if err != nil {
+    log.Fatal(err)
 }
-// pass totoggle.WithToggleContextProvider(provider{}) to NewConfig
+client := totoggle.New(cfg)
+
+handler := resolver.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if client.IsActiveContext(r.Context(), "payments.card") {
+        // new behavior
+    }
+}))
 ```
 
-`percentage` requires `RolloutKey` and enables the configured percentage of that stable,
-toggle-specific population. `canary` matches a textual `Cohort` such as `canary` or `beta`.
-Missing context or a provider panic logs a warning and returns `false`; `IsActive` never panics.
-For request-scoped values call `client.IsActiveContext(request.Context(), "payments.card")`;
-the simpler `IsActive` uses an empty background context.
+`country` prefers a valid configured edge header when the direct peer is trusted. Otherwise the
+optional local resolver runs with the effective client IP; malformed, unavailable, and disabled
+sources fail closed. Application `Values` cannot override `ip` or `country`. Missing context or a
+resolver panic returns `false`; evaluation never panics. For request-scoped values call
+`client.IsActiveContext(request.Context(), "payments.card")`; `IsActive` uses an empty background
+context.
 
 ## Observability
 

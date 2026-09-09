@@ -220,6 +220,36 @@ The SDK asks the resolver only for the configured key, such as `rollout_key`, `c
 `attributes.plan`. `percentage` requires a stable rollout key; `cohort` matches textual values
 such as `canary` or `beta`. Missing context or resolver failures return `false`.
 
+### HTTP country context
+
+Framework middleware should extract HTTP values once, then scope the resulting map around the
+filter chain. `NetworkContext` uses the socket address by default. It honors `Forwarded`,
+`X-Forwarded-For`, and an edge country header only when the direct peer matches an explicitly
+configured IP/CIDR allowlist. A local GeoIP resolver is optional and receives the effective
+client IP; do not make network calls from it.
+
+```kotlin
+val networkValues = NetworkContext.values(
+    NetworkRequest(
+        remoteIp = request.remoteAddr,
+        forwarded = request.getHeader("Forwarded"),
+        forwardedFor = request.getHeader("X-Forwarded-For"),
+        trustedCountryHeader = request.getHeader("CF-IPCountry"),
+    ),
+    NetworkContextOptions(
+        trustedProxyRanges = listOf("10.0.0.0/8", "2001:db8::/32"),
+        countryResolver = CountryResolver { clientIp -> localGeoIp.countryCode(clientIp) },
+    ),
+)
+
+requestContextResolver.withValues(networkValues) {
+    filterChain.doFilter(request, response)
+}
+```
+
+Omit `countryResolver` to disable GeoIP. Invalid, unavailable, or untrusted country values are
+not exposed to rules, so country targeting fails closed.
+
 ## 🔒 Security Features
 
 ### Server Security

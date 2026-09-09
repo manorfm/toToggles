@@ -2,6 +2,30 @@ package com.totoggle.client.context
 
 import java.net.InetAddress
 
+/** HTTP values extracted by a framework adapter without retaining the request object. */
+data class NetworkRequest(
+    val remoteIp: String?,
+    val forwarded: String?,
+    val forwardedFor: String?,
+    /** Country header selected by the framework adapter, for example CF-IPCountry. */
+    val trustedCountryHeader: String?,
+)
+
+/**
+ * Resolves a country from a client IP using a local database or in-process service.
+ *
+ * Implementations must not perform network I/O on the request path.
+ */
+fun interface CountryResolver {
+    fun resolve(clientIp: String): String?
+}
+
+/** Network extraction policy. Omitting [countryResolver] disables local GeoIP lookup. */
+data class NetworkContextOptions(
+    val trustedProxyRanges: Iterable<String> = emptyList(),
+    val countryResolver: CountryResolver? = null,
+)
+
 /**
  * Extracts network values for HTTP adapters without trusting client-controlled forwarding headers.
  *
@@ -11,32 +35,43 @@ import java.net.InetAddress
  */
 object NetworkContext {
     fun values(
-        remoteIp: String?,
-        trustedProxyRanges: Iterable<String>,
-        forwarded: String?,
-        forwardedFor: String?,
-        country: String?,
+        request: NetworkRequest,
+        options: NetworkContextOptions = NetworkContextOptions(),
     ): Map<String, String> {
-        val remoteAddress = parseIp(remoteIp)
-        val trustedPeer = remoteAddress != null && trustedProxyRanges
+        val remoteAddress = parseIp(request.remoteIp)
+        val trustedPeer = remoteAddress != null && options.trustedProxyRanges
             .mapNotNull(::parseNetwork)
             .any { it.contains(remoteAddress) }
 
         val clientAddress = if (trustedPeer) {
-            firstForwardedAddress(forwarded)
-                ?: firstForwardedForAddress(forwardedFor)
+            firstForwardedAddress(request.forwarded)
+                ?: firstForwardedForAddress(request.forwardedFor)
                 ?: remoteAddress
         } else {
             remoteAddress
         }
 
+        // A header is trustworthy only when the direct peer is explicitly trusted. A local
+        // resolver uses the effective client IP and is safe for direct and proxied requests.
+        val country = trustedCountry(trustedPeer, request.trustedCountryHeader)
+            ?: clientAddress?.hostAddress?.let { resolveCountry(options.countryResolver, it) }
+
         return buildMap {
             clientAddress?.let { put("ip", it.hostAddress) }
-            if (trustedPeer && country?.trim()?.matches(COUNTRY_CODE) == true) {
-                put("country", country.trim().uppercase())
-            }
+            country?.let { put("country", it) }
         }
     }
+
+    private fun trustedCountry(trustedPeer: Boolean, header: String?): String? =
+        header?.takeIf { trustedPeer }?.let(::normalizeCountry)
+
+    private fun resolveCountry(resolver: CountryResolver?, clientIp: String): String? =
+        runCatching { resolver?.resolve(clientIp) }
+            .getOrNull()
+            ?.let(::normalizeCountry)
+
+    private fun normalizeCountry(value: String): String? =
+        value.trim().takeIf { it.matches(COUNTRY_CODE) }?.uppercase()
 
     private fun firstForwardedAddress(header: String?): InetAddress? = header
         ?.split(',')

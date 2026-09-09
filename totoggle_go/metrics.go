@@ -15,7 +15,7 @@ type RefreshFailureListener interface {
 	OnRefreshFailure(err error, consecutiveFailures int)
 }
 
-// EvaluationListener is notified after every IsActive/IsActiveFor call that completed (including
+// EvaluationListener is notified after every IsActive/IsActiveContext call that completed (including
 // ones that resolved to false because the toggle wasn't found, or the client wasn't started).
 type EvaluationListener interface {
 	OnEvaluation(path string, result bool)

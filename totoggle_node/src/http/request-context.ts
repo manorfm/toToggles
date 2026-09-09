@@ -8,7 +8,11 @@ export interface NodeRequestContextOptions {
   readonly trustedProxyAddresses?: readonly string[];
   /** Country header emitted by a trusted edge. It is ignored for untrusted peers. */
   readonly countryHeader?: string;
-  /** Optional local GeoIP resolver; called only when a trusted country header is unavailable. */
+  /**
+   * Optional local GeoIP resolver. It receives the effective client IP: the socket peer by
+   * default, or a validated forwarded IP when that peer is trusted. It is never called for a
+   * trusted, valid country header.
+   */
   readonly countryResolver?: (ip: string) => string | undefined;
   /** Domain-owned values such as user_id, rollout_key, cohort and attributes.*. */
   readonly values?: (request: IncomingMessage) => Readonly<Record<string, string | undefined>>;
@@ -44,33 +48,65 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
     const remote = normalizeAddress(request.socket.remoteAddress);
     const trusted = remote !== undefined && isTrustedPeer(remote, this.trustedPeers);
     const values = new Map<string, string>();
-    if (remote) values.set("ip", remote);
+    const forwarded = trusted ? firstForwardedAddress(request.headers) : undefined;
+    const clientIp = forwarded && isIP(forwarded) !== 0 ? forwarded : remote;
+
+    if (clientIp) values.set("ip", clientIp);
     if (trusted) {
-      const forwardedHeader = request.headers["forwarded"];
-      const forwarded = firstForwardedAddress(Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader)
-        ?? firstForwardedAddress(Array.isArray(request.headers["x-forwarded-for"]) ? request.headers["x-forwarded-for"][0] : request.headers["x-forwarded-for"]);
-      if (forwarded && isIP(forwarded) !== 0) values.set("ip", forwarded);
-      const country = request.headers[this.countryHeader];
-      const countryValue = Array.isArray(country) ? country[0] : country;
-      const resolvedCountry = countryValue ?? (remote ? this.options.countryResolver?.(remote) : undefined);
-      if (resolvedCountry && /^[A-Za-z]{2}$/.test(resolvedCountry.trim())) values.set("country", resolvedCountry.trim().toUpperCase());
+      const country = normalizeCountry(headerValue(request.headers[this.countryHeader]));
+      if (country) values.set("country", country);
     }
-    for (const [key, value] of Object.entries(this.options.values?.(request) ?? {})) {
+
+    if (!values.has("country")) {
+      const country = clientIp ? resolveCountry(this.options.countryResolver, clientIp) : undefined;
+      if (country) values.set("country", country);
+    }
+
+    for (const [key, value] of Object.entries(domainValues(this.options.values, request))) {
+      if (key === "ip" || key === "country") continue;
       if (value !== undefined && value !== "") values.set(key, value);
     }
     return values;
   }
 }
 
-function firstForwardedAddress(value: string | undefined): string | undefined {
-  const first = value?.split(",", 1)[0]?.trim();
+function firstForwardedAddress(headers: IncomingMessage["headers"]): string | undefined {
+  const forwarded = headerValue(headers.forwarded);
+  const first = forwarded?.split(",", 1)[0]?.trim();
   const match = /^for=(.+?)(?:;.*)?$/i.exec(first ?? "");
-  return (match?.[1]?.trim().replace(/^"|"$/g, "").replace(/^\[|\]$/g, "") ?? first) || undefined;
+  const rfc7239Address = match?.[1]?.trim().replace(/^"|"$/g, "").replace(/^\[|\]$/g, "");
+  return rfc7239Address || headerValue(headers["x-forwarded-for"])?.split(",", 1)[0]?.trim() || undefined;
+}
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeCountry(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toUpperCase();
+  return normalized && /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
+}
+
+function resolveCountry(resolver: NodeRequestContextOptions["countryResolver"], ip: string): string | undefined {
+  try {
+    return normalizeCountry(resolver?.(ip));
+  } catch {
+    return undefined;
+  }
+}
+
+function domainValues(values: NodeRequestContextOptions["values"], request: IncomingMessage): Readonly<Record<string, string | undefined>> {
+  try {
+    return values?.(request) ?? {};
+  } catch {
+    return {};
+  }
 }
 
 function normalizeAddress(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  return value.startsWith("::ffff:") ? value.slice(7) : value;
+  const normalized = value.startsWith("::ffff:") ? value.slice(7) : value;
+  return isIP(normalized) === 0 ? undefined : normalized;
 }
 
 function isTrustedPeer(address: string, peers: ReadonlySet<string>): boolean {

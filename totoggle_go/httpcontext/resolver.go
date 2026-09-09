@@ -16,9 +16,18 @@ import (
 type Options struct {
 	// TrustedProxyAddresses accepts exact IPs or CIDRs.
 	TrustedProxyAddresses []string
-	CountryHeader         string
-	Values                func(*http.Request) map[string]string
+	// CountryHeader is read only from an explicitly trusted proxy. It defaults to CF-IPCountry.
+	CountryHeader string
+	// CountryResolver performs local GeoIP resolution from the effective client IP. It is optional;
+	// when neither a trusted header nor this resolver supplies a valid country, country rules fail closed.
+	CountryResolver CountryResolver
+	// Values supplies non-network, application-owned request values such as user_id or attributes.plan.
+	Values func(*http.Request) map[string]string
 }
+
+// CountryResolver isolates optional GeoIP implementations from HTTP extraction. It must not make
+// network calls while evaluating a request.
+type CountryResolver func(net.IP) (string, bool)
 
 type Resolver struct{ options Options }
 
@@ -49,27 +58,70 @@ type contextKey struct{}
 func (r *Resolver) values(req *http.Request) map[string]string {
 	values := map[string]string{}
 	remote := remoteAddress(req.RemoteAddr)
-	if ip := net.ParseIP(remote); ip != nil {
-		values["ip"] = ip.String()
+	clientIP := net.ParseIP(remote)
+	if clientIP != nil {
+		values["ip"] = clientIP.String()
 	}
 	if r.trusted(remote) {
 		if ip, ok := forwardedIP(req.Header.Get("Forwarded")); ok {
-			values["ip"] = ip
+			clientIP = net.ParseIP(ip)
+			values["ip"] = clientIP.String()
 		} else if ip, ok := xForwardedForIP(req.Header.Get("X-Forwarded-For")); ok {
-			values["ip"] = ip.String()
+			clientIP = ip
+			values["ip"] = clientIP.String()
 		}
-		if country := strings.ToUpper(strings.TrimSpace(req.Header.Get(r.options.CountryHeader))); len(country) == 2 {
+		if country, ok := normalizeCountry(req.Header.Get(r.options.CountryHeader)); ok {
+			values["country"] = country
+		}
+	}
+	if _, found := values["country"]; !found && r.options.CountryResolver != nil && clientIP != nil {
+		if country, ok := r.resolveCountry(clientIP); ok {
 			values["country"] = country
 		}
 	}
 	if r.options.Values != nil {
-		for key, value := range r.options.Values(req) {
-			if value != "" {
+		for key, value := range r.applicationValues(req) {
+			if value != "" && key != "ip" && key != "country" {
 				values[key] = value
 			}
 		}
 	}
 	return values
+}
+
+func (r *Resolver) applicationValues(req *http.Request) (values map[string]string) {
+	defer func() {
+		if recover() != nil {
+			values = nil
+		}
+	}()
+	return r.options.Values(req)
+}
+
+func (r *Resolver) resolveCountry(ip net.IP) (country string, ok bool) {
+	defer func() {
+		if recover() != nil {
+			country, ok = "", false
+		}
+	}()
+	country, ok = r.options.CountryResolver(ip)
+	if !ok {
+		return "", false
+	}
+	return normalizeCountry(country)
+}
+
+func normalizeCountry(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) != 2 {
+		return "", false
+	}
+	for i := range value {
+		if (value[i] < 'A' || value[i] > 'Z') && (value[i] < 'a' || value[i] > 'z') {
+			return "", false
+		}
+	}
+	return strings.ToUpper(value), true
 }
 
 func remoteAddress(address string) string {

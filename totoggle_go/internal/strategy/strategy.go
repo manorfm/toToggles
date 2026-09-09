@@ -1,5 +1,5 @@
-// Package strategy holds one Evaluator per activation-rule type (percentage, parameter, user_id,
-// ip, country, time, canary) plus a Registry that dispatches a rule to the evaluator for its
+// Package strategy holds one Evaluator per activation-rule type (percentage, attribute, user_id,
+// ip, country, time, cohort) plus a Registry that dispatches a rule to the evaluator for its
 // Type — the Client asks the Registry, never a concrete evaluator directly.
 package strategy
 
@@ -10,11 +10,8 @@ import (
 )
 
 // Evaluator decides whether an activation rule matches a given evaluation key (e.g. the
-// "parameter" value passed by the caller, or a stable per-request identifier — the meaning of
-// key is defined by each rule Type, not by this interface). hasKey distinguishes "no parameter
-// was supplied at all" (Client.IsActive) from "an explicit empty-string parameter was supplied"
-// (Client.IsActiveFor(path, "")) — a Go string can't represent that distinction on its own the
-// way a nullable parameter can.
+// context value obtained by the configured resolver. The meaning of key is defined by the rule
+// type; hasKey distinguishes unavailable context from an explicitly empty context value.
 type Evaluator interface {
 	Evaluate(rule toggle.ActivationRule, key string, hasKey bool) bool
 }

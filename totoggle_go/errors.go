@@ -1,7 +1,7 @@
 // Package totoggle is the ToToggle feature-flag client. It fetches the toggle set for one
 // application via a secret key, caches it in memory, and evaluates toggles (including
 // hierarchical cascading and activation rules) entirely from that cache — no network access on
-// the IsActive/IsActiveFor hot path.
+// the IsActive/IsActiveContext hot path.
 package totoggle
 
 import (
@@ -14,7 +14,7 @@ import (
 // errors.Is to check for it; the wrapped message names the specific problem.
 var ErrInvalidConfig = errors.New("totoggle: invalid configuration")
 
-// ErrNotStarted is never currently returned (IsActive/IsActiveFor fail closed to false instead,
+// ErrNotStarted is never currently returned (IsActive/IsActiveContext fail closed to false instead,
 // so a feature-flag check never needs its own error handling at the call site) — it is exported
 // for Refresh, which is a deliberate action a caller can retry, and therefore deserves a real
 // error rather than silent failure.

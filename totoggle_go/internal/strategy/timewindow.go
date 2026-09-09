@@ -8,7 +8,7 @@ import (
 )
 
 // TimeWindowEvaluator matches a "HH:mm-HH:mm" 24h daily window against the current time. Needs
-// no parameter — it reads the clock instead. An overnight window (start > end, e.g.
+// no context key — it reads the clock instead. An overnight window (start > end, e.g.
 // "22:00-06:00") wraps past midnight.
 type TimeWindowEvaluator struct {
 	now func() time.Time

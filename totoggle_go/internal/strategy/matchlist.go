@@ -7,8 +7,7 @@ import (
 )
 
 // MatchListEvaluator implements the "comma-separated allowlist, exact trimmed match" shape
-// shared by four otherwise-identical rule types (parameter, user_id, country, canary — the
-// confirmed prototype hints describe all four the same way). One implementation registered
+// shared by four otherwise-identical rule types (attribute, user_id, country, cohort). One implementation registered
 // under all four types, instead of four copies of the same logic.
 type MatchListEvaluator struct{}
 
