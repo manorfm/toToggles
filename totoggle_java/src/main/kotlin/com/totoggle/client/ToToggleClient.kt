@@ -159,16 +159,16 @@ class ToToggleClient(private val config: ToToggleConfig) {
                 val rule = toggle.activationRule
                 if (toggle.hasActivationRule && rule != null) {
                     val ruleResult = evaluateRule(rule, toggle.path)
-                    logger.debug("Activation rule evaluation: path='{}', rule='{}/{}', result={}",
-                        path, rule.type, rule.value, ruleResult)
+                    logger.debug("Activation rule evaluated: path='{}', ruleType='{}', result={}",
+                        path, rule.type, ruleResult)
                     ruleResult
                 } else {
                     logger.debug("No activation rules for toggle: {}", path)
                     true
                 }
             }
-        } catch (e: Exception) {
-            logger.error("Error checking toggle: {}", path, e)
+        } catch (_: Exception) {
+            logger.error("Error checking toggle; returning false")
             false
         }
 
@@ -212,14 +212,14 @@ class ToToggleClient(private val config: ToToggleConfig) {
             }
             val rawKey = config.contextResolver?.resolve(contextKey)
             if (rawKey.isNullOrBlank()) {
-                logger.warn("Activation rule context '{}' is absent; returning false", contextKey)
+                logger.warn("Activation rule context is absent; returning false")
                 false
             } else {
                 val key = if (rule.type == "percentage") "$path:$rawKey" else rawKey
                 strategyFactory.evaluate(rule, key)
             }
-        } catch (e: Exception) {
-            logger.warn("ToggleContextResolver or rule evaluation failed; returning false", e)
+        } catch (_: Exception) {
+            logger.warn("Toggle context resolution or rule evaluation failed; returning false")
             false
         }
     }

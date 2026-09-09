@@ -107,6 +107,11 @@ the context key requested by the rule. The included `httpcontext` package reads 
 default; it honors forwarding and country headers only from configured trusted proxies. It also
 accepts an optional local GeoIP resolver, which receives the effective client IP.
 
+`ApplicationValues` is the only application-controlled context surface. It contains an
+authenticated `user_id`, stable `rollout_key`, deployment `cohort`, and named `attributes`.
+It deliberately cannot set network-owned `ip` or `country`. Return the zero value when identity
+is unavailable: a contextual rule then fails closed.
+
 ```go
 // In the HTTP bootstrap; import net, net/http, and the httpcontext package.
 resolver := httpcontext.New(httpcontext.Options{
@@ -114,12 +119,16 @@ resolver := httpcontext.New(httpcontext.Options{
     CountryResolver: func(ip net.IP) (string, bool) {
         return localGeoIP.CountryCode(ip) // no network I/O on the request path
     },
-    Values: func(r *http.Request) map[string]string {
-        return map[string]string{
-            "user_id":         authenticatedUserID(r),
-            "rollout_key":     authenticatedUserID(r),
-            "cohort":          deploymentCohort,
-            "attributes.plan": accountPlan(r),
+    ApplicationValues: func(r *http.Request) httpcontext.ApplicationValues {
+        identity, ok := authenticatedIdentity(r.Context())
+        if !ok {
+            return httpcontext.ApplicationValues{}
+        }
+        return httpcontext.ApplicationValues{
+            UserID:     identity.ID,
+            RolloutKey: identity.AccountID,
+            Cohort:     deploymentCohort,
+            Attributes: map[string]string{"plan": identity.Plan},
         }
     },
 })
@@ -132,19 +141,48 @@ if err != nil {
 }
 client := totoggle.New(cfg)
 
-handler := resolver.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+handler := authenticationMiddleware(resolver.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     if client.IsActiveContext(r.Context(), "payments.card") {
         // new behavior
     }
-}))
+})))
+http.ListenAndServe(":8080", handler)
 ```
 
 `country` prefers a valid configured edge header when the direct peer is trusted. Otherwise the
 optional local resolver runs with the effective client IP; malformed, unavailable, and disabled
-sources fail closed. Application `Values` cannot override `ip` or `country`. Missing context or a
-resolver panic returns `false`; evaluation never panics. For request-scoped values call
+sources fail closed. `ApplicationValues` cannot override `ip` or `country`. Missing context or a
+resolver panic returns `false`; evaluation never panics. `authenticationMiddleware` must run
+before `resolver.Middleware`, so the resolver receives its trusted identity context. For
+request-scoped values call
 `client.IsActiveContext(request.Context(), "payments.card")`; `IsActive` uses an empty background
 context.
+
+Gin middleware can establish authenticated identity before a small resolver bridge attaches the
+request-local context. Import `github.com/gin-gonic/gin` in an application that uses Gin.
+
+```go
+router := gin.New()
+router.Use(authenticateGin) // writes trusted identity to c.Request.Context()
+router.Use(func(c *gin.Context) {
+    resolver.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+        c.Request = request
+        c.Next()
+    })).ServeHTTP(c.Writer, c.Request)
+})
+router.GET("/payments", func(c *gin.Context) {
+    if client.IsActiveContext(c.Request.Context(), "payments.card") {
+        c.Status(http.StatusNoContent)
+        return
+    }
+    c.Status(http.StatusNotFound)
+})
+
+http.ListenAndServe(":8080", router)
+```
+
+Each call to the middleware snapshots the values into that request's `context.Context`; values
+are never held on the client or shared across concurrent requests.
 
 ## Observability
 

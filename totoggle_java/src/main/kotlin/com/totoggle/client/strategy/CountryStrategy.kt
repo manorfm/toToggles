@@ -21,7 +21,7 @@ class CountryStrategy : ActivationStrategy {
 
     override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
         val result = matchesCommaSeparatedList(rule.value, parameter)
-        logger.debug("Country strategy: rule='${rule.value}', country='$parameter', result=$result")
+        logger.debug("Country strategy evaluated: result={}", result)
         return result
     }
 

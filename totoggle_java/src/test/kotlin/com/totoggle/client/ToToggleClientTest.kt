@@ -2,6 +2,8 @@ package com.totoggle.client
 
 import com.totoggle.client.config.LogLevel
 import com.totoggle.client.config.ToToggleConfig
+import com.totoggle.client.context.RequestContextResolver
+import com.totoggle.client.context.ToggleRequestContext
 import com.totoggle.client.metrics.ToToggleMetricsListener
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -181,6 +183,24 @@ class ToToggleClientTest {
         contextValues["user_id"] = "999"
         assertThat(client.isActive("user.payments.view-table")).isFalse()
         assertThat(client.isActive("user.payments.view-table")).isFalse()
+    }
+
+    @Test
+    fun `should evaluate contextual rules from the request resolver without call-site parameters`() {
+        val resolver = RequestContextResolver()
+        val scopedClient = ToToggleClient(config.copy(contextResolver = resolver))
+
+        try {
+            mockResponseWithParameterRule()
+            scopedClient.start()
+
+            assertThat(scopedClient.isActive("user.payments.view-table")).isFalse()
+            resolver.withContext(ToggleRequestContext(attributes = mapOf("plan" to "premium"))) {
+                assertThat(scopedClient.isActive("user.payments.view-table")).isTrue()
+            }
+        } finally {
+            scopedClient.shutdown()
+        }
     }
 
     @Test

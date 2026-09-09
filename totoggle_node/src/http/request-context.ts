@@ -3,6 +3,23 @@ import type { IncomingMessage } from "node:http";
 import { isIP } from "node:net";
 import type { ToggleContextResolver } from "../context.js";
 
+/** Application-owned request values. Network values are deliberately absent: the adapter
+ * derives `ip` and `country` itself, so application code cannot spoof them. */
+export interface NodeDomainContextValues {
+  /** Authenticated principal identifier used by `user_id` rules. */
+  readonly userId?: string;
+  /** Stable subject identifier used by `percentage` rules. */
+  readonly rolloutKey?: string;
+  /** Textual deployment ring used by `cohort` rules, for example `beta`. */
+  readonly cohort?: string;
+  /** Application attributes addressed by rules as `attributes.<name>`. */
+  readonly attributes?: Readonly<Record<string, string | undefined>>;
+}
+
+export interface FastifyRequestLike {
+  readonly raw: IncomingMessage;
+}
+
 export interface NodeRequestContextOptions {
   /** Exact peer addresses allowed to supply forwarded IP and country headers. Empty by default. */
   readonly trustedProxyAddresses?: readonly string[];
@@ -14,8 +31,8 @@ export interface NodeRequestContextOptions {
    * trusted, valid country header.
    */
   readonly countryResolver?: (ip: string) => string | undefined;
-  /** Domain-owned values such as user_id, rollout_key, cohort and attributes.*. */
-  readonly values?: (request: IncomingMessage) => Readonly<Record<string, string | undefined>>;
+  /** Application-owned values. The resolver converts them to canonical rule context keys. */
+  readonly values?: (request: IncomingMessage) => NodeDomainContextValues | undefined;
 }
 
 /** Request-local resolver for Node HTTP servers. Use run() in middleware before calling isActive. */
@@ -33,10 +50,17 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
     return this.storage.run(this.valuesFor(request), callback);
   }
 
-  /** Express/Fastify-compatible middleware: req must be a Node IncomingMessage shape. */
-  middleware() {
+  /** Express middleware. Register with `app.use(requestContext.expressMiddleware())`. */
+  expressMiddleware() {
     return (request: IncomingMessage, _response: unknown, next: () => void): void => {
       this.run(request, next);
+    };
+  }
+
+  /** Fastify `onRequest` hook. Register with `fastify.addHook("onRequest", hook)`. */
+  fastifyOnRequest() {
+    return (request: FastifyRequestLike, _reply: unknown, done: () => void): void => {
+      this.run(request.raw, done);
     };
   }
 
@@ -62,9 +86,12 @@ export class NodeRequestContextResolver implements ToggleContextResolver {
       if (country) values.set("country", country);
     }
 
-    for (const [key, value] of Object.entries(domainValues(this.options.values, request))) {
-      if (key === "ip" || key === "country") continue;
-      if (value !== undefined && value !== "") values.set(key, value);
+    const domain = domainValues(this.options.values, request);
+    setValue(values, "user_id", domain.userId);
+    setValue(values, "rollout_key", domain.rolloutKey);
+    setValue(values, "cohort", domain.cohort);
+    for (const [name, value] of attributeEntries(domain.attributes)) {
+      if (name.trim() !== "") setValue(values, `attributes.${name}`, value);
     }
     return values;
   }
@@ -95,11 +122,24 @@ function resolveCountry(resolver: NodeRequestContextOptions["countryResolver"], 
   }
 }
 
-function domainValues(values: NodeRequestContextOptions["values"], request: IncomingMessage): Readonly<Record<string, string | undefined>> {
+function domainValues(values: NodeRequestContextOptions["values"], request: IncomingMessage): NodeDomainContextValues {
   try {
     return values?.(request) ?? {};
   } catch {
     return {};
+  }
+}
+
+function setValue(values: Map<string, string>, key: string, value: unknown): void {
+  if (typeof value === "string" && value.trim() !== "") values.set(key, value);
+}
+
+function attributeEntries(attributes: unknown): ReadonlyArray<readonly [string, unknown]> {
+  if (attributes === null || typeof attributes !== "object" || Array.isArray(attributes)) return [];
+  try {
+    return Object.entries(attributes);
+  } catch {
+    return [];
   }
 }
 

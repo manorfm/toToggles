@@ -11,7 +11,6 @@ import com.totoggle.client.model.ServerResponse
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.logging.HttpLoggingInterceptor
 import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -27,24 +26,9 @@ class HttpClient(private val config: ToToggleConfig) {
     private val httpClient: OkHttpClient
     
     init {
-        val loggingInterceptor = HttpLoggingInterceptor { message ->
-            when (config.logLevel) {
-                com.totoggle.client.config.LogLevel.TRACE,
-                com.totoggle.client.config.LogLevel.DEBUG -> logger.debug("HTTP: {}", message)
-                else -> { /* No logging */ }
-            }
-        }
-        
-        loggingInterceptor.level = when (config.logLevel) {
-            com.totoggle.client.config.LogLevel.TRACE -> HttpLoggingInterceptor.Level.BODY
-            com.totoggle.client.config.LogLevel.DEBUG -> HttpLoggingInterceptor.Level.HEADERS
-            else -> HttpLoggingInterceptor.Level.NONE
-        }
-        
         httpClient = OkHttpClient.Builder()
             .connectTimeout(config.connectionTimeout.toMillis(), TimeUnit.MILLISECONDS)
             .readTimeout(config.readTimeout.toMillis(), TimeUnit.MILLISECONDS)
-            .addInterceptor(loggingInterceptor)
             .build()
         
         logger.info("HTTP client initialized for application: {}", config.applicationName)
@@ -59,7 +43,7 @@ class HttpClient(private val config: ToToggleConfig) {
      * @throws ParseException if the response cannot be parsed
      */
     fun fetchToggles(): ServerResponse {
-        logger.debug("Fetching toggles from server: {}", config.getApiUrl())
+        logger.debug("Fetching toggle catalogue")
         
         val request = Request.Builder()
             .url(config.getApiUrl())
@@ -73,7 +57,7 @@ class HttpClient(private val config: ToToggleConfig) {
                 handleResponse(response)
             }
         } catch (e: IOException) {
-            logger.error("Network error while fetching toggles", e)
+            logger.error("Network error while fetching toggle catalogue")
             throw NetworkException("Failed to fetch toggles from server", e)
         }
     }
@@ -93,12 +77,12 @@ class HttpClient(private val config: ToToggleConfig) {
                     throw ParseException("Empty response body")
                 }
                 
-                logger.debug("Response body length: {} characters", responseBody.length)
+                logger.debug("Received a toggle catalogue response body of {} characters", responseBody.length)
                 
                 return try {
                     objectMapper.readValue<ServerResponse>(responseBody)
                 } catch (e: Exception) {
-                    logger.error("Failed to parse server response", e)
+                    logger.error("Failed to parse server response")
                     throw ParseException("Failed to parse server response", e)
                 }
             }

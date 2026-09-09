@@ -5,6 +5,9 @@ import com.totoggle.client.config.ToToggleConfig
 import com.totoggle.client.exception.AuthenticationException
 import com.totoggle.client.exception.NetworkException
 import com.totoggle.client.exception.ParseException
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.core.read.ListAppender
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.assertj.core.api.Assertions.assertThat
@@ -12,6 +15,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import java.time.Duration
 
 class HttpClientTest {
@@ -227,5 +231,36 @@ class HttpClientTest {
         assertThatThrownBy { httpClient.fetchToggles() }
             .isInstanceOf(ParseException::class.java)
             .hasMessageContaining("Failed to parse server response")
+    }
+
+    @Test
+    fun `should never log API keys headers or raw response bodies at trace`() {
+        val apiKey = "sk_sensitive_api-key"
+        val responseMarker = "response-body-secret"
+        val traceClient = HttpClient(config.copy(secretKey = apiKey, logLevel = LogLevel.TRACE))
+        val logger = LoggerFactory.getLogger(HttpClient::class.java) as Logger
+        val appender = ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>()
+        val previousLevel = logger.level
+
+        mockServer.enqueue(MockResponse().setResponseCode(200).setBody("""
+            {"application":{"id":"app-123","name":"$responseMarker","toggles":[]}}
+        """.trimIndent()))
+
+        try {
+            appender.start()
+            logger.level = Level.DEBUG
+            logger.addAppender(appender)
+
+            traceClient.fetchToggles()
+
+            val messages = appender.list.map { it.formattedMessage }
+            assertThat(messages).noneMatch { it.contains(apiKey) }
+            assertThat(messages).noneMatch { it.contains("X-API-Key") }
+            assertThat(messages).noneMatch { it.contains(responseMarker) }
+        } finally {
+            logger.detachAppender(appender)
+            logger.level = previousLevel
+            traceClient.close()
+        }
     }
 }

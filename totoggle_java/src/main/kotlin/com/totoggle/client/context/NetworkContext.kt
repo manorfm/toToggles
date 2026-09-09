@@ -37,7 +37,7 @@ object NetworkContext {
     fun values(
         request: NetworkRequest,
         options: NetworkContextOptions = NetworkContextOptions(),
-    ): Map<String, String> {
+    ): NetworkContextValues {
         val remoteAddress = parseIp(request.remoteIp)
         val trustedPeer = remoteAddress != null && options.trustedProxyRanges
             .mapNotNull(::parseNetwork)
@@ -56,10 +56,10 @@ object NetworkContext {
         val country = trustedCountry(trustedPeer, request.trustedCountryHeader)
             ?: clientAddress?.hostAddress?.let { resolveCountry(options.countryResolver, it) }
 
-        return buildMap {
+        return NetworkContextValues.from(buildMap {
             clientAddress?.let { put("ip", it.hostAddress) }
             country?.let { put("country", it) }
-        }
+        })
     }
 
     private fun trustedCountry(trustedPeer: Boolean, header: String?): String? =

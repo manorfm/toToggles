@@ -31,6 +31,7 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
         private val TYPES_REQUIRING_PARAMETER = setOf(
             ActivationRule.TYPE_ATTRIBUTE,
             ActivationRule.TYPE_USER_ID,
+            ActivationRule.TYPE_IP,
             ActivationRule.TYPE_COUNTRY,
             ActivationRule.TYPE_COHORT,
         )
@@ -92,14 +93,9 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
     /**
      * Evaluates an activation rule using the appropriate strategy.
      *
-     * Never throws for a missing parameter — a caller-side mistake here should degrade to "rule
-     * doesn't match" (`false`), not crash the caller's request. Instead, when [rule]'s type is
-     * one of [TYPES_REQUIRING_PARAMETER] and [parameter] is null, this logs an ERROR: that
-     * combination can only mean the code calling `isActive()` forgot to pass a parameter that a
-     * rule on the toggle (or one of its ancestors — see ToToggleClient#areParentsActive) actually
-     * needs. This can't be caught at compile time: the rule catalog is fetched from the server at
-     * runtime and can change independently of the calling code, so there's no static type that
-     * could encode "this path string needs a parameter."
+     * Never throws for missing resolved context — it degrades to a failed rule. [parameter] is an
+     * internal strategy input supplied by [com.totoggle.client.ToToggleClient] after consulting
+     * its configured context resolver; callers use `isActive(path)` without context parameters.
      *
      * @param rule The activation rule to evaluate
      * @param parameter Optional parameter for rule evaluation
@@ -112,17 +108,13 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
         }
 
         if (!rule.isValid()) {
-            logger.warn("Invalid activation rule: type='${rule.type}', value='${rule.value}'")
+            logger.warn("Invalid activation rule; returning false")
             return false
         }
 
         if (parameter == null && rule.type in TYPES_REQUIRING_PARAMETER) {
             logger.error(
-                "Activation rule type '{}' (value='{}') requires a parameter to evaluate, but " +
-                    "isActive() was called without one. This toggle — or an ancestor of the " +
-                    "toggle being checked — will always evaluate to false until a parameter is " +
-                    "passed to isActive(path, parameter).",
-                rule.type, rule.value
+                "Activation rule requires context but no value was resolved; returning false"
             )
         }
 
@@ -132,8 +124,8 @@ class StrategyFactory(timeZone: ZoneId = ZoneId.systemDefault()) {
         } catch (_: StrategyNotFoundException) {
             logger.warn("Strategy not found for rule type '{}', returning false", rule.type)
             false
-        } catch (e: Exception) {
-            logger.error("Error evaluating activation rule: type='${rule.type}', value='${rule.value}'", e)
+        } catch (_: Exception) {
+            logger.error("Activation rule evaluation failed")
             false
         }
     }

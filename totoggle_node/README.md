@@ -102,23 +102,37 @@ const requestContext = new NodeRequestContextResolver({
   trustedProxyAddresses: ["10.0.0.0/24", "2001:db8::/32"],
   countryResolver: localGeoIpLookup,
   values: (request) => ({
-    user_id: request.user?.id,
-    rollout_key: request.user?.id,
-    cohort: process.env.DEPLOY_RING,
-    "attributes.plan": request.account?.plan,
+    userId: authenticatedUserId(request),
+    rolloutKey: authenticatedUserId(request),
+    cohort: deploymentCohort,
+    attributes: { plan: accountPlan(request) },
   }),
 });
 const config = createConfig("checkout", "https://toggles.example", "sk_...", {
   contextResolver: requestContext,
 });
-app.use(requestContext.middleware());
+```
+
+With Express, register the adapter before handlers that call `isActive`:
+
+```ts
+app.use(requestContext.expressMiddleware());
+```
+
+With Fastify, use its `onRequest` hook; the adapter scopes the context from Fastify's raw Node
+request:
+
+```ts
+fastify.addHook("onRequest", requestContext.fastifyOnRequest());
 ```
 
 `country` uses a valid country header only from a trusted peer. Otherwise, or if that header is
 missing or invalid, the optional local GeoIP resolver receives the effective client IP. The socket
 peer is used directly; `Forwarded` and `X-Forwarded-For` are used only for trusted peers. With no
 country source, malformed data, or a resolver error, country rules fail closed. Domain `values`
-cannot override `ip` or `country`.
+has only `userId`, `rolloutKey`, `cohort`, and `attributes`; it cannot override `ip` or `country`.
+Each request gets an isolated async context, so concurrent requests never share identity or
+attribute values.
 
 ## Observability
 

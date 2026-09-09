@@ -205,50 +205,88 @@ user                     (disabled)
 
 In this case, `client.isActive("user.payments.new-ui")` returns `false` because the parent `user` toggle is disabled, even though the specific toggle is enabled.
 
-## ToggleContextResolver
+## Request context
 
-Contextual rules are local to the requested toggle; ancestor rules never cascade. Configure the
-resolver from application middleware, which is responsible for safely extracting request data:
+Contextual rules are local to the requested toggle; ancestor rules never cascade. Applications
+should configure one `RequestContextResolver` and call `client.isActive(path)` without supplying
+user or network data at each call site. The resolver exposes only the configured key, such as
+`rollout_key`, `country`, or `attributes.plan`. Missing context and resolver failures return
+`false`.
+
+`ToggleRequestContext` is the canonical application-owned context:
+
+- `userId` comes only from an authenticated principal.
+- `rolloutKey` is a stable, non-secret identity used by percentage rules. It is intentionally
+  never derived from a request ID; using the authenticated user ID is common when appropriate.
+- `cohort` is a server-owned deployment or experiment ring, such as `beta`.
+- `attributes` uses unprefixed names (`"plan"` becomes `attributes.plan`).
+
+`ip` and `country` are transport-owned. The domain context cannot overwrite them.
+
+### Servlet filter
+
+The SDK has no Servlet dependency. In an application using Jakarta Servlet, bind the context in a
+filter around the complete synchronous chain. The example obtains identity and attributes from
+application authentication services—not request headers or query parameters.
 
 ```kotlin
-.contextResolver(ToggleContextResolver { key ->
-    requestContext[key]
-})
-```
-
-The SDK asks the resolver only for the configured key, such as `rollout_key`, `country`, or
-`attributes.plan`. `percentage` requires a stable rollout key; `cohort` matches textual values
-such as `canary` or `beta`. Missing context or resolver failures return `false`.
-
-### HTTP country context
-
-Framework middleware should extract HTTP values once, then scope the resulting map around the
-filter chain. `NetworkContext` uses the socket address by default. It honors `Forwarded`,
-`X-Forwarded-For`, and an edge country header only when the direct peer matches an explicitly
-configured IP/CIDR allowlist. A local GeoIP resolver is optional and receives the effective
-client IP; do not make network calls from it.
-
-```kotlin
-val networkValues = NetworkContext.values(
-    NetworkRequest(
-        remoteIp = request.remoteAddr,
-        forwarded = request.getHeader("Forwarded"),
-        forwardedFor = request.getHeader("X-Forwarded-For"),
-        trustedCountryHeader = request.getHeader("CF-IPCountry"),
-    ),
-    NetworkContextOptions(
-        trustedProxyRanges = listOf("10.0.0.0/8", "2001:db8::/32"),
-        countryResolver = CountryResolver { clientIp -> localGeoIp.countryCode(clientIp) },
-    ),
-)
-
-requestContextResolver.withValues(networkValues) {
-    filterChain.doFilter(request, response)
+class ToToggleContextFilter(
+    private val resolver: RequestContextResolver,
+    private val authenticatedUser: (HttpServletRequest) -> AuthenticatedUser?,
+    private val localGeoIp: (String) -> String?,
+) : Filter {
+    override fun doFilter(request: ServletRequest, response: ServletResponse, chain: FilterChain) {
+        val http = request as? HttpServletRequest ?: return chain.doFilter(request, response)
+        val networkValues = NetworkContext.values(
+            NetworkRequest(
+                remoteIp = http.remoteAddr,
+                forwarded = http.getHeader("Forwarded"),
+                forwardedFor = http.getHeader("X-Forwarded-For"),
+                trustedCountryHeader = http.getHeader("CF-IPCountry"),
+            ),
+            NetworkContextOptions(
+                trustedProxyRanges = listOf("10.0.0.0/8", "2001:db8::/32"),
+                countryResolver = CountryResolver { clientIp -> localGeoIp(clientIp) },
+            ),
+        )
+        val user = authenticatedUser(http)
+        resolver.withContext(
+            ToggleRequestContext(
+                userId = user?.id,
+                rolloutKey = user?.id,
+                cohort = deploymentCohort(),
+                attributes = user?.attributes.orEmpty(),
+            ),
+            networkValues,
+        ) { chain.doFilter(request, response) }
+    }
 }
 ```
 
-Omit `countryResolver` to disable GeoIP. Invalid, unavailable, or untrusted country values are
-not exposed to rules, so country targeting fails closed.
+Configure the client once with `.contextResolver(resolver)`. `NetworkContext` uses the socket
+address by default. It honors `Forwarded`, `X-Forwarded-For`, and an edge country header only
+when the direct peer matches an explicitly configured IP/CIDR allowlist. The optional local GeoIP
+resolver receives the effective client IP and must not make network calls. Invalid, unavailable,
+or untrusted country data is omitted, so country rules fail closed.
+
+### Synchronous MVC interceptor
+
+For a synchronous MVC interceptor, retain the `RequestContextScope` from `preHandle` and close it
+in `afterCompletion`. A Servlet filter is preferred because it automatically cleans up on every
+exception. Do not use this ThreadLocal resolver for reactive handlers, coroutines, Servlet async
+dispatch, or work submitted to another executor; provide a resolver backed by that framework's
+request context instead.
+
+```kotlin
+override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
+    request.setAttribute(CONTEXT_SCOPE, resolver.openContext(contextForAuthenticatedUser(request), networkValuesFor(request)))
+    return true
+}
+
+override fun afterCompletion(request: HttpServletRequest, response: HttpServletResponse, handler: Any, exception: Exception?) {
+    (request.getAttribute(CONTEXT_SCOPE) as? AutoCloseable)?.close()
+}
+```
 
 ## 🔒 Security Features
 

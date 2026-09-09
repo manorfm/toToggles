@@ -35,12 +35,12 @@ class PercentageStrategy : ActivationStrategy {
         return try {
             val percentage = rule.value.toDoubleOrNull()
             if (percentage == null) {
-                logger.warn("Invalid percentage value: ${rule.value}")
+                logger.warn("Invalid percentage rule value")
                 return false
             }
 
             if (percentage !in 0.0..100.0) {
-                logger.warn("Percentage value out of range [0,100]: $percentage")
+                logger.warn("Percentage rule value is outside the supported range")
                 return false
             }
 
@@ -51,11 +51,11 @@ class PercentageStrategy : ActivationStrategy {
             }
             val result = bucket < percentage
 
-            logger.debug("Percentage strategy: bucket=$bucket, threshold=$percentage, parameter=$parameter, result=$result")
+            logger.debug("Percentage strategy evaluated: result={}", result)
             result
 
-        } catch (e: Exception) {
-            logger.error("Error evaluating percentage rule: ${rule.value}", e)
+        } catch (_: Exception) {
+            logger.error("Percentage strategy evaluation failed")
             false
         }
     }

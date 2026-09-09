@@ -29,12 +29,12 @@ class IpStrategy : ActivationStrategy {
 
         val candidate = parseIpv4(parameter)
         if (candidate == null) {
-            logger.warn("IP strategy: could not parse candidate IP '{}'", parameter)
+            logger.warn("IP strategy received an invalid candidate address")
             return false
         }
 
         val result = rule.value.split(",").map { it.trim() }.any { matchesEntry(it, candidate) }
-        logger.debug("IP strategy: rule='${rule.value}', ip='$parameter', result=$result")
+        logger.debug("IP strategy evaluated: result={}", result)
         return result
     }
 

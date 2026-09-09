@@ -4,10 +4,103 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestResolver_ProvidesOnlyCanonicalApplicationValues(t *testing.T) {
+	resolver := New(Options{
+		ApplicationValues: func(*http.Request) ApplicationValues {
+			return ApplicationValues{
+				UserID:     "user-42",
+				RolloutKey: "account-7",
+				Cohort:     "beta",
+				Attributes: map[string]string{"plan": "pro", "": "ignored"},
+			}
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.4:443"
+
+	resolver.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		for key, want := range map[string]string{
+			"user_id":         "user-42",
+			"rollout_key":     "account-7",
+			"cohort":          "beta",
+			"attributes.plan": "pro",
+		} {
+			got, ok := resolver.Resolve(request.Context(), key)
+			assert.True(t, ok, key)
+			assert.Equal(t, want, got)
+		}
+		_, ok := resolver.Resolve(request.Context(), "attributes.")
+		assert.False(t, ok)
+	})).ServeHTTP(httptest.NewRecorder(), req)
+}
+
+func TestResolver_IsolatesApplicationValuesBetweenConcurrentRequests(t *testing.T) {
+	resolver := New(Options{
+		ApplicationValues: func(request *http.Request) ApplicationValues {
+			return ApplicationValues{
+				UserID:     request.Header.Get("X-Authenticated-User"),
+				RolloutKey: request.Header.Get("X-Rollout-Key"),
+				Cohort:     request.Header.Get("X-Deployment-Cohort"),
+				Attributes: map[string]string{"plan": request.Header.Get("X-Account-Plan")},
+			}
+		},
+	})
+
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	errs := make(chan string, 2)
+	handler := resolver.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		ready <- struct{}{}
+		<-release
+		for key, want := range map[string]string{
+			"user_id":         request.Header.Get("X-Authenticated-User"),
+			"rollout_key":     request.Header.Get("X-Rollout-Key"),
+			"cohort":          request.Header.Get("X-Deployment-Cohort"),
+			"attributes.plan": request.Header.Get("X-Account-Plan"),
+		} {
+			got, ok := resolver.Resolve(request.Context(), key)
+			if !ok || got != want {
+				errs <- key
+				return
+			}
+		}
+	}))
+
+	requests := []*http.Request{
+		requestWithDomainValues("user-a", "account-a", "beta", "pro"),
+		requestWithDomainValues("user-b", "account-b", "stable", "free"),
+	}
+	var requestsWG sync.WaitGroup
+	for _, request := range requests {
+		requestsWG.Add(1)
+		go func(request *http.Request) {
+			defer requestsWG.Done()
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+		}(request)
+	}
+	<-ready
+	<-ready
+	close(release)
+	requestsWG.Wait()
+	close(errs)
+	assert.Empty(t, errs)
+}
+
+func requestWithDomainValues(userID, rolloutKey, cohort, plan string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.4:443"
+	req.Header.Set("X-Authenticated-User", userID)
+	req.Header.Set("X-Rollout-Key", rolloutKey)
+	req.Header.Set("X-Deployment-Cohort", cohort)
+	req.Header.Set("X-Account-Plan", plan)
+	return req
+}
 
 func TestResolver_UsesTrustedCountryHeaderBeforeLocalResolver(t *testing.T) {
 	called := false
@@ -104,8 +197,8 @@ func TestResolver_FailsClosedWhenCountryResolverPanics(t *testing.T) {
 
 func TestResolver_DoesNotAllowApplicationValuesToOverrideNetworkContext(t *testing.T) {
 	resolver := New(Options{
-		Values: func(*http.Request) map[string]string {
-			return map[string]string{"ip": "203.0.113.9", "country": "BR", "user_id": "u-1"}
+		ApplicationValues: func(*http.Request) ApplicationValues {
+			return ApplicationValues{UserID: "u-1"}
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -124,7 +217,7 @@ func TestResolver_DoesNotAllowApplicationValuesToOverrideNetworkContext(t *testi
 }
 
 func TestResolver_FailsClosedWhenApplicationValuesPanics(t *testing.T) {
-	resolver := New(Options{Values: func(*http.Request) map[string]string {
+	resolver := New(Options{ApplicationValues: func(*http.Request) ApplicationValues {
 		panic("identity provider unavailable")
 	}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -157,7 +250,7 @@ func TestResolver_IgnoresForwardedHeadersFromUntrustedPeer(t *testing.T) {
 }
 
 func TestResolver_UsesTrustedProxyAndDomainValues(t *testing.T) {
-	resolver := New(Options{TrustedProxyAddresses: []string{"10.0.0.8"}, Values: func(*http.Request) map[string]string { return map[string]string{"user_id": "u-1"} }})
+	resolver := New(Options{TrustedProxyAddresses: []string{"10.0.0.8"}, ApplicationValues: func(*http.Request) ApplicationValues { return ApplicationValues{UserID: "u-1"} }})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.8:443"
 	req.Header.Set("X-Forwarded-For", "203.0.113.4, 10.0.0.8")

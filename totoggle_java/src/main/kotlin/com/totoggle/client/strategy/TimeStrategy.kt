@@ -27,7 +27,7 @@ class TimeStrategy(private val clock: Clock = Clock.systemDefaultZone()) : Activ
     override fun evaluate(rule: ActivationRule, parameter: String?): Boolean {
         val window = rule.value.split("-", limit = 2)
         if (window.size != 2) {
-            logger.warn("Time strategy: invalid window format '{}', expected HH:mm-HH:mm", rule.value)
+            logger.warn("Time strategy received an invalid window format")
             return false
         }
 
@@ -42,10 +42,10 @@ class TimeStrategy(private val clock: Clock = Clock.systemDefaultZone()) : Activ
                 // Overnight window, e.g. 22:00-06:00
                 !now.isBefore(start) || now.isBefore(end)
             }
-            logger.debug("Time strategy: window='{}', now='{}', result={}", rule.value, now, result)
+            logger.debug("Time strategy evaluated: result={}", result)
             result
         } catch (e: DateTimeParseException) {
-            logger.warn("Time strategy: could not parse window '{}'", rule.value)
+            logger.warn("Time strategy could not parse its configured window")
             false
         }
     }

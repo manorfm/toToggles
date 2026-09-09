@@ -45,7 +45,7 @@ resolver.
 | 1 | Canonical rule and lazy resolver contract | Complete |
 | 2 | Request-local HTTP adapters | Complete |
 | 3 | Trusted IP and country extraction | Complete |
-| 4 | Non-HTTP identity, cohort, and attributes | Planned |
+| 4 | Non-HTTP identity, cohort, and attributes | Complete |
 | 5 | Remove legacy APIs and dead code | In progress |
 | 6 | Efficient catalog synchronization | Planned |
 | 7 | E2E coverage and final documentation | Planned |
@@ -82,8 +82,8 @@ resolver.
 
 - [x] Define canonical middleware values: authenticated `user_id`, stable `rollout_key`,
   deployment `cohort`, and `attributes.*`.
-- [ ] Provide framework-specific middleware examples for those values.
-- [ ] Add request-concurrency/isolation tests for all SDK adapters.
+- [x] Provide framework-specific middleware examples for those values.
+- [x] Add request-concurrency/isolation tests for all SDK adapters.
 
 ### Wave 5 — Remove legacy code
 

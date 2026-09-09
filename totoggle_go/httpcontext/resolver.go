@@ -21,9 +21,24 @@ type Options struct {
 	// CountryResolver performs local GeoIP resolution from the effective client IP. It is optional;
 	// when neither a trusted header nor this resolver supplies a valid country, country rules fail closed.
 	CountryResolver CountryResolver
-	// Values supplies non-network, application-owned request values such as user_id or attributes.plan.
-	Values func(*http.Request) map[string]string
+	// ApplicationValues supplies authenticated, application-owned request values. Network-owned ip
+	// and country always come from the resolver and cannot be supplied here.
+	ApplicationValues ApplicationValuesResolver
 }
+
+// ApplicationValues is the complete canonical application context. Populate it from trusted
+// authentication and deployment state, never from unvalidated request headers or query values.
+// Attributes are exposed as attributes.<name>; empty attribute names are ignored.
+type ApplicationValues struct {
+	UserID     string
+	RolloutKey string
+	Cohort     string
+	Attributes map[string]string
+}
+
+// ApplicationValuesResolver extracts immutable-for-evaluation application context for one HTTP
+// request. The resolver copies its values into a request-local context before the next handler.
+type ApplicationValuesResolver func(*http.Request) ApplicationValues
 
 // CountryResolver isolates optional GeoIP implementations from HTTP extraction. It must not make
 // network calls while evaluating a request.
@@ -79,23 +94,36 @@ func (r *Resolver) values(req *http.Request) map[string]string {
 			values["country"] = country
 		}
 	}
-	if r.options.Values != nil {
-		for key, value := range r.applicationValues(req) {
-			if value != "" && key != "ip" && key != "country" {
-				values[key] = value
+	if r.options.ApplicationValues != nil {
+		applicationValues := r.applicationValues(req)
+		setApplicationValue(values, "user_id", applicationValues.UserID)
+		setApplicationValue(values, "rollout_key", applicationValues.RolloutKey)
+		setApplicationValue(values, "cohort", applicationValues.Cohort)
+		for name, value := range applicationValues.Attributes {
+			if name != "" {
+				setApplicationValue(values, "attributes."+name, value)
 			}
 		}
 	}
 	return values
 }
 
-func (r *Resolver) applicationValues(req *http.Request) (values map[string]string) {
+func setApplicationValue(values map[string]string, key, value string) {
+	if value != "" {
+		values[key] = value
+	}
+}
+
+func (r *Resolver) applicationValues(req *http.Request) (values ApplicationValues) {
 	defer func() {
 		if recover() != nil {
-			values = nil
+			values = ApplicationValues{}
 		}
 	}()
-	return r.options.Values(req)
+	if r.options.ApplicationValues == nil {
+		return ApplicationValues{}
+	}
+	return r.options.ApplicationValues(req)
 }
 
 func (r *Resolver) resolveCountry(ip net.IP) (country string, ok bool) {
