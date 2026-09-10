@@ -1,0 +1,58 @@
+[
+  {
+    "name": "no-rule",
+    "body": "{\"path\":\"stress.no-rule\",\"context\":{}}",
+    "forwarded": "",
+    "country": "",
+    "expectedActive": true
+  },
+  {
+    "name": "local-rule-match",
+    "body": "{\"path\":\"stress.local-rule\",\"context\":{\"userId\":\"user-pro\",\"rolloutKey\":\"user-pro\",\"attributes\":{\"plan\":\"pro\"}}}",
+    "forwarded": "",
+    "country": "",
+    "expectedActive": true
+  },
+  {
+    "name": "hierarchy-disabled",
+    "body": "{\"path\":\"stress.parent-disabled.child\",\"context\":{\"userId\":\"user-pro\",\"attributes\":{\"plan\":\"pro\"}}}",
+    "forwarded": "",
+    "country": "",
+    "expectedActive": false
+  },
+  {
+    "name": "country-match",
+    "body": "{\"path\":\"stress.country-rule\",\"context\":{}}",
+    "forwarded": "for=\"127.0.0.1\"",
+    "country": "BR",
+    "expectedActive": true
+  },
+  {
+    "name": "ipv4-match",
+    "body": "{\"path\":\"stress.ipv4-rule\",\"context\":{}}",
+    "forwarded": "for=\"203.0.113.42\"",
+    "country": "",
+    "expectedActive": true
+  },
+  {
+    "name": "ipv6-match",
+    "body": "{\"path\":\"stress.ipv6-rule\",\"context\":{}}",
+    "forwarded": "for=\"[2001:db8::42]\"",
+    "country": "",
+    "expectedActive": true
+  },
+  {
+    "name": "missing-context-fails-closed",
+    "body": "{\"path\":\"stress.local-rule\",\"context\":{}}",
+    "forwarded": "",
+    "country": "",
+    "expectedActive": false
+  },
+  {
+    "name": "malformed-network-context-fails-closed",
+    "body": "{\"path\":\"stress.ipv4-rule\",\"context\":{}}",
+    "forwarded": "for=\"not-an-ip\"",
+    "country": "ZZ!",
+    "expectedActive": false
+  }
+]

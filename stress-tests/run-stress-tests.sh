@@ -14,6 +14,9 @@ NC='\033[0m' # No Color
 
 # Configuration
 SERVER_URL=${SERVER_URL:-"http://localhost:3056"}
+SDK_GO_URL=${SDK_GO_URL:-"http://127.0.0.1:19091"}
+SDK_NODE_URL=${SDK_NODE_URL:-"http://127.0.0.1:19092"}
+SDK_JAVA_URL=${SDK_JAVA_URL:-"http://127.0.0.1:19093"}
 MAX_USERS=${MAX_USERS:-1000}
 TEST_DURATION=${TEST_DURATION:-300}
 RAMP_UP_DURATION=${RAMP_UP_DURATION:-60}
@@ -27,6 +30,44 @@ echo "Max Users: $MAX_USERS"
 echo "Test Duration: ${TEST_DURATION}s"
 echo "Ramp Up Duration: ${RAMP_UP_DURATION}s"
 echo ""
+
+# Stress tests must not accidentally target a remote system. A remote target needs an
+# explicit operator acknowledgement; this also prevents credentials or test data from
+# being sent to an unintended host.
+stress_require_safe_target() {
+    local target_url=$1
+    local target_name=$2
+    local target_host
+
+    if [[ ! "$target_url" =~ ^https?://[^/@]+(/|$) ]]; then
+        echo -e "${RED}❌ $target_name URL must be an absolute HTTP(S) URL without user credentials${NC}" >&2
+        return 1
+    fi
+
+    target_host=${target_url#http://}
+    target_host=${target_host#https://}
+    target_host=${target_host%%/*}
+    target_host=${target_host%%:*}
+    if [[ "$target_url" == http://\[* || "$target_url" == https://\[* ]]; then
+        target_host=${target_url#http://[}
+        target_host=${target_host#https://[}
+        target_host=${target_host%%]*}
+    fi
+
+    case "$target_host" in
+        localhost|127.0.0.1|::1|0:0:0:0:0:0:0:1)
+            return 0
+            ;;
+    esac
+
+    if [[ "${ALLOW_NON_LOOPBACK_STRESS_TARGETS:-}" == "yes" ]]; then
+        return 0
+    fi
+
+    echo -e "${RED}❌ Refusing to target non-loopback $target_name: $target_url${NC}" >&2
+    echo "Set ALLOW_NON_LOOPBACK_STRESS_TARGETS=yes only after explicitly approving that target." >&2
+    return 1
+}
 
 # Function to check if server is running
 check_server() {
@@ -42,11 +83,39 @@ check_server() {
     fi
 }
 
+check_sidecar() {
+    local sidecar_name=$1
+    local sidecar_url=$2
+    echo -e "${YELLOW}🔍 Checking $sidecar_name sidecar...${NC}"
+
+    if curl -sS --fail --max-time 5 "$sidecar_url/health" > /dev/null; then
+        echo -e "${GREEN}✅ $sidecar_name sidecar is healthy${NC}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ $sidecar_name sidecar is not responding at $sidecar_url/health${NC}"
+    return 1
+}
+
+check_server_target() {
+    stress_require_safe_target "$SERVER_URL" "ToToggle server" || return 1
+    check_server || return 1
+}
+
+check_sdk_sidecars() {
+    stress_require_safe_target "$SDK_GO_URL" "Go SDK sidecar" || return 1
+    stress_require_safe_target "$SDK_NODE_URL" "Node SDK sidecar" || return 1
+    stress_require_safe_target "$SDK_JAVA_URL" "Java SDK sidecar" || return 1
+    check_sidecar "Go SDK" "$SDK_GO_URL" || return 1
+    check_sidecar "Node SDK" "$SDK_NODE_URL" || return 1
+    check_sidecar "Java SDK" "$SDK_JAVA_URL" || return 1
+}
+
 # Function to setup test data
 setup_test_data() {
     echo -e "${YELLOW}📋 Setting up test data...${NC}"
     
-    if gradle setupTestData; then
+    if ./gradlew setupTestData; then
         echo -e "${GREEN}✅ Test data setup completed${NC}"
         
         if [ -f "test-data.json" ]; then
@@ -72,8 +141,11 @@ run_simulation() {
     
     local start_time=$(date +%s)
     
-    if gradle gatlingRun-$simulation_name \
+    if ./gradlew gatlingRun-$simulation_name \
         -Dserver.url="$SERVER_URL" \
+        -Dsdk.go.url="$SDK_GO_URL" \
+        -Dsdk.node.url="$SDK_NODE_URL" \
+        -Dsdk.java.url="$SDK_JAVA_URL" \
         -Dmax.users="$MAX_USERS" \
         -Dtest.duration="$TEST_DURATION" \
         -Dramp.up.duration="$RAMP_UP_DURATION" \
@@ -198,6 +270,14 @@ cleanup() {
     echo -e "${GREEN}✅ Cleanup completed${NC}"
 }
 
+require_sdk_fixture() {
+    if [[ -f "test-data.json" ]]; then
+        return 0
+    fi
+    echo -e "${RED}❌ SDK stress requires test-data.json created by './run-stress-tests.sh setup' before starting the sidecars${NC}" >&2
+    return 1
+}
+
 # Function to show help
 show_help() {
     echo "ToToggle Stress Test Runner"
@@ -209,6 +289,7 @@ show_help() {
     echo "  basic        Run basic stress test only"
     echo "  capacity     Run capacity test only"
     echo "  spike        Run spike test only"
+    echo "  sdk          Run contextual stress against Go, Node and Java sidecars"
     echo "  setup        Setup test data only"
     echo "  cleanup      Cleanup test data"
     echo "  help         Show this help"
@@ -218,11 +299,16 @@ show_help() {
     echo "  MAX_USERS           Maximum concurrent users (default: 1000)"
     echo "  TEST_DURATION       Test duration in seconds (default: 300)"
     echo "  RAMP_UP_DURATION    Ramp up duration in seconds (default: 60)"
+    echo "  SDK_GO_URL          Go SDK sidecar URL (default: http://127.0.0.1:19091)"
+    echo "  SDK_NODE_URL        Node SDK sidecar URL (default: http://127.0.0.1:19092)"
+    echo "  SDK_JAVA_URL        Java SDK sidecar URL (default: http://127.0.0.1:19093)"
+    echo "  ALLOW_NON_LOOPBACK_STRESS_TARGETS=yes  Explicitly acknowledge a non-loopback target"
     echo ""
     echo "Examples:"
     echo "  $0                                    # Run all tests"
     echo "  $0 basic                              # Run basic test only"
-    echo "  SERVER_URL=http://prod.server $0      # Test against production"
+    echo "  $0 sdk                                # Run cross-SDK contextual stress"
+    echo "  ALLOW_NON_LOOPBACK_STRESS_TARGETS=yes SERVER_URL=https://approved.example $0 sdk"
     echo "  MAX_USERS=2000 $0 capacity           # Capacity test with 2000 users"
 }
 
@@ -236,6 +322,7 @@ main() {
             exit 0
             ;;
         "setup")
+            check_server_target || exit 1
             setup_test_data
             exit 0
             ;;
@@ -244,29 +331,37 @@ main() {
             exit 0
             ;;
         "basic")
-            check_server || exit 1
+            check_server_target || exit 1
             setup_test_data
             run_simulation "simulations.ToToggleStressSimulation" "Basic Stress Test" ""
             generate_summary
             ;;
         "capacity")
-            check_server || exit 1
+            check_server_target || exit 1
             setup_test_data
             run_simulation "simulations.CapacityTestSimulation" "Capacity Test" \
                 "-Dstart.users=10 -Dmax.users=1500 -Dstep.users=50"
             generate_summary
             ;;
         "spike")
-            check_server || exit 1
+            check_server_target || exit 1
             setup_test_data
             run_simulation "simulations.SpikeTestSimulation" "Spike Test" \
                 "-Dnormal.users=50 -Dspike.users=500"
             generate_summary
             ;;
         "all")
-            check_server || exit 1
+            check_server_target || exit 1
             setup_test_data
             run_all_tests
+            generate_summary
+            ;;
+        "sdk")
+            check_server_target || exit 1
+            require_sdk_fixture || exit 1
+            check_sdk_sidecars || exit 1
+            run_simulation "simulations.SdkContextStressSimulation" "Cross-SDK Context Stress Test" \
+                "-Dsdk.users=$MAX_USERS -Dsdk.test.duration=$TEST_DURATION -Dsdk.ramp.up.duration=$RAMP_UP_DURATION"
             generate_summary
             ;;
         *)
@@ -277,14 +372,12 @@ main() {
     esac
 }
 
-# Start logging
-exec > >(tee -a "$LOG_FILE")
-exec 2>&1
-
-echo "=== Stress Test Session Started: $(date) ===" >> "$LOG_FILE"
-
-# Run main function
-main "$@"
-
-echo -e "\n${GREEN}🎉 Stress testing completed!${NC}"
-echo -e "${BLUE}📋 Full log available in: $LOG_FILE${NC}"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    # Start logging only for an executable run. Sourcing this script is used by the safety tests.
+    exec > >(tee -a "$LOG_FILE")
+    exec 2>&1
+    echo "=== Stress Test Session Started: $(date) ===" >> "$LOG_FILE"
+    main "$@"
+    echo -e "\n${GREEN}🎉 Stress testing completed!${NC}"
+    echo -e "${BLUE}📋 Full log available in: $LOG_FILE${NC}"
+fi
