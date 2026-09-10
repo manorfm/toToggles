@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in the server or a client library isn't working as expected
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - server (Go)
+        - totoggle_java (Kotlin/Java client)
+        - totoggle_go (Go client)
+        - totoggle_node (Node/TypeScript client)
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected instead, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps, code snippet, or request/response that reproduces it.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Server version / client library version (git commit or tag if no release yet).

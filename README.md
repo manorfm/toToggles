@@ -319,11 +319,9 @@ val config = ToToggleConfig.builder()
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+`main` is branch-protected — external contributions go through a fork + pull request (at least
+one approval required). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide: when to
+open an issue first vs. going straight to a PR, and how to run each component's test suite.
 
 ### Development Setup
 

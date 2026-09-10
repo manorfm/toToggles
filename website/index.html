@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ToToggle — feature flags for Go, Java/Kotlin and Node</title>
 <meta name="description" content="ToToggle: a self-hosted feature-flag platform with a Go server and 3 official client libraries (Go, Java/Kotlin, Node/TypeScript)." />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="alternate icon" href="favicon.svg" />
 <style>
   :root{
     --bg:#0b0f0e; --surface:#121613; --surface-2:#171c19; --border:#232a26;
@@ -20,8 +22,10 @@
   .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
   header.top{padding:22px 0;border-bottom:1px solid var(--border)}
   .top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-  .brand{font-size:19px;font-weight:500;letter-spacing:-0.01em}
+  .brand{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:500;letter-spacing:-0.01em}
   .brand b{color:var(--accent);font-weight:700}
+  .brand-mark{flex:none;color:var(--ink-2)}
+  .brand-mark circle{fill:var(--accent)}
   nav.top-links{display:flex;gap:18px;font-size:14px;color:var(--ink-2)}
   nav.top-links a{color:var(--ink-2)}
   nav.top-links a:hover{color:var(--ink)}
@@ -67,7 +71,13 @@
 
 <header class="top">
   <div class="wrap">
-    <div class="brand">to<b>Toggle</b></div>
+    <div class="brand">
+      <svg class="brand-mark" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="8.5" width="16" height="7" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="15" cy="12" r="2.6"/>
+      </svg>
+      to<b>Toggle</b>
+    </div>
     <nav class="top-links">
       <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/manorfm/toToggles/blob/main/docs/rest-flow.md" target="_blank" rel="noopener">API docs</a>
