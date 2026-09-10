@@ -141,7 +141,7 @@ run_simulation() {
     
     local start_time=$(date +%s)
     
-    if ./gradlew gatlingRun-$simulation_name \
+    if ./gradlew gatlingRun --non-interactive --simulation "$simulation_name" \
         -Dserver.url="$SERVER_URL" \
         -Dsdk.go.url="$SDK_GO_URL" \
         -Dsdk.node.url="$SDK_NODE_URL" \

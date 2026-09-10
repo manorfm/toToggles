@@ -11,7 +11,7 @@ class TestDataSetupTest {
     fun `requires explicit setup credentials`() {
         assertThatThrownBy { TestDataSetup.setupCredentials(emptyMap()) }
             .isInstanceOf(IllegalStateException::class.java)
-            .hasMessage("STRESS_SETUP_USERNAME and STRESS_SETUP_PASSWORD are required")
+            .hasMessage("STRESS_SETUP_USERNAME and STRESS_SETUP_PASSWORD or STRESS_SETUP_PASSWORD_FILE are required")
     }
 
     @Test
@@ -23,6 +23,54 @@ class TestDataSetupTest {
 
         assertThat(credentials.first).isEqualTo("stress-operator")
         assertThat(credentials.second).isEqualTo("test-password")
+    }
+
+    @Test
+    fun `reads a setup password from an explicit local file`() {
+        val credentials = TestDataSetup.setupCredentials(
+            environment = mapOf(
+                "STRESS_SETUP_USERNAME" to "root",
+                "STRESS_SETUP_PASSWORD_FILE" to "/private/tmp/root-password",
+            ),
+            passwordFileReader = { "bootstrap-password\n" },
+        )
+
+        assertThat(credentials).isEqualTo("root" to "bootstrap-password")
+    }
+
+    @Test
+    fun `rejects ambiguous inline and file setup passwords`() {
+        assertThatThrownBy {
+            TestDataSetup.setupCredentials(mapOf(
+                "STRESS_SETUP_USERNAME" to "root",
+                "STRESS_SETUP_PASSWORD" to "inline",
+                "STRESS_SETUP_PASSWORD_FILE" to "/private/tmp/root-password",
+            ))
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessage("set only one of STRESS_SETUP_PASSWORD or STRESS_SETUP_PASSWORD_FILE")
+    }
+
+    @Test
+    fun `accepts a login response with authentication metadata`() {
+        assertThat(TestDataSetup.loginSucceeded("""{
+            "success": true,
+            "must_change_password": false,
+            "user": {"id": "root-id", "role": "root"}
+        }""".trimIndent())).isTrue()
+    }
+
+    @Test
+    fun `reads the created stress team identifier from the server response`() {
+        assertThat(TestDataSetup.createdTeamID("""{
+            "success": true,
+            "team": {"id": "team-01", "name": "stress-test-team"}
+        }""".trimIndent())).isEqualTo("team-01")
+    }
+
+    @Test
+    fun `names stress applications uniquely per run while retaining their ordinal`() {
+        assertThat(TestDataSetup.stressApplicationName("run-123", 2))
+            .isEqualTo("stress-test-run-123-02")
     }
 
     @Test

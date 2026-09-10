@@ -35,9 +35,18 @@ assert_requires_prepared_sdk_fixture() {
   rm -rf "$temporary_directory"
 }
 
+assert_uses_the_current_gatling_task_contract() {
+  if rg -q 'gatlingRun-' "$SCRIPT_DIR/run-stress-tests.sh"; then
+    echo "stress runner still uses removed per-simulation Gatling tasks" >&2
+    return 1
+  fi
+  rg -q 'gatlingRun --non-interactive --simulation' "$SCRIPT_DIR/run-stress-tests.sh"
+}
+
 assert_allows_loopback
 assert_rejects_remote_without_acknowledgement
 assert_allows_remote_with_acknowledgement
 assert_requires_prepared_sdk_fixture
+assert_uses_the_current_gatling_task_contract
 
 echo "stress runner safety tests passed"

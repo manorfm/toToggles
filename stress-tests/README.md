@@ -168,7 +168,7 @@ O runner recusa qualquer URL fora de loopback por padrão. Para um ambiente apro
 ALLOW_NON_LOOPBACK_STRESS_TARGETS=yes SERVER_URL=https://approved.example ./run-stress-tests.sh sdk
 ```
 
-Essa confirmação também se aplica às URLs dos sidecars. O script não imprime segredos. O setup exige `STRESS_SETUP_USERNAME` e `STRESS_SETUP_PASSWORD`; não existem credenciais administrativas padrão. Os fixtures que contêm secret keys são gravados com permissão de proprietário quando o sistema operacional suporta POSIX e nunca devem ser versionados ou enviados a relatórios.
+Essa confirmação também se aplica às URLs dos sidecars. O script não imprime segredos. O setup exige `STRESS_SETUP_USERNAME` e uma de `STRESS_SETUP_PASSWORD` ou `STRESS_SETUP_PASSWORD_FILE`; o segundo formato permite consumir a senha bootstrap owner-only sem expô-la no ambiente. Não existem credenciais administrativas padrão. Os fixtures que contêm secret keys são gravados com permissão de proprietário quando o sistema operacional suporta POSIX e nunca devem ser versionados ou enviados a relatórios.
 
 ### Dados de Teste
 

@@ -32,19 +32,19 @@ class SdkContextStressSimulation extends Simulation {
 
   private val verifyDecision = exec { session =>
     val expected = session("expectedActive").as[Boolean]
-    val actual = session("active").as[Boolean]
-    if (actual == expected) session else session.markAsFailed
+    val actual = session("active").asOption[Boolean]
+    if (!session.isFailed && actual.contains(expected)) session else session.markAsFailed
   }
 
   private def sdkScenario(sdkName: String) = scenario(s"$sdkName SDK contextual evaluation")
     .feed(scenarioFeeder)
     .during(duration) {
       exec(
-        http(s"$sdkName evaluate $${name}")
+        http(s"$sdkName evaluate " + "#{name}")
           .post("/evaluate")
-          .header("Forwarded", "$${forwarded}")
-          .header("CF-IPCountry", "$${country}")
-          .body(StringBody("$${body}")).asJson
+          .header("Forwarded", "#{forwarded}")
+          .header("CF-IPCountry", "#{country}")
+          .body(StringBody("#{body}")).asJson
           .check(status.is(200))
           .check(jsonPath("$.active").ofType[Boolean].saveAs("active"))
       )

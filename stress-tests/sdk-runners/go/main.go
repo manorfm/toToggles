@@ -26,7 +26,10 @@ func main() {
 
 	go func() {
 		if serveErr := server.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			log.Print("stress Go runner stopped unexpectedly")
+			// Listener failures contain only local transport information. Include them so an
+			// operator can distinguish a port collision from an SDK startup failure without
+			// logging credentials or request context.
+			log.Printf("stress Go runner stopped unexpectedly: %v", serveErr)
 		}
 	}()
 

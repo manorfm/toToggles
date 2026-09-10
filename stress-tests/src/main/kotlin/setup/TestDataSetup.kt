@@ -1,6 +1,7 @@
 package setup
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -60,11 +61,19 @@ object TestDataSetup {
         val contextKey: String
     )
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class TeamsResponse(val teams: List<TeamResponse>)
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class TeamResponse(val id: String)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private data class CreatedTeamResponse(val team: TeamResponse)
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class ApplicationResponse(val id: String)
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class SecretResponse(@JsonProperty("plain_key") val plainKey: String)
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class AuthenticationResponse(val success: Boolean)
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private data class ToggleResponse(val id: String, val path: String)
     
     @JvmStatic
@@ -89,13 +98,18 @@ object TestDataSetup {
     private fun createApplications(): List<Application> {
         val applications = mutableListOf<Application>()
         val toggles = stressToggleCatalogue()
+        check(authenticateWithServer()) { "authentication failed" }
+        val teamID = resolveTeamID(
+            Request.Builder().url("$baseUrl/api/profile/teams").build(),
+        )
+        val runID = UUID.randomUUID().toString().take(8)
         
         for (i in 1..5) {
-            val appName = "stress-test-app-${i.toString().padStart(2, '0')}"
+            val appName = stressApplicationName(runID, i)
             
             println("Creating application: $appName with ${toggles.size} toggles")
             
-            val realSecretKey = createApplicationInServer(appName, toggles)
+            val realSecretKey = createApplicationInServer(appName, toggles, teamID)
             applications.add(Application(appName, realSecretKey, toggles))
             println("    ✅ Application '$appName' added to test data")
         }
@@ -114,39 +128,17 @@ object TestDataSetup {
         Toggle("stress.ipv4-rule", true, 2, true, ActivationRule("ip", "203.0.113.0/24", "ip")),
         Toggle("stress.ipv6-rule", true, 2, true, ActivationRule("ip", "2001:db8::/32", "ip")),
     )
+
+    internal fun stressApplicationName(runID: String, ordinal: Int): String =
+        "stress-test-$runID-${ordinal.toString().padStart(2, '0')}"
     
-    private fun createApplicationInServer(appName: String, toggles: List<Toggle>): String {
+    private fun createApplicationInServer(appName: String, toggles: List<Toggle>, teamID: String): String {
         println("  → Creating application '$appName' in server...")
         
         try {
-            // First, authenticate (sets cookies automatically)
-            check(authenticateWithServer()) { "authentication failed" }
-            
-            // Get user teams first to get a team_id
-            val teamsRequest = Request.Builder()
-                .url("$baseUrl/api/profile/teams")
-                .build()
-                
-            val teamId = client.newCall(teamsRequest).execute().use { teamsResponse ->
-                if (!teamsResponse.isSuccessful) {
-                    println("    ⚠️  Failed to get teams: ${teamsResponse.code}")
-                    throw IllegalStateException("unable to load teams")
-                }
-                
-                val teams = objectMapper.readValue<TeamsResponse>(teamsResponse.bodyText()).teams
-                
-                if (teams.isEmpty()) {
-                    println("    ⚠️  No teams available")
-                    throw IllegalStateException("no teams available")
-                }
-                
-                teams.first().id
-            }
-            
-            // Create application (cookies are sent automatically)
             val createAppBody = mapOf(
                 "name" to appName,
-                "team_id" to teamId
+                "team_id" to teamID
             )
             val createAppRequest = Request.Builder()
                 .url("$baseUrl/api/applications")
@@ -209,7 +201,7 @@ object TestDataSetup {
                     return false
                 }
                 
-                val authData = objectMapper.readValue<AuthenticationResponse>(response.bodyText())
+                val authData = loginResponse(response.bodyText())
                 
                 if (authData.success) {
                     println("    ✅ Authentication successful, cookie saved")
@@ -222,6 +214,33 @@ object TestDataSetup {
         } catch (_: Exception) {
             println("    ❌ Authentication error")
             return false
+        }
+    }
+
+    private fun resolveTeamID(teamsRequest: Request): String {
+        val teams = client.newCall(teamsRequest).execute().use { response ->
+            check(response.isSuccessful) { "unable to load teams" }
+            objectMapper.readValue<TeamsResponse>(response.bodyText()).teams
+        }
+        if (teams.isNotEmpty()) return teams.first().id
+
+        val allTeamsRequest = Request.Builder().url("$baseUrl/api/teams").build()
+        val allTeams = client.newCall(allTeamsRequest).execute().use { response ->
+            check(response.isSuccessful) { "unable to load teams for stress setup" }
+            objectMapper.readValue<TeamsResponse>(response.bodyText()).teams
+        }
+        if (allTeams.isNotEmpty()) return allTeams.first().id
+
+        val request = Request.Builder()
+            .url("$baseUrl/api/teams")
+            .post(objectMapper.writeValueAsString(mapOf(
+                "name" to "stress-test-team",
+                "description" to "Ephemeral team created by the ToToggle stress setup",
+            )).toRequestBody(mediaType))
+            .build()
+        return client.newCall(request).execute().use { response ->
+            check(response.isSuccessful) { "unable to create stress team" }
+            createdTeamID(response.bodyText())
         }
     }
     
@@ -299,14 +318,34 @@ object TestDataSetup {
         )
     }
 
-    internal fun setupCredentials(environment: Map<String, String> = System.getenv()): Pair<String, String> {
+    internal fun setupCredentials(
+        environment: Map<String, String> = System.getenv(),
+        passwordFileReader: (String) -> String = { path -> File(path).readText() },
+    ): Pair<String, String> {
         val username = environment["STRESS_SETUP_USERNAME"]?.trim().orEmpty()
-        val password = environment["STRESS_SETUP_PASSWORD"]?.trim().orEmpty()
+        val inlinePassword = environment["STRESS_SETUP_PASSWORD"]?.trim().orEmpty()
+        val passwordFile = environment["STRESS_SETUP_PASSWORD_FILE"]?.trim().orEmpty()
+        check(inlinePassword.isEmpty() || passwordFile.isEmpty()) {
+            "set only one of STRESS_SETUP_PASSWORD or STRESS_SETUP_PASSWORD_FILE"
+        }
+        val password = when {
+            inlinePassword.isNotEmpty() -> inlinePassword
+            passwordFile.isNotEmpty() -> passwordFileReader(passwordFile).trim()
+            else -> ""
+        }
         check(username.isNotEmpty() && password.isNotEmpty()) {
-            "STRESS_SETUP_USERNAME and STRESS_SETUP_PASSWORD are required"
+            "STRESS_SETUP_USERNAME and STRESS_SETUP_PASSWORD or STRESS_SETUP_PASSWORD_FILE are required"
         }
         return username to password
     }
+
+    internal fun loginSucceeded(responseBody: String): Boolean = loginResponse(responseBody).success
+
+    internal fun createdTeamID(responseBody: String): String =
+        objectMapper.readValue<CreatedTeamResponse>(responseBody).team.id
+
+    private fun loginResponse(responseBody: String): AuthenticationResponse =
+        objectMapper.readValue(responseBody)
 
     private fun writeOwnerOnly(file: File, content: String) {
         file.writeText(content)
