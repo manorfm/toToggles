@@ -1,5 +1,7 @@
 package com.totoggle.client
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.totoggle.client.config.LogLevel
 import com.totoggle.client.config.ToToggleConfig
 import com.totoggle.client.context.RequestContextResolver
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.Executors
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -54,6 +58,29 @@ class ToToggleClientTest {
         mockServer.shutdown()
     }
     
+    @Test
+    fun `honors the shared contract fixture for context local rules hierarchy IP and country`() {
+        val fixture = loadSdkContractFixture()
+        mockServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody(fixture.path("catalog").toString()),
+        )
+        client.start()
+
+        fixture.path("cases").forEach { scenario ->
+            contextValues.clear()
+            scenario.path("context").fields().forEachRemaining { entry ->
+                contextValues[entry.key] = entry.value.asText()
+            }
+
+            assertThat(client.isActive(scenario.path("path").asText()))
+                .describedAs(scenario.path("name").asText())
+                .isEqualTo(scenario.path("expected").asBoolean())
+        }
+    }
+
     @Test
     fun `should start client and fetch initial data`() {
         mockSuccessfulResponse()
@@ -553,6 +580,11 @@ class ToToggleClientTest {
             .setResponseCode(200)
             .setBody(responseBody)
             .setHeader("Content-Type", "application/json"))
+    }
+
+    private fun loadSdkContractFixture(): JsonNode {
+        val fixturePath = Path.of("..", "contract", "fixtures", "sdk-evaluation.json")
+        return jacksonObjectMapper().readTree(Files.readString(fixturePath))
     }
 
     private fun catalogBody(): String = """

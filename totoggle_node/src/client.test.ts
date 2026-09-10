@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToToggleClient, type RefreshScheduler } from "./client.js";
 import { createConfig } from "./config.js";
@@ -6,6 +7,20 @@ import { TotoggleAuthenticationError } from "./errors.js";
 import type { ToToggleMetricsListener } from "./metrics.js";
 
 let server: Server | undefined;
+
+interface SdkContractFixture {
+  readonly catalog: { readonly application: { readonly toggles: unknown[] } };
+  readonly cases: ReadonlyArray<{
+    readonly name: string;
+    readonly path: string;
+    readonly context: Readonly<Record<string, string>>;
+    readonly expected: boolean;
+  }>;
+}
+
+function loadSdkContractFixture(): SdkContractFixture {
+  return JSON.parse(readFileSync(new URL("../../contract/fixtures/sdk-evaluation.json", import.meta.url), "utf8")) as SdkContractFixture;
+}
 
 class ControlledRefreshScheduler implements RefreshScheduler {
   private next: { readonly callback: () => void; readonly delayMs: number; cancelled: boolean } | undefined;
@@ -108,6 +123,23 @@ afterEach(() => {
 });
 
 describe("ToToggleClient", () => {
+  it("honors the shared contract fixture for context, local rules, hierarchy, IP and country", async () => {
+    const fixture = loadSdkContractFixture();
+    const { url } = await fixedResponseServer(fixture.catalog.application.toggles);
+    let context: Readonly<Record<string, string>> = {};
+    const client = new ToToggleClient(createConfig("test-app", url, "sk_test", {
+      refreshIntervalMs: 60 * 60 * 1000,
+      contextResolver: { resolve: (key) => context[key] },
+    }));
+
+    await client.start();
+    for (const scenario of fixture.cases) {
+      context = scenario.context;
+      expect(client.isActive(scenario.path), scenario.name).toBe(scenario.expected);
+    }
+    client.shutdown();
+  });
+
   it("conditionally refreshes a cached snapshot and treats a bodyless 304 as fresh", async () => {
     const scheduler = new ControlledRefreshScheduler();
     const fetchMock = vi.fn()

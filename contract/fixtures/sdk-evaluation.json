@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "catalog": {
+    "application": {
+      "id": "contract-app",
+      "name": "SDK evaluation contract",
+      "revision": "sdk-evaluation-v1",
+      "toggles": [
+        {
+          "id": "payments",
+          "path": "payments",
+          "value": "payments",
+          "enabled": true,
+          "level": 0,
+          "parent_id": null,
+          "app_id": "contract-app",
+          "has_activation_rule": false,
+          "activation_rule": null
+        },
+        {
+          "id": "payments-card",
+          "path": "payments.card",
+          "value": "card",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "country",
+            "value": "BR,US",
+            "config": { "context_key": "country" }
+          }
+        },
+        {
+          "id": "payments-card-tokenization",
+          "path": "payments.card.tokenization",
+          "value": "tokenization",
+          "enabled": true,
+          "level": 2,
+          "parent_id": "payments-card",
+          "app_id": "contract-app",
+          "has_activation_rule": false,
+          "activation_rule": null
+        },
+        {
+          "id": "payments-cards",
+          "path": "payments.cards",
+          "value": "cards",
+          "enabled": false,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": false,
+          "activation_rule": null
+        },
+        {
+          "id": "payments-cards-apple-pay",
+          "path": "payments.cards.apple-pay",
+          "value": "apple-pay",
+          "enabled": true,
+          "level": 2,
+          "parent_id": "payments-cards",
+          "app_id": "contract-app",
+          "has_activation_rule": false,
+          "activation_rule": null
+        },
+        {
+          "id": "payments-ip-allowlist",
+          "path": "payments.ip-allowlist",
+          "value": "ip-allowlist",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "ip",
+            "value": "203.0.113.0/24,198.51.100.10",
+            "config": { "context_key": "ip" }
+          }
+        }
+      ]
+    }
+  },
+  "cases": [
+    {
+      "name": "country rule matches only its exact toggle",
+      "path": "payments.card",
+      "context": { "country": "BR" },
+      "expected": true
+    },
+    {
+      "name": "country rule fails closed without context",
+      "path": "payments.card",
+      "context": {},
+      "expected": false
+    },
+    {
+      "name": "country rule rejects a non-allowlisted country",
+      "path": "payments.card",
+      "context": { "country": "FR" },
+      "expected": false
+    },
+    {
+      "name": "ancestor rule does not cascade to a child toggle",
+      "path": "payments.card.tokenization",
+      "context": {},
+      "expected": true
+    },
+    {
+      "name": "disabled ancestor blocks its whole hierarchy",
+      "path": "payments.cards.apple-pay",
+      "context": {},
+      "expected": false
+    },
+    {
+      "name": "ip rule matches an IPv4 CIDR range",
+      "path": "payments.ip-allowlist",
+      "context": { "ip": "203.0.113.42" },
+      "expected": true
+    },
+    {
+      "name": "ip rule rejects a non-allowlisted address",
+      "path": "payments.ip-allowlist",
+      "context": { "ip": "192.0.2.7" },
+      "expected": false
+    },
+    {
+      "name": "ip rule fails closed for a malformed address",
+      "path": "payments.ip-allowlist",
+      "context": { "ip": "api.internal.example" },
+      "expected": false
+    }
+  ]
+}

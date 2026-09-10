@@ -185,6 +185,18 @@ http.ListenAndServe(":8080", router)
 Each call to the middleware snapshots the values into that request's `context.Context`; values
 are never held on the client or shared across concurrent requests.
 
+### Security and migration
+
+Derive `ApplicationValues` from verified authentication and deployment state, not client input.
+Only place proxies operated directly in front of this service in `TrustedProxyAddresses`; leaving
+it empty keeps all forwarding headers untrusted. Do not carry identity or network values through
+feature-check helpers. Configure the resolver once, then use
+`client.IsActiveContext(request.Context(), path)` for HTTP requests; `client.IsActive(path)` has
+an intentionally empty context and therefore fails closed for contextual rules.
+
+See the shared [context adapter security and migration guide](../docs/context-adapter-security.md)
+for the IP/country trust model, fail-closed behavior, and migration details.
+
 ## Observability
 
 ```go

@@ -269,6 +269,19 @@ when the direct peer matches an explicitly configured IP/CIDR allowlist. The opt
 resolver receives the effective client IP and must not make network calls. Invalid, unavailable,
 or untrusted country data is omitted, so country rules fail closed.
 
+### Security and migration
+
+Build `ToggleRequestContext` from verified authentication and deployment state, never directly
+from a request header, query parameter, or body. Keep `trustedProxyRanges` restricted to proxies
+operated directly in front of the service; an empty list intentionally ignores forwarded values.
+The former `isActive(path, parameter)` overload is removed with no compatibility path. Configure
+the resolver and call only `client.isActive(path)` while its request scope is open.
+
+`RequestContextResolver` is thread-bound: do not use it for reactive handlers, coroutines, async
+Servlet dispatch, or executor-hopped work. Those runtimes need a resolver backed by their own
+request context. See the shared [context adapter security and migration guide](../docs/context-adapter-security.md)
+for the IP/country trust model and fail-closed behavior.
+
 ### Synchronous MVC interceptor
 
 For a synchronous MVC interceptor, retain the `RequestContextScope` from `preHandle` and close it
@@ -417,10 +430,9 @@ client.getCacheInfo()                  // human-readable summary of all of the a
 
 ## 📚 Documentation
 
-- [Server Documentation](server/README.md) - Complete server setup and API reference
-- [Client Library Documentation](totoggle_java/README.md) - Java/Kotlin client usage guide
-- [API Reference](server/README.md#-api-reference) - Complete API documentation
-- [Examples](totoggle_java/examples/) - Usage examples and patterns
+- [Server Documentation](../server/README.md) - Complete server setup and API reference
+- [Client Library Documentation](README.md) - Java/Kotlin client usage guide
+- [API Reference](../server/README.md#-api-reference) - Complete API documentation
 
 ## 🤝 Contributing
 
@@ -438,7 +450,7 @@ client.getCacheInfo()                  // human-readable summary of all of the a
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](server/LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](../server/LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

@@ -48,7 +48,7 @@ resolver.
 | 4 | Non-HTTP identity, cohort, and attributes | Complete |
 | 5 | Remove legacy APIs and dead code | Complete |
 | 6 | Efficient catalog synchronization | Complete |
-| 7 | E2E coverage and final documentation | Planned |
+| 7 | E2E coverage and final documentation | Complete |
 
 ## Tasks
 
@@ -101,7 +101,7 @@ resolver.
 
 ### Wave 7 — Verification and docs
 
-- [ ] Add server E2E scenarios for local-rule-only evaluation and hierarchy blocking.
-- [ ] Add SDK contract fixtures shared across languages.
-- [ ] Publish adapter security guides and migration notes.
-- [ ] Run full server, frontend, Go, Node, and Java suites before release.
+- [x] Add server E2E scenarios for local-rule-only evaluation and hierarchy blocking.
+- [x] Add SDK contract fixtures shared across languages.
+- [x] Publish adapter security guides and migration notes.
+- [x] Run full server, frontend, Go, Node, and Java suites before release.

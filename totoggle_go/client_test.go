@@ -2,8 +2,11 @@ package totoggle
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -70,6 +73,46 @@ type testContextResolver struct{ values map[string]string }
 func (p *testContextResolver) Resolve(_ context.Context, key string) (string, bool) {
 	value, ok := p.values[key]
 	return value, ok
+}
+
+type sdkContractFixture struct {
+	Catalog json.RawMessage `json:"catalog"`
+	Cases   []struct {
+		Name     string            `json:"name"`
+		Path     string            `json:"path"`
+		Context  map[string]string `json:"context"`
+		Expected bool              `json:"expected"`
+	} `json:"cases"`
+}
+
+func loadSDKContractFixture(t *testing.T) sdkContractFixture {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("..", "contract", "fixtures", "sdk-evaluation.json"))
+	require.NoError(t, err)
+	var fixture sdkContractFixture
+	require.NoError(t, json.Unmarshal(body, &fixture))
+	require.NotEmpty(t, fixture.Catalog)
+	require.NotEmpty(t, fixture.Cases)
+	return fixture
+}
+
+func TestClient_ContractFixture_EvaluatesContextAndHierarchyConsistently(t *testing.T) {
+	fixture := loadSDKContractFixture(t)
+	values := map[string]string{}
+	srv, _ := jsonServer(t, string(fixture.Catalog))
+	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextResolver(&testContextResolver{values: values}))
+	require.NoError(t, client.Start(context.Background()))
+	t.Cleanup(client.Shutdown)
+
+	for _, scenario := range fixture.Cases {
+		t.Run(scenario.Name, func(t *testing.T) {
+			clear(values)
+			for key, value := range scenario.Context {
+				values[key] = value
+			}
+			assert.Equal(t, scenario.Expected, client.IsActive(scenario.Path))
+		})
+	}
 }
 
 func TestClient_Start_FetchesInitialDataSynchronously(t *testing.T) {

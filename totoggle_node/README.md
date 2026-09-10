@@ -134,6 +134,17 @@ has only `userId`, `rolloutKey`, `cohort`, and `attributes`; it cannot override 
 Each request gets an isolated async context, so concurrent requests never share identity or
 attribute values.
 
+### Security and migration
+
+Treat `values` as an authenticated-domain boundary: derive its values from verified identity and
+deployment state, never from arbitrary client input. Keep `trustedProxyAddresses` limited to the
+direct proxies operated for this service; otherwise leave it empty and forwarding headers remain
+untrusted. The previous `isActiveFor(...)` API is removed with no compatibility path. Configure
+the resolver once and call only `client.isActive(path)` in handlers.
+
+See the shared [context adapter security and migration guide](../docs/context-adapter-security.md)
+for the IP/country trust model, fail-closed behavior, and operational guidance.
+
 ## Observability
 
 ```ts
