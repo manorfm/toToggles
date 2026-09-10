@@ -5,8 +5,10 @@ name: totoggle-java-release
 #
 # Builds, tests and packages the library (jar + sources + javadoc), then creates a GitHub
 # Release with those artifacts attached. Actual Maven Central publishing is a separate,
-# deliberately-disabled job below — it needs a decision on the groupId (io.github.manorfm vs. a
-# verified custom domain) plus Sonatype + GPG signing secrets, none of which exist yet.
+# deliberately-disabled job below. GroupId is decided (io.github.manorfm — auto-verified via
+# GitHub OAuth login on the Sonatype Central Portal); it still needs Sonatype + GPG signing
+# secrets, plus a real `publishing { repositories { ... } }` target in build.gradle.kts, none of
+# which exist yet.
 
 on:
   push:

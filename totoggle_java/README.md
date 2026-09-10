@@ -103,7 +103,7 @@ users/teams — create an admin and stop using `root` day-to-day).
 
 ```kotlin
 // Add dependency to your project
-implementation("com.totoggle:totoggle-java:1.0.0")
+implementation("io.github.manorfm:totoggle_java:1.0.0")
 
 // Configure and start the client
 val config = ToToggleConfig.builder()

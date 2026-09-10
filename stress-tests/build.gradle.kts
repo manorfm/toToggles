@@ -35,7 +35,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // The Java sidecar executes the real SDK through the local composite build.
-    implementation("com.totoggle:totoggle_java:1.0.0")
+    implementation("io.github.manorfm:totoggle_java:1.0.0")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

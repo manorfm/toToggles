@@ -4,7 +4,7 @@ plugins {
     id("jacoco")
 }
 
-group = "com.totoggle"
+group = "io.github.manorfm"
 version = "1.0.0"
 
 repositories {
