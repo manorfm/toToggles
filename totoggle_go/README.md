@@ -239,3 +239,10 @@ go vet ./...
 go build ./...
 go test ./... -race -cover
 ```
+
+## License
+
+Licensed under the **ToToggle License 1.0** (Apache License 2.0 plus a commercial-use attribution
+clause) - see [LICENSE](LICENSE). Author: [Manoel Medeiros](https://github.com/manorfm).
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.

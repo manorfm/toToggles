@@ -1,10 +1,26 @@
 {
   "name": "totoggle-node",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Node.js/TypeScript client library for the ToToggle feature-flag server",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Manoel Medeiros <manoel.rodrigo@gmail.com>",
+  "homepage": "https://github.com/manorfm/toToggles/tree/main/totoggle_node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manorfm/toToggles.git",
+    "directory": "totoggle_node"
+  },
+  "bugs": {
+    "url": "https://github.com/manorfm/toToggles/issues"
+  },
+  "keywords": [
+    "feature-flags",
+    "feature-toggles",
+    "totoggle"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,7 +28,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"

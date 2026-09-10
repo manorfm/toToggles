@@ -457,7 +457,8 @@ client.getCacheInfo()                  // human-readable summary of all of the a
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](../server/LICENSE) file for details.
+This project is licensed under the **ToToggle License 1.0** (Apache License 2.0 plus a
+commercial-use attribution clause) - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

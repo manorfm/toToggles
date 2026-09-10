@@ -1,0 +1,57 @@
+name: totoggle-go-release
+
+# Triggered by a tag push (the "hook") matching totoggle_go/v*, e.g.:
+#   git tag totoggle_go/v1.0.0 && git push origin totoggle_go/v1.0.0
+#
+# Builds, tests and packages the module, then creates a GitHub Release with a source tarball
+# attached. Publishing to pkg.go.dev needs no credentials — it indexes automatically from the
+# tag once `go get` (or the GOPROXY warm-up step below) is run against it.
+
+on:
+  push:
+    tags:
+      - "totoggle_go/v*"
+
+defaults:
+  run:
+    working-directory: totoggle_go
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: totoggle_go/go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -race -cover
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#totoggle_go/}" >> "$GITHUB_OUTPUT"
+
+      - name: Package source tarball
+        run: |
+          mkdir -p ../dist
+          tar --exclude='.git' -czf "../dist/totoggle_go-${{ steps.version.outputs.version }}.tar.gz" .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "totoggle_go ${{ steps.version.outputs.version }}"
+          body_path: totoggle_go/CHANGELOG.md
+          files: dist/totoggle_go-${{ steps.version.outputs.version }}.tar.gz
+
+      - name: Warm up the Go module proxy (triggers pkg.go.dev indexing)
+        run: |
+          GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod \
+            go list -m "github.com/manorfm/toToggles/totoggle_go@${{ steps.version.outputs.version }}" || true

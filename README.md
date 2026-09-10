@@ -5,7 +5,7 @@
 [![totoggle-go](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml)
 [![totoggle-node](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml)
 [![frontend-web](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml)
-![License](https://img.shields.io/badge/license-MIT-blue)
+[![License](https://img.shields.io/badge/license-ToToggle%201.0-blue)](LICENSE)
 
 A feature flag (feature toggle) management platform: a Go server with a role-based admin UI, team
 management, and an optional approval workflow for sensitive changes, plus 3 official client
@@ -344,7 +344,23 @@ cd ../totoggle_node && npm install && npm run build
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **ToToggle License 1.0** — the Apache License 2.0 plus one
+addition: commercial use must keep visible attribution back to this project (non-commercial,
+internal and evaluation use is unrestricted). See the [LICENSE](LICENSE) file for the full text.
+
+## 📦 Publishing status
+
+Each client library ships from this monorepo with its own CI (test-on-push) and a release
+pipeline (`*-release.yml`) that triggers automatically on a version tag (`totoggle_go/vX.Y.Z`,
+`totoggle_java/vX.Y.Z`, `totoggle_node/vX.Y.Z`) — it builds, tests, packages, and publishes a
+GitHub Release with the artifacts attached. Publishing to each language's official registry
+(Maven Central, npm) is the next step and is currently disabled pending package naming/signing
+decisions — see each release workflow for the (deliberately disabled) publish job. `totoggle_go`
+needs no registry: `go get github.com/manorfm/toToggles/totoggle_go` already works off any
+pushed tag.
+
+See **[the project landing page](https://manorfm.github.io/toToggles/)** for an overview of all 3
+SDKs (once GitHub Pages is enabled for this repo — Settings → Pages → Source: GitHub Actions).
 
 ## 📞 Support
 
@@ -353,6 +369,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Discussions**: [GitHub Discussions](https://github.com/manorfm/toToggles/discussions)
 
 ---
+
+**Author**: [Manoel Medeiros](https://github.com/manorfm)
 
 **Built with ❤️ for reliable feature management**
 ### Contextual activation rules

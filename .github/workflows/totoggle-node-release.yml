@@ -1,0 +1,70 @@
+name: totoggle-node-release
+
+# Triggered by a tag push (the "hook") matching totoggle_node/v*, e.g.:
+#   git tag totoggle_node/v1.0.0 && git push origin totoggle_node/v1.0.0
+#
+# Builds, tests and packages the library (npm pack tarball), then creates a GitHub Release with
+# that tarball attached. Actual npm registry publishing is a separate, deliberately-disabled job
+# below — it needs an NPM_TOKEN secret (npm login/automation token) that doesn't exist yet.
+
+on:
+  push:
+    tags:
+      - "totoggle_node/v*"
+
+defaults:
+  run:
+    working-directory: totoggle_node
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: totoggle_node/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --coverage
+      - run: npm run build
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#totoggle_node/}" >> "$GITHUB_OUTPUT"
+
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "totoggle-node ${{ steps.version.outputs.version }}"
+          body_path: totoggle_node/CHANGELOG.md
+          files: totoggle_node/*.tgz
+
+  # Disabled until an NPM_TOKEN (npm automation token, 2FA enabled) secret is configured.
+  # Flip `if: false` to `if: true` once that secret exists.
+  publish-npm:
+    if: false
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - working-directory: totoggle_node
+        run: npm ci && npm run build
+      - working-directory: totoggle_node
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

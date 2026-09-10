@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ToToggle — feature flags for Go, Java/Kotlin and Node</title>
+<meta name="description" content="ToToggle: a self-hosted feature-flag platform with a Go server and 3 official client libraries (Go, Java/Kotlin, Node/TypeScript)." />
+<style>
+  :root{
+    --bg:#0b0f0e; --surface:#121613; --surface-2:#171c19; --border:#232a26;
+    --ink:#e9efec; --ink-2:#a9b6b0; --ink-3:#77857f;
+    --accent:#3ddc84; --accent-ink:#062b16;
+    --font-sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);line-height:1.5}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  header.top{padding:22px 0;border-bottom:1px solid var(--border)}
+  .top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .brand{font-size:19px;font-weight:500;letter-spacing:-0.01em}
+  .brand b{color:var(--accent);font-weight:700}
+  nav.top-links{display:flex;gap:18px;font-size:14px;color:var(--ink-2)}
+  nav.top-links a{color:var(--ink-2)}
+  nav.top-links a:hover{color:var(--ink)}
+  .hero{padding:72px 0 56px;text-align:center}
+  .hero h1{font-size:clamp(28px,5vw,46px);line-height:1.15;margin:0 0 16px;letter-spacing:-0.02em}
+  .hero h1 .accent{color:var(--accent)}
+  .hero p{color:var(--ink-2);font-size:17px;max-width:640px;margin:0 auto 30px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--border)}
+  .btn-primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .btn-primary:hover{opacity:.92;text-decoration:none}
+  .btn-soft{background:var(--surface-2);color:var(--ink)}
+  .btn-soft:hover{background:#1d2420;text-decoration:none}
+  section{padding:44px 0}
+  .section-title{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin:0 0 20px;font-weight:600}
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  .feature{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .feature h3{margin:0 0 8px;font-size:15px}
+  .feature p{margin:0;color:var(--ink-2);font-size:13.5px}
+  .sdks{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+  .sdk-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:12px}
+  .sdk-card h3{margin:0;font-size:17px;display:flex;align-items:center;gap:10px}
+  .sdk-tag{font-size:11px;font-weight:700;letter-spacing:.04em;background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:3px 9px;text-transform:uppercase}
+  .sdk-card p.desc{margin:0;color:var(--ink-2);font-size:13.5px}
+  pre{background:#0e1210;border:1px solid var(--border);border-radius:9px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:12.5px;color:var(--ink);margin:0}
+  .sdk-card a.repo-link{font-size:13px}
+  .status{font-size:12px;color:var(--ink-3)}
+  .status.live{color:var(--accent)}
+  .license{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .license h3{margin:0 0 10px;font-size:15px}
+  .license p{margin:0 0 10px;color:var(--ink-2);font-size:13.5px}
+  .license p:last-child{margin-bottom:0}
+  footer{border-top:1px solid var(--border);padding:26px 0;color:var(--ink-3);font-size:13px;text-align:center}
+  footer a{color:var(--ink-3)}
+  footer a:hover{color:var(--accent)}
+  @media (max-width:520px){
+    .cta{flex-direction:column;align-items:stretch}
+    .btn{justify-content:center}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">to<b>Toggle</b></div>
+    <nav class="top-links">
+      <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/manorfm/toToggles/blob/main/docs/rest-flow.md" target="_blank" rel="noopener">API docs</a>
+      <a href="https://github.com/manorfm/toToggles/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>Self-hosted feature flags,<br>with a client for <span class="accent">every stack</span>.</h1>
+    <p>ToToggle is a Go server with a role-based admin UI, team management and an optional
+      approval workflow — plus 3 official client libraries that fetch and cache toggles locally
+      and evaluate 7 activation rule types with cascading validation.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">View on GitHub</a>
+      <a class="btn btn-soft" href="https://github.com/manorfm/toToggles#-quick-start" target="_blank" rel="noopener">Quick start</a>
+    </div>
+  </section>
+
+  <section>
+    <p class="section-title">Why ToToggle</p>
+    <div class="features">
+      <div class="feature">
+        <h3>Hierarchical toggles</h3>
+        <p><code>service.feature.flag</code> paths with cascading validation — a disabled parent
+          disables every descendant.</p>
+      </div>
+      <div class="feature">
+        <h3>7 activation rules</h3>
+        <p>Percentage rollout, attribute, user ID, IP/CIDR, country, time window, and cohort.</p>
+      </div>
+      <div class="feature">
+        <h3>Local evaluation</h3>
+        <p>Every client caches the catalog in memory — evaluation never blocks on the network.</p>
+      </div>
+      <div class="feature">
+        <h3>Approval workflow</h3>
+        <p>Optional propose → approve → execute flow for sensitive changes, with a full audit
+          trail.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="section-title">Client libraries</p>
+    <div class="sdks">
+      <div class="sdk-card">
+        <h3>Go <span class="sdk-tag">totoggle_go</span></h3>
+        <p class="desc">Functional options, <code>error</code> returns, <code>context.Context</code>
+          on network operations.</p>
+        <pre>go get github.com/manorfm/toToggles/totoggle_go</pre>
+        <span class="status live">● live — available now via go get</span>
+        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_go" target="_blank" rel="noopener">README →</a>
+      </div>
+      <div class="sdk-card">
+        <h3>Java / Kotlin <span class="sdk-tag">totoggle_java</span></h3>
+        <p class="desc">Builder-style config, coroutines-friendly, OkHttp under the hood.</p>
+        <pre>implementation("io.github.manorfm:totoggle-java:1.0.0")
+// Maven Central publishing in progress — build from source for now</pre>
+        <span class="status">○ registry publish pending</span>
+        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_java" target="_blank" rel="noopener">README →</a>
+      </div>
+      <div class="sdk-card">
+        <h3>Node / TypeScript <span class="sdk-tag">totoggle-node</span></h3>
+        <p class="desc">Zero runtime dependencies, native <code>fetch</code>, Express/Fastify
+          middleware included.</p>
+        <pre>npm install totoggle-node
+# npm publish in progress — build from source for now</pre>
+        <span class="status">○ registry publish pending</span>
+        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_node" target="_blank" rel="noopener">README →</a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="section-title">License</p>
+    <div class="license">
+      <h3>ToToggle License 1.0</h3>
+      <p>Based on the Apache License 2.0, with one addition: commercial use must keep visible
+        attribution back to this project. Non-commercial, internal and evaluation use is
+        unrestricted.</p>
+      <p><a href="https://github.com/manorfm/toToggles/blob/main/LICENSE" target="_blank" rel="noopener">Read the full license →</a></p>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    Built by <a href="https://github.com/manorfm" target="_blank" rel="noopener">Manoel Medeiros</a>
+    · <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">Source on GitHub</a>
+  </div>
+</footer>
+
+</body>
+</html>

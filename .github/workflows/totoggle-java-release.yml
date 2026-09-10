@@ -1,0 +1,69 @@
+name: totoggle-java-release
+
+# Triggered by a tag push (the "hook") matching totoggle_java/v*, e.g.:
+#   git tag totoggle_java/v1.0.0 && git push origin totoggle_java/v1.0.0
+#
+# Builds, tests and packages the library (jar + sources + javadoc), then creates a GitHub
+# Release with those artifacts attached. Actual Maven Central publishing is a separate,
+# deliberately-disabled job below — it needs a decision on the groupId (io.github.manorfm vs. a
+# verified custom domain) plus Sonatype + GPG signing secrets, none of which exist yet.
+
+on:
+  push:
+    tags:
+      - "totoggle_java/v*"
+
+defaults:
+  run:
+    working-directory: totoggle_java
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gradle Wrapper 8.7 (this project's version) doesn't support newer JDKs.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build (compiles, tests, jar + sourcesJar + javadocJar)
+        run: ./gradlew build --no-daemon
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#totoggle_java/}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "totoggle_java ${{ steps.version.outputs.version }}"
+          body_path: totoggle_java/CHANGELOG.md
+          files: totoggle_java/build/libs/*.jar
+
+  # Disabled until the Maven Central groupId/Sonatype/GPG setup is done (see project README).
+  # Flip `if: false` to `if: true` once SONATYPE_USERNAME, SONATYPE_PASSWORD, GPG_PRIVATE_KEY and
+  # GPG_PASSPHRASE secrets are configured and build.gradle.kts has a real publish repository.
+  publish-maven-central:
+    if: false
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Publish
+        working-directory: totoggle_java
+        run: ./gradlew publish --no-daemon
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

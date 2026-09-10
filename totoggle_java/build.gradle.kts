@@ -78,15 +78,17 @@ publishing {
                 
                 licenses {
                     license {
-                        name.set("Apache License 2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                        name.set("ToToggle License 1.0")
+                        url.set("https://github.com/manorfm/toToggles/blob/main/LICENSE")
+                        comments.set("Apache License 2.0, plus a commercial-use attribution clause (see LICENSE).")
                     }
                 }
-                
+
                 developers {
                     developer {
                         id.set("manorfm")
                         name.set("Manoel Medeiros")
+                        email.set("manoel.rodrigo@gmail.com")
                     }
                 }
             }
