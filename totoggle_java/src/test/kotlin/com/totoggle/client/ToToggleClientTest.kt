@@ -9,8 +9,10 @@ import com.totoggle.client.context.ToggleRequestContext
 import com.totoggle.client.metrics.ToToggleMetricsListener
 import com.totoggle.client.refresh.RefreshScheduler
 import com.totoggle.client.refresh.ScheduledRefresh
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.AfterEach
@@ -23,6 +25,7 @@ import java.nio.file.Path
 import java.util.concurrent.Executors
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class ToToggleClientTest {
     
@@ -30,6 +33,7 @@ class ToToggleClientTest {
     private lateinit var config: ToToggleConfig
     private lateinit var client: ToToggleClient
     private val contextValues = mutableMapOf<String, String>()
+    private var resolverCalls = 0
     
     @BeforeEach
     fun setUp() {
@@ -44,7 +48,10 @@ class ToToggleClientTest {
             connectionTimeout = Duration.ofSeconds(1),
             readTimeout = Duration.ofSeconds(1),
             logLevel = LogLevel.DEBUG,
-            contextResolver = { key -> contextValues[key] }
+            contextResolver = { key ->
+                resolverCalls++
+                contextValues[key]
+            }
         )
         
         client = ToToggleClient(config)
@@ -71,6 +78,7 @@ class ToToggleClientTest {
 
         fixture.path("cases").forEach { scenario ->
             contextValues.clear()
+            resolverCalls = 0
             scenario.path("context").fields().forEachRemaining { entry ->
                 contextValues[entry.key] = entry.value.asText()
             }
@@ -78,6 +86,11 @@ class ToToggleClientTest {
             assertThat(client.isActive(scenario.path("path").asText()))
                 .describedAs(scenario.path("name").asText())
                 .isEqualTo(scenario.path("expected").asBoolean())
+            if (scenario.has("resolver_calls")) {
+                assertThat(resolverCalls)
+                    .describedAs(scenario.path("name").asText())
+                    .isEqualTo(scenario.path("resolver_calls").asInt())
+            }
         }
     }
 
@@ -382,6 +395,47 @@ class ToToggleClientTest {
     }
 
     @Test
+    fun `shutdown discards an in flight refresh without repopulating cache or emitting success`() {
+        mockSuccessfulResponse()
+        client.start()
+        assertThat(mockServer.takeRequest(1, TimeUnit.SECONDS)).isNotNull()
+
+        val refreshRequestStarted = CountDownLatch(1)
+        val releaseResponse = CountDownLatch(1)
+        mockServer.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                refreshRequestStarted.countDown()
+                releaseResponse.await(1, TimeUnit.SECONDS)
+                return MockResponse().setResponseCode(200).setBody(catalogBody())
+            }
+        }
+        val refreshSuccesses = AtomicInteger()
+        client.addMetricsListener(object : ToToggleMetricsListener {
+            override fun onRefreshSuccess(toggleCount: Int) {
+                refreshSuccesses.incrementAndGet()
+            }
+        })
+
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val refresh = executor.submit { client.refresh() }
+            assertThat(refreshRequestStarted.await(1, TimeUnit.SECONDS)).isTrue()
+
+            val shutdown = executor.submit { client.shutdown() }
+            assertThat(waitForCondition { !client.isHealthy() }).isTrue()
+            releaseResponse.countDown()
+
+            refresh.get(2, TimeUnit.SECONDS)
+            shutdown.get(2, TimeUnit.SECONDS)
+            assertThat(client.getCacheInfo()).contains("0 toggles")
+            assertThat(refreshSuccesses.get()).isZero()
+        } finally {
+            releaseResponse.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `background failures use bounded exponential backoff with deterministic jitter`() {
         val scheduler = RecordingScheduler()
         val runtime = ToToggleClientRuntime(
@@ -637,6 +691,15 @@ class ToToggleClientTest {
         .setBody(
             """{"application":{"id":"app-123","name":"Test App","revision":"$revision","toggles":[{"id":"toggle-1","path":"user","value":"user","enabled":true,"level":0,"parent_id":null,"app_id":"app-123","has_activation_rule":false,"activation_rule":null}]}}"""
         )
+
+    private fun waitForCondition(timeout: Duration = Duration.ofSeconds(1), condition: () -> Boolean): Boolean {
+        val deadline = System.nanoTime() + timeout.toNanos()
+        while (System.nanoTime() < deadline) {
+            if (condition()) return true
+            Thread.sleep(5)
+        }
+        return condition()
+    }
 
     private class RecordingScheduler : RefreshScheduler {
         val delays = mutableListOf<Duration>()

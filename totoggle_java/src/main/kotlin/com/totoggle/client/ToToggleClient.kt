@@ -36,9 +36,6 @@ import kotlin.concurrent.withLock
  * val client = ToToggleClient(config)
  * client.start()
  * 
- * // Check if a toggle is active
- * val isActive = client.isActive("user.payments.view-table")
- * 
  * // Context is resolved by the configured middleware-backed resolver.
  * val isActive = client.isActive("user.payments.view-table")
  * 
@@ -176,11 +173,14 @@ class ToToggleClient(
     }
     
     /**
-     * Validates that all parent toggles are active (cascading validation).
+     * Validates that all parent toggles are enabled (hierarchical validation).
      *
      * For example, for path "user.payments.view-table":
-     * - Checks that "user" is enabled (and its activation rule, if any)
-     * - Checks that "user.payments" is enabled (and its activation rule, if any)
+     * - Checks that "user" is enabled
+     * - Checks that "user.payments" is enabled
+     *
+     * Activation rules are intentionally evaluated only for the requested toggle; an ancestor
+     * rule never cascades to a descendant.
      *
      * @param path The toggle path
      * @return true if all parents are enabled, false otherwise
@@ -202,6 +202,10 @@ class ToToggleClient(
     /** Rules are local to their toggle. Missing context is warned and fails closed. */
     private fun evaluateRule(rule: com.totoggle.client.model.ActivationRule, path: String): Boolean {
         return try {
+            if (!rule.hasCanonicalContextKey()) {
+                logger.warn("Activation rule has an invalid type/context-key pair; returning false")
+                return false
+            }
             if (rule.type == "time") return strategyFactory.evaluate(rule, null)
             val contextKey = rule.config?.get("context_key")?.asText()
             if (contextKey.isNullOrBlank()) {
@@ -297,9 +301,14 @@ class ToToggleClient(
             scheduledRefresh = null
         }
         scheduler.close()
-        
-        httpClient.close()
-        cache.clear()
+
+        // Refresh owns this lock while a response is parsed and applied. Waiting for it makes
+        // cache clearing the terminal lifecycle action: an in-flight response cannot resurrect
+        // state after shutdown has completed.
+        refreshLock.withLock {
+            httpClient.close()
+            cache.clear()
+        }
         
         logger.info("ToToggle client shut down completed")
     }
@@ -345,6 +354,7 @@ class ToToggleClient(
     }
 
     private fun refreshToggles(): Boolean = refreshLock.withLock {
+		if (isShutdown.get()) return false
         try {
             logger.debug("Refreshing toggles from server")
             when (val response = httpClient.fetchToggles(cache.getCatalogueVersion()?.etag)) {
@@ -354,12 +364,14 @@ class ToToggleClient(
                     cache.markFresh(response.etag, runtime.now())
                 }
             }
+			if (isShutdown.get()) return false
             lastError.set(null)
             consecutiveFailureCount.set(0)
             notifyRefreshSuccess(cache.getStats().toggleCount)
             return true
 
         } catch (e: NetworkException) {
+			if (isShutdown.get()) return false
             lastError.set(e)
             lastErrorTime.set(runtime.now())
             val failures = consecutiveFailureCount.incrementAndGet()
@@ -373,6 +385,7 @@ class ToToggleClient(
             return false
 
         } catch (e: Exception) {
+			if (isShutdown.get()) return false
             lastError.set(e)
             lastErrorTime.set(runtime.now())
             val failures = consecutiveFailureCount.incrementAndGet()

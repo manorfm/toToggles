@@ -15,6 +15,7 @@ interface SdkContractFixture {
     readonly path: string;
     readonly context: Readonly<Record<string, string>>;
     readonly expected: boolean;
+    readonly resolver_calls?: number;
   }>;
 }
 
@@ -127,15 +128,23 @@ describe("ToToggleClient", () => {
     const fixture = loadSdkContractFixture();
     const { url } = await fixedResponseServer(fixture.catalog.application.toggles);
     let context: Readonly<Record<string, string>> = {};
+    let resolverCalls = 0;
     const client = new ToToggleClient(createConfig("test-app", url, "sk_test", {
       refreshIntervalMs: 60 * 60 * 1000,
-      contextResolver: { resolve: (key) => context[key] },
+      contextResolver: { resolve: (key) => {
+        resolverCalls++;
+        return context[key];
+      } },
     }));
 
     await client.start();
     for (const scenario of fixture.cases) {
       context = scenario.context;
+      resolverCalls = 0;
       expect(client.isActive(scenario.path), scenario.name).toBe(scenario.expected);
+      if (scenario.resolver_calls !== undefined) {
+        expect(resolverCalls, scenario.name).toBe(scenario.resolver_calls);
+      }
     }
     client.shutdown();
   });
@@ -181,6 +190,42 @@ describe("ToToggleClient", () => {
 
     expect(scheduler.delays).toEqual([10, 10, 20, 10]);
     expect(client.consecutiveFailureCount()).toBe(0);
+    client.shutdown();
+  });
+
+  it("bounds refresh jitter to plus or minus twenty percent", async () => {
+    for (const [random, expectedDelay] of [[0, 8], [0.5, 10], [1, 11]] as const) {
+      const scheduler = new ControlledRefreshScheduler();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+      const client = new ToToggleClient(
+        createConfig("test-app", "https://toggles.example", "sk_test", { refreshIntervalMs: 10 }),
+        { scheduler, random: () => random },
+      );
+
+      await client.start();
+
+      expect(scheduler.delays, `random ${random}`).toEqual([expectedDelay]);
+      client.shutdown();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not log resolver exception payloads", async () => {
+    const sensitivePayload = "user=alice@example.test ip=203.0.113.9";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      application: {
+        id: "app-1", name: "x", toggles: [toggleJson("1", "user", true, 0, null, true, "country", "BR")],
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const client = new ToToggleClient(createConfig("test-app", "https://toggles.example", "sk_test", {
+      contextResolver: { resolve: () => { throw new Error(sensitivePayload); } },
+    }));
+
+    await client.start();
+
+    expect(client.isActive("user")).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
     client.shutdown();
   });
 

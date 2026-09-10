@@ -2,6 +2,8 @@ package com.totoggle.client.context
 
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.entry
+import com.totoggle.client.model.ActivationRule
+import com.totoggle.client.strategy.IpStrategy
 import org.junit.jupiter.api.Test
 
 class NetworkContextTest {
@@ -23,6 +25,7 @@ class NetworkContextTest {
         )
 
         assertThat(values).containsEntry("ip", "2001:db8:ffff:0:0:0:0:42").containsEntry("country", "BR")
+        assertThat(IpStrategy().evaluate(ActivationRule("ip", "2001:db8:ffff::/64"), values["ip"])).isTrue()
     }
 
     @Test fun `ignores RFC 7239 data when the remote peer is outside trusted ranges`() {

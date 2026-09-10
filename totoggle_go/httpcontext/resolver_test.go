@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/manorfm/toToggles/totoggle_go/internal/strategy"
+	"github.com/manorfm/toToggles/totoggle_go/internal/toggle"
 )
 
 func TestResolver_ProvidesOnlyCanonicalApplicationValues(t *testing.T) {
@@ -288,6 +291,9 @@ func TestResolver_UsesRFC7239ForwardedForTrustedIPv6CIDRProxy(t *testing.T) {
 		ip, ok := resolver.Resolve(request.Context(), "ip")
 		assert.True(t, ok)
 		assert.Equal(t, "2001:db8:cafe::4", ip)
+		assert.True(t, strategy.IPEvaluator{}.Evaluate(
+			toggle.ActivationRule{Value: "2001:db8:cafe::/64"}, ip, ok,
+		))
 	})).ServeHTTP(httptest.NewRecorder(), req)
 }
 

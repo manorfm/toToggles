@@ -7,9 +7,9 @@ import (
 	"github.com/manorfm/toToggles/totoggle_go/internal/toggle"
 )
 
-// IPEvaluator matches a candidate IPv4 address against a comma-separated allowlist of exact
-// addresses and/or CIDR ranges (e.g. "10.0.0.0/24"). IPv4 only, per the confirmed prototype
-// placeholder/hint. Uses net.ParseIP/net.ParseCIDR (never a DNS-resolving lookup), so a
+// IPEvaluator matches a candidate IPv4 or IPv6 address against a comma-separated allowlist of
+// exact addresses and/or CIDR ranges (e.g. "10.0.0.0/24" or "2001:db8::/32"). Uses
+// net.ParseIP/net.ParseCIDR (never a DNS-resolving lookup), so a
 // malformed or hostname-shaped candidate can never trigger a network call during evaluation.
 type IPEvaluator struct{}
 
@@ -25,11 +25,6 @@ func (IPEvaluator) Evaluate(rule toggle.ActivationRule, key string, hasKey bool)
 	if candidate == nil {
 		return false
 	}
-	candidate = candidate.To4()
-	if candidate == nil {
-		return false
-	}
-
 	for _, entry := range strings.Split(rule.Value, ",") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
@@ -54,6 +49,5 @@ func matchesIPEntry(entry string, candidate net.IP) bool {
 	if exact == nil {
 		return false
 	}
-	exact = exact.To4()
-	return exact != nil && exact.Equal(candidate)
+	return exact.Equal(candidate)
 }

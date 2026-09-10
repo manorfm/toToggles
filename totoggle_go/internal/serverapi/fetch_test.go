@@ -155,3 +155,22 @@ func TestFetcher_Fetch_RecordsETagAndCatalogRevisionFrom200Response(t *testing.T
 	assert.Equal(t, `"catalog-v2"`, result.ETag)
 	assert.Equal(t, "2", result.Revision)
 }
+
+func TestSafeETag_RejectsMalformedControlAndOversizedValidators(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{name: "quoted", value: `"catalog-v1"`, valid: true},
+		{name: "unquoted", value: "catalog-v1", valid: false},
+		{name: "control character", value: "\"catalog\x01v1\"", valid: false},
+		{name: "oversized", value: `"` + string(make([]byte, 1023)) + `"`, valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.valid, safeETag(tt.value))
+		})
+	}
+}

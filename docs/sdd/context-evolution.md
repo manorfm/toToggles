@@ -49,6 +49,7 @@ resolver.
 | 5 | Remove legacy APIs and dead code | Complete |
 | 6 | Efficient catalog synchronization | Complete |
 | 7 | E2E coverage and final documentation | Complete |
+| 8 | Audit remediation: contract, security, and resilience gaps | Complete |
 
 ## Tasks
 
@@ -105,3 +106,50 @@ resolver.
 - [x] Add SDK contract fixtures shared across languages.
 - [x] Publish adapter security guides and migration notes.
 - [x] Run full server, frontend, Go, Node, and Java suites before release.
+
+### Wave 8 — Audit remediation: contract, security, and resilience
+
+All work in this wave follows red-green-blue: introduce the failing regression test first,
+implement the smallest safe change, then refactor without reducing coverage.
+
+#### Canonical evaluation contract
+
+- [x] Make Go, Node, and Java reject a catalogue rule when its `type` and `config.context_key`
+  are not a canonical pair. Invalid combinations must fail closed before calling a context
+  resolver.
+- [x] Extend the shared SDK fixture with invalid type/context-key combinations and assert the
+  same fail-closed result and zero resolver access in every SDK.
+- [x] Add IPv6 literal and IPv6 CIDR matching to IP-rule evaluators in Go, Node, and Java;
+  retain IPv4 behavior and malformed-value fail-closed cases.
+- [x] Extend trusted-proxy and shared-contract tests to exercise effective IPv6 client addresses
+  end to end for every supported adapter.
+
+#### Context confidentiality and lifecycle safety
+
+- [x] Remove raw resolver errors and recovered panic values from Go and Node SDK logs. Emit only
+  stable, non-sensitive failure messages while preserving fail-closed evaluation.
+- [x] Add log-safety regressions proving `user_id`, IP, country, headers, secret-like values, and
+  resolver exception text cannot reach SDK logs.
+- [x] Serialize shutdown with an in-flight refresh in Go and Java, preventing cache repopulation,
+  late metrics, or a new schedule after shutdown.
+- [x] Add deterministic shutdown-during-refresh regressions for Go and Java, including a blocked
+  `200` response and an assertion that the cache remains empty after shutdown.
+
+#### Synchronization consistency and maintainability
+
+- [x] Standardize Node retry jitter to the documented `±20%` range used by Go and Java, with
+  deterministic lower-, midpoint-, and upper-bound tests.
+- [x] Validate and bound server-supplied ETags in Go before caching or sending `If-None-Match`,
+  matching Node and Java's defensive behavior; add malformed, control-character, and oversized
+  validator tests.
+- [x] Correct Java KDoc/examples so they state that ancestors contribute only `enabled`, remove
+  the duplicate call-site example, and make the HTTP integration boundary explicit.
+- [x] Provide a concrete, optional Java Servlet filter/interceptor adapter (or explicitly scope
+  and test a framework-neutral integration module) so request extraction is as transparent as
+  the Node and Go middleware paths.
+
+#### Closure criteria
+
+- [x] Run the full server, frontend, E2E, Go race/vet, Node typecheck/build, and Java test suites.
+- [x] Perform an independent read-only security and architecture review confirming all Wave 8
+  findings are resolved and no raw context or secret data is exposed in SDK logs.

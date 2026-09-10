@@ -46,4 +46,24 @@ data class ActivationRule(
      * Checks if this rule is valid (has both type and value).
      */
     fun isValid(): Boolean = type.isNotBlank() && value.isNotBlank()
+
+    /**
+     * Verifies the canonical type/context-key relationship before SDK code consults a request
+     * resolver. The fetched catalogue is treated as untrusted input and invalid pairs fail
+     * closed locally even though the server validates them when a rule is saved.
+     */
+    fun hasCanonicalContextKey(): Boolean {
+        if (type == TYPE_TIME) return config == null || config.isNull
+        val key = config?.get("context_key")?.takeIf { it.isTextual }?.asText()
+            ?.takeIf { it.isNotBlank() } ?: return false
+        if (key.startsWith("attributes.")) {
+            return key.removePrefix("attributes.").isNotEmpty() &&
+                (type == TYPE_PERCENTAGE || type == TYPE_ATTRIBUTE)
+        }
+        return (type == TYPE_PERCENTAGE && key == "rollout_key") ||
+            (type == TYPE_USER_ID && key == "user_id") ||
+            (type == TYPE_IP && key == "ip") ||
+            (type == TYPE_COUNTRY && key == "country") ||
+            (type == TYPE_COHORT && key == "cohort")
+    }
 }

@@ -1,6 +1,10 @@
 package toggle
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
 
 // RuleType is one of the 7 activation-rule types the server supports
 // (server/internal/app/domain/entity/activation_rule.go#ActivationRuleType) — a typed string so
@@ -25,18 +29,32 @@ type ActivationRule struct {
 	Config json.RawMessage `json:"config"`
 }
 
-// ContextKey returns the configured provider key. Invalid or missing configuration fails closed.
+// ContextKey returns a canonical configured provider key. A catalogue is untrusted input even
+// after the server has validated it, so incompatible type/key pairs fail closed in the SDK before
+// a resolver is invoked.
 func (r ActivationRule) ContextKey() (string, bool) {
 	if r.Type == RuleTypeTime {
-		return "", true
+		return "", len(r.Config) == 0 || bytes.Equal(bytes.TrimSpace(r.Config), []byte("null"))
 	}
 	var config struct {
 		ContextKey string `json:"context_key"`
 	}
-	if json.Unmarshal(r.Config, &config) != nil || config.ContextKey == "" {
+	if json.Unmarshal(r.Config, &config) != nil || !validContextKey(r.Type, config.ContextKey) {
 		return "", false
 	}
 	return config.ContextKey, true
+}
+
+func validContextKey(ruleType RuleType, key string) bool {
+	if strings.HasPrefix(key, "attributes.") {
+		return len(strings.TrimPrefix(key, "attributes.")) > 0 &&
+			(ruleType == RuleTypePercentage || ruleType == RuleTypeAttribute)
+	}
+	return (ruleType == RuleTypePercentage && key == "rollout_key") ||
+		(ruleType == RuleTypeUserID && key == "user_id") ||
+		(ruleType == RuleTypeIP && key == "ip") ||
+		(ruleType == RuleTypeCountry && key == "country") ||
+		(ruleType == RuleTypeCohort && key == "cohort")
 }
 
 // IsEmpty reports whether this is "no rule configured" (both fields blank).

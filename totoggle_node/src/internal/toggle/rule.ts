@@ -21,6 +21,26 @@ export interface ActivationRule {
   readonly config?: { readonly context_key?: string } | null;
 }
 
+/**
+ * Validates the type/context-key pair before a resolver is touched. Catalogue data crosses a
+ * trust boundary, so SDK evaluation repeats this small canonical contract and fails closed when
+ * an invalid server payload somehow reaches the cache.
+ */
+export function hasCanonicalContextKey(rule: ActivationRule): boolean {
+  if (rule.type === "time") return rule.config === undefined || rule.config === null;
+
+  const key = rule.config?.context_key;
+  if (key === undefined || key === "") return false;
+  if (key.startsWith("attributes.")) {
+    return key.length > "attributes.".length && (rule.type === "percentage" || rule.type === "attribute");
+  }
+  return (rule.type === "percentage" && key === "rollout_key")
+    || (rule.type === "user_id" && key === "user_id")
+    || (rule.type === "ip" && key === "ip")
+    || (rule.type === "country" && key === "country")
+    || (rule.type === "cohort" && key === "cohort");
+}
+
 /** Reports whether this is "no rule configured" (both fields blank). */
 export function isEmpty(rule: ActivationRule): boolean {
   return rule.type === "" && rule.value === "";

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "catalog": {
     "application": {
       "id": "contract-app",
@@ -79,6 +79,66 @@
             "value": "203.0.113.0/24,198.51.100.10",
             "config": { "context_key": "ip" }
           }
+        },
+        {
+          "id": "payments-ipv6-allowlist",
+          "path": "payments.ipv6-allowlist",
+          "value": "ipv6-allowlist",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "ip",
+            "value": "2001:db8:42::/64,2001:db8:ffff::7",
+            "config": { "context_key": "ip" }
+          }
+        },
+        {
+          "id": "payments-invalid-user-context",
+          "path": "payments.invalid-user-context",
+          "value": "invalid-user-context",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "user_id",
+            "value": "user-1",
+            "config": { "context_key": "attributes.plan" }
+          }
+        },
+        {
+          "id": "payments-invalid-attribute-context",
+          "path": "payments.invalid-attribute-context",
+          "value": "invalid-attribute-context",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "attribute",
+            "value": "premium",
+            "config": { "context_key": "user_id" }
+          }
+        },
+        {
+          "id": "payments-invalid-time-context",
+          "path": "payments.invalid-time-context",
+          "value": "invalid-time-context",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "time",
+            "value": "00:00-23:59",
+            "config": { "context_key": "country" }
+          }
         }
       ]
     }
@@ -131,6 +191,45 @@
       "path": "payments.ip-allowlist",
       "context": { "ip": "api.internal.example" },
       "expected": false
+    },
+    {
+      "name": "ip rule matches an IPv6 CIDR range",
+      "path": "payments.ipv6-allowlist",
+      "context": { "ip": "2001:db8:42::123" },
+      "expected": true
+    },
+    {
+      "name": "ip rule matches an exact IPv6 literal",
+      "path": "payments.ipv6-allowlist",
+      "context": { "ip": "2001:db8:ffff::7" },
+      "expected": true
+    },
+    {
+      "name": "ip rule rejects an IPv6 address outside its CIDR range",
+      "path": "payments.ipv6-allowlist",
+      "context": { "ip": "2001:db8:43::1" },
+      "expected": false
+    },
+    {
+      "name": "invalid user ID context pair fails closed before resolution",
+      "path": "payments.invalid-user-context",
+      "context": { "attributes.plan": "premium" },
+      "expected": false,
+      "resolver_calls": 0
+    },
+    {
+      "name": "invalid attribute context pair fails closed before resolution",
+      "path": "payments.invalid-attribute-context",
+      "context": { "user_id": "user-1" },
+      "expected": false,
+      "resolver_calls": 0
+    },
+    {
+      "name": "time rule with context pair fails closed before resolution",
+      "path": "payments.invalid-time-context",
+      "context": { "country": "BR" },
+      "expected": false,
+      "resolver_calls": 0
     }
   ]
 }

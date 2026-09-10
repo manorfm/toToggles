@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NodeRequestContextResolver } from "./request-context.js";
+import { IpEvaluator } from "../internal/strategy/ip.js";
 
 function request(remoteAddress: string, headers: Record<string, string> = {}) {
   return { socket: { remoteAddress }, headers } as unknown as import("node:http").IncomingMessage;
@@ -36,7 +37,10 @@ describe("NodeRequestContextResolver", () => {
 
   it("uses RFC 7239 Forwarded only for a trusted peer", () => {
     const resolver = new NodeRequestContextResolver({ trustedProxyAddresses: ["10.0.0.8"] });
-    resolver.run(request("10.0.0.8", { forwarded: "for=2001:db8::1" }), () => expect(resolver.resolve("ip")).toBe("2001:db8::1"));
+    resolver.run(request("10.0.0.8", { forwarded: "for=2001:db8::1" }), () => {
+      expect(resolver.resolve("ip")).toBe("2001:db8::1");
+      expect(new IpEvaluator().evaluate({ type: "ip", value: "2001:db8::/64" }, resolver.resolve("ip"))).toBe(true);
+    });
   });
 
   it("supports an IPv6 trusted peer without trusting a different peer", () => {

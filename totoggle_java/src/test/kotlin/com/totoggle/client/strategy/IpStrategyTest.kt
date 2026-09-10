@@ -70,4 +70,21 @@ class IpStrategyTest {
 
         assertThat(strategy.evaluate(rule, "10.0.0.1")).isFalse()
     }
+
+    @Test
+    fun `should match IPv6 literals and CIDR ranges`() {
+        val rule = ActivationRule("ip", "2001:db8:42::/64,2001:db8:ffff::7")
+
+        assertThat(strategy.evaluate(rule, "2001:db8:42::123")).isTrue()
+        assertThat(strategy.evaluate(rule, "2001:db8:ffff::7")).isTrue()
+        assertThat(strategy.evaluate(rule, "2001:db8:43::1")).isFalse()
+    }
+
+    @Test
+    fun `should fail closed for malformed IPv6 values`() {
+        val rule = ActivationRule("ip", "2001:db8::/32")
+
+        assertThat(strategy.evaluate(rule, "2001:db8:::1")).isFalse()
+        assertThat(strategy.evaluate(ActivationRule("ip", "2001:db8::/129"), "2001:db8::1")).isFalse()
+    }
 }

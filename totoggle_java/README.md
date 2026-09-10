@@ -225,40 +225,43 @@ user or network data at each call site. The resolver exposes only the configured
 
 ### Servlet filter
 
-The SDK has no Servlet dependency. In an application using Jakarta Servlet, bind the context in a
-filter around the complete synchronous chain. The example obtains identity and attributes from
-application authentication services—not request headers or query-string data.
+The SDK has no Servlet dependency. Its built-in, framework-neutral `HttpRequestContextAdapter`
+is the HTTP boundary for synchronous filters and interceptors. Supply small framework extractors
+for socket/header metadata and verified authentication state, then wrap the complete downstream
+chain. The adapter copies only the required values, applies the configured proxy trust policy,
+and restores the scope even if the chain throws.
 
 ```kotlin
-class ToToggleContextFilter(
-    private val resolver: RequestContextResolver,
-    private val authenticatedUser: (HttpServletRequest) -> AuthenticatedUser?,
-    private val localGeoIp: (String) -> String?,
-) : Filter {
+val adapter = HttpRequestContextAdapter(
+    resolver = resolver,
+    metadataExtractor = HttpRequestMetadataExtractor { request: HttpServletRequest ->
+        HttpRequestMetadata(
+            remoteIp = request.remoteAddr,
+            forwarded = request.getHeader("Forwarded"),
+            forwardedFor = request.getHeader("X-Forwarded-For"),
+            trustedCountryHeader = request.getHeader("CF-IPCountry"),
+        )
+    },
+    authenticatedContextExtractor = AuthenticatedToggleContextExtractor { request: HttpServletRequest ->
+        authenticatedUser(request)?.let { user ->
+            ToggleRequestContext(
+                userId = user.id,
+                rolloutKey = user.id,
+                cohort = deploymentCohort(),
+                attributes = user.attributes,
+            )
+        }
+    },
+    networkOptions = NetworkContextOptions(
+        trustedProxyRanges = listOf("10.0.0.0/8", "2001:db8::/32"),
+        countryResolver = CountryResolver { clientIp -> localGeoIp(clientIp) },
+    ),
+)
+
+class ToToggleContextFilter : Filter {
     override fun doFilter(request: ServletRequest, response: ServletResponse, chain: FilterChain) {
         val http = request as? HttpServletRequest ?: return chain.doFilter(request, response)
-        val networkValues = NetworkContext.values(
-            NetworkRequest(
-                remoteIp = http.remoteAddr,
-                forwarded = http.getHeader("Forwarded"),
-                forwardedFor = http.getHeader("X-Forwarded-For"),
-                trustedCountryHeader = http.getHeader("CF-IPCountry"),
-            ),
-            NetworkContextOptions(
-                trustedProxyRanges = listOf("10.0.0.0/8", "2001:db8::/32"),
-                countryResolver = CountryResolver { clientIp -> localGeoIp(clientIp) },
-            ),
-        )
-        val user = authenticatedUser(http)
-        resolver.withContext(
-            ToggleRequestContext(
-                userId = user?.id,
-                rolloutKey = user?.id,
-                cohort = deploymentCohort(),
-                attributes = user?.attributes.orEmpty(),
-            ),
-            networkValues,
-        ) { chain.doFilter(request, response) }
+        adapter.withRequest(http) { chain.doFilter(request, response) }
     }
 }
 ```
@@ -281,6 +284,10 @@ the resolver and call only `client.isActive(path)` while its request scope is op
 Servlet dispatch, or executor-hopped work. Those runtimes need a resolver backed by their own
 request context. See the shared [context adapter security and migration guide](../docs/context-adapter-security.md)
 for the IP/country trust model and fail-closed behavior.
+
+If either adapter extractor fails, the SDK supplies no values from that extractor; contextual
+rules therefore fail closed. The local GeoIP resolver receives the resolved client IP and must
+not make network calls.
 
 ### Synchronous MVC interceptor
 

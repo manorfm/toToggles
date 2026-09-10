@@ -1,8 +1,10 @@
 package totoggle
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,20 +70,31 @@ func newTestClient(t *testing.T, serverURL string, opts ...Option) *Client {
 	return New(cfg)
 }
 
-type testContextResolver struct{ values map[string]string }
+type testContextResolver struct {
+	values map[string]string
+	calls  int
+}
 
 func (p *testContextResolver) Resolve(_ context.Context, key string) (string, bool) {
+	p.calls++
 	value, ok := p.values[key]
 	return value, ok
+}
+
+type panicContextResolver struct{ value any }
+
+func (p panicContextResolver) Resolve(context.Context, string) (string, bool) {
+	panic(p.value)
 }
 
 type sdkContractFixture struct {
 	Catalog json.RawMessage `json:"catalog"`
 	Cases   []struct {
-		Name     string            `json:"name"`
-		Path     string            `json:"path"`
-		Context  map[string]string `json:"context"`
-		Expected bool              `json:"expected"`
+		Name          string            `json:"name"`
+		Path          string            `json:"path"`
+		Context       map[string]string `json:"context"`
+		Expected      bool              `json:"expected"`
+		ResolverCalls *int              `json:"resolver_calls"`
 	} `json:"cases"`
 }
 
@@ -100,7 +113,8 @@ func TestClient_ContractFixture_EvaluatesContextAndHierarchyConsistently(t *test
 	fixture := loadSDKContractFixture(t)
 	values := map[string]string{}
 	srv, _ := jsonServer(t, string(fixture.Catalog))
-	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextResolver(&testContextResolver{values: values}))
+	resolver := &testContextResolver{values: values}
+	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour), WithToggleContextResolver(resolver))
 	require.NoError(t, client.Start(context.Background()))
 	t.Cleanup(client.Shutdown)
 
@@ -110,7 +124,11 @@ func TestClient_ContractFixture_EvaluatesContextAndHierarchyConsistently(t *test
 			for key, value := range scenario.Context {
 				values[key] = value
 			}
+			resolver.calls = 0
 			assert.Equal(t, scenario.Expected, client.IsActive(scenario.Path))
+			if scenario.ResolverCalls != nil {
+				assert.Equal(t, *scenario.ResolverCalls, resolver.calls)
+			}
 		})
 	}
 }
@@ -427,6 +445,71 @@ func TestClient_BackgroundRefresh_RefetchesOnInterval(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt32(hits) >= 3
 	}, time.Second, 5*time.Millisecond)
+}
+
+func TestClient_IsActive_DoesNotLogResolverPanicPayload(t *testing.T) {
+	const sensitivePayload = "user=alice@example.test ip=203.0.113.9"
+	srv, _ := jsonServer(t, applicationJSON(
+		toggleJSON("1", "user", "user", true, 0, "", true, "country", "BR"),
+	))
+	client := newTestClient(t, srv.URL,
+		WithRefreshInterval(time.Hour),
+		WithToggleContextResolver(panicContextResolver{value: sensitivePayload}),
+	)
+	require.NoError(t, client.Start(context.Background()))
+	t.Cleanup(client.Shutdown)
+
+	var output bytes.Buffer
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	previousPrefix := log.Prefix()
+	log.SetOutput(&output)
+	log.SetFlags(0)
+	log.SetPrefix("")
+	t.Cleanup(func() {
+		log.SetOutput(previousWriter)
+		log.SetFlags(previousFlags)
+		log.SetPrefix(previousPrefix)
+	})
+
+	assert.False(t, client.IsActive("user"))
+	assert.NotContains(t, output.String(), sensitivePayload)
+}
+
+func TestClient_ShutdownDuringManualRefresh_DiscardsLateCatalogResult(t *testing.T) {
+	var requests atomic.Int32
+	refreshStarted := make(chan struct{})
+	releaseRefresh := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(applicationJSON(toggleJSON("1", "user", "user", true, 0, "", false, "", ""))))
+			return
+		}
+		close(refreshStarted)
+		<-releaseRefresh
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(applicationJSON(toggleJSON("1", "user", "user", true, 0, "", false, "", ""))))
+	}))
+	t.Cleanup(srv.Close)
+
+	client := newTestClient(t, srv.URL, WithRefreshInterval(time.Hour))
+	require.NoError(t, client.Start(context.Background()))
+	refreshResult := make(chan error, 1)
+	go func() { refreshResult <- client.Refresh(context.Background()) }()
+	<-refreshStarted
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		client.Shutdown()
+		close(shutdownDone)
+	}()
+	require.Eventually(t, client.shutdown.Load, time.Second, time.Millisecond)
+	close(releaseRefresh)
+	<-shutdownDone
+	require.ErrorIs(t, <-refreshResult, ErrAlreadyShutdown)
+	assert.False(t, client.IsActive("user"))
+	assert.Zero(t, client.cache.Stats().ToggleCount)
 }
 
 func TestClient_IsHealthy_TrueAfterSuccessfulStart(t *testing.T) {

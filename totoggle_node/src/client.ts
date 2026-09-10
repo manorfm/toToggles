@@ -9,6 +9,7 @@ import { MatchListEvaluator } from "./internal/strategy/matchlist.js";
 import { PercentageEvaluator } from "./internal/strategy/percentage.js";
 import { IpEvaluator } from "./internal/strategy/ip.js";
 import { TimeWindowEvaluator } from "./internal/strategy/timewindow.js";
+import { hasCanonicalContextKey } from "./internal/toggle/rule.js";
 
 export interface RefreshScheduler {
   schedule(callback: () => void, delayMs: number): unknown;
@@ -134,7 +135,9 @@ export class ToToggleClient {
     );
     const randomValue = this.random();
     const sampled = Number.isFinite(randomValue) ? randomValue : 0.5;
-    return Math.max(1, Math.min(maxDelay, Math.floor(exponentialDelay * (0.5 + Math.max(0, Math.min(sampled, 0.999999))))));
+    // Keep all SDKs within the same bounded +/-20% retry jitter envelope. It desynchronizes
+    // clients without allowing a failed refresh to retry aggressively or drift too far late.
+    return Math.max(1, Math.min(maxDelay, Math.floor(exponentialDelay * (0.8 + 0.4 * Math.max(0, Math.min(sampled, 0.999999))))));
   }
 
   private async refreshOnce(): Promise<void> {
@@ -231,8 +234,9 @@ export class ToToggleClient {
 
     this.metrics.notifyEvaluation(path, result);
     return result;
-    } catch (error) {
-      console.warn(`totoggle: isActive(${path}) failed closed`, error);
+    } catch {
+      // Resolvers are application code and can throw messages containing request data. Evaluation
+      // stays fail-closed without sending that data to process logs.
       this.metrics.notifyEvaluation(path, false);
       return false;
     }
@@ -250,6 +254,7 @@ export class ToToggleClient {
       return true;
     }
     try {
+      if (!hasCanonicalContextKey(toggle.activationRule)) return false;
       const key = this.keyForRule(toggle.activationRule, toggle.path.toString());
       if (key === undefined && toggle.activationRule.type !== "time") return false;
       return this.registry.evaluate(toggle.activationRule, key);
@@ -265,14 +270,10 @@ export class ToToggleClient {
     let raw: string | undefined;
     try {
       raw = this.config.contextResolver?.resolve(contextKey);
-    } catch (error) {
-      console.warn("totoggle: ToggleContextResolver failed; rule evaluation fails closed", error);
+    } catch {
       return undefined;
     }
     const key = type === "percentage" && raw !== undefined ? `${path}:${raw}` : raw;
-    if (type !== "time" && key === undefined) {
-      console.warn(`totoggle: rule type "${type}" requires configured context key; evaluation fails closed`);
-    }
     return key;
   }
 

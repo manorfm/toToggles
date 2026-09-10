@@ -185,8 +185,16 @@ func (c *Client) backoffDelay(failures int) time.Duration {
 func (c *Client) refreshOnce(ctx context.Context) error {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
+	if c.shutdown.Load() {
+		return ErrAlreadyShutdown
+	}
 	stats := c.cache.Stats()
 	result, err := c.fetcher.Fetch(ctx, stats.ETag)
+	// Shutdown may complete while an HTTP request is in flight. Its cache clear must be the
+	// terminal lifecycle action: never apply a late response or publish refresh effects after it.
+	if c.shutdown.Load() {
+		return ErrAlreadyShutdown
+	}
 	if err != nil {
 		c.cache.RecordFailure(err)
 		c.metrics.notifyRefreshFailure(err, c.cache.Stats().ConsecutiveFailures)
@@ -241,7 +249,9 @@ func (c *Client) IsActive(path string) (active bool) {
 func (c *Client) IsActiveContext(ctx context.Context, path string) (active bool) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			log.Printf("totoggle: isActive(%q) panicked; failing closed: %v", path, recovered)
+			// A resolver is application code and can panic with request data in its value. Keep the
+			// diagnostic intentionally generic so an evaluation failure cannot disclose that data.
+			log.Print("totoggle: isActive evaluation panicked; failing closed")
 			active = false
 		}
 	}()
@@ -372,5 +382,9 @@ func (c *Client) Shutdown() {
 		close(c.stopRefresh)
 		<-c.refreshDone
 	}
+	// A caller-triggered Refresh is not part of refreshLoop. Serialize with it before clearing
+	// so a response that began before Shutdown cannot repopulate the cache afterwards.
+	c.refreshMu.Lock()
 	c.cache.Clear()
+	c.refreshMu.Unlock()
 }

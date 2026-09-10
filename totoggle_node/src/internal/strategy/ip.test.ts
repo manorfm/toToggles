@@ -75,9 +75,16 @@ describe("IpEvaluator", () => {
     expect(evaluator.evaluate(rule, "10.0.0.999")).toBe(false);
   });
 
-  // IPv6 is out of scope — the confirmed prototype hint/placeholder only ever shows IPv4.
-  it("never matches an IPv6 candidate", () => {
-    const rule: ActivationRule = { type: "ip", value: "::1" };
-    expect(evaluator.evaluate(rule, "::1")).toBe(false);
+  it("matches IPv6 literals and CIDR ranges", () => {
+    const rule: ActivationRule = { type: "ip", value: "2001:db8:42::/64,2001:db8:ffff::7" };
+    expect(evaluator.evaluate(rule, "2001:db8:42::123")).toBe(true);
+    expect(evaluator.evaluate(rule, "2001:db8:ffff::7")).toBe(true);
+    expect(evaluator.evaluate(rule, "2001:db8:43::1")).toBe(false);
+  });
+
+  it("fails closed for malformed IPv6 values", () => {
+    const rule: ActivationRule = { type: "ip", value: "2001:db8::/32" };
+    expect(evaluator.evaluate(rule, "2001:db8:::1")).toBe(false);
+    expect(evaluator.evaluate({ type: "ip", value: "2001:db8::/129" }, "2001:db8::1")).toBe(false);
   });
 });

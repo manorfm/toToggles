@@ -63,10 +63,19 @@ func TestIPEvaluator_BlankRuleValueNeverMatches(t *testing.T) {
 	assert.False(t, e.Evaluate(rule, "10.0.0.5", true))
 }
 
-// IPv6 is out of scope — the confirmed prototype hint/placeholder only ever shows IPv4.
-func TestIPEvaluator_IPv6CandidateNeverMatches(t *testing.T) {
+func TestIPEvaluator_IPv6LiteralAndCIDR(t *testing.T) {
 	e := IPEvaluator{}
-	rule := toggle.ActivationRule{Value: "::1"}
+	rule := toggle.ActivationRule{Value: "2001:db8:42::/64,2001:db8:ffff::7"}
 
-	assert.False(t, e.Evaluate(rule, "::1", true))
+	assert.True(t, e.Evaluate(rule, "2001:db8:42::123", true))
+	assert.True(t, e.Evaluate(rule, "2001:db8:ffff::7", true))
+	assert.False(t, e.Evaluate(rule, "2001:db8:43::1", true))
+}
+
+func TestIPEvaluator_MalformedIPv6NeverMatches(t *testing.T) {
+	e := IPEvaluator{}
+	rule := toggle.ActivationRule{Value: "2001:db8::/32"}
+
+	assert.False(t, e.Evaluate(rule, "2001:db8:::1", true))
+	assert.False(t, e.Evaluate(rule, "2001:db8::1/64", true))
 }

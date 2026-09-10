@@ -50,6 +50,20 @@ type fetchResponse struct {
 	} `json:"application"`
 }
 
+// safeETag accepts only a bounded quoted HTTP entity-tag. The value is retained and replayed
+// in If-None-Match, so a malformed upstream header must never become request metadata.
+func safeETag(value string) bool {
+	if len(value) < 2 || len(value) > 1024 || value[0] != '"' || value[len(value)-1] != '"' {
+		return false
+	}
+	for _, character := range value {
+		if character <= 31 || character == 127 {
+			return false
+		}
+	}
+	return true
+}
+
 // Fetch retrieves and parses the current toggle set. The returned error never includes the
 // secret key or the raw response body — only a sentinel or a status code — so a caller logging
 // err.Error() can't leak the credential.
@@ -73,7 +87,11 @@ func (f *Fetcher) Fetch(ctx context.Context, ifNoneMatch string) (FetchResult, e
 		return FetchResult{}, ErrAuthentication
 	}
 	if resp.StatusCode == http.StatusNotModified {
-		return FetchResult{ETag: resp.Header.Get("ETag"), NotModified: true}, nil
+		etag := resp.Header.Get("ETag")
+		if !safeETag(etag) {
+			etag = ""
+		}
+		return FetchResult{ETag: etag, NotModified: true}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		return FetchResult{}, fmt.Errorf("serverapi: unexpected status %d", resp.StatusCode)
@@ -84,9 +102,13 @@ func (f *Fetcher) Fetch(ctx context.Context, ifNoneMatch string) (FetchResult, e
 		return FetchResult{}, fmt.Errorf("serverapi: decoding response: %w", err)
 	}
 
+	etag := resp.Header.Get("ETag")
+	if !safeETag(etag) {
+		etag = ""
+	}
 	return FetchResult{
 		Application: toggle.NewApplication(parsed.Application.Toggles),
-		ETag:        resp.Header.Get("ETag"),
+		ETag:        etag,
 		Revision:    parsed.Application.Revision,
 	}, nil
 }
