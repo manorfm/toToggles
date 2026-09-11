@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ToToggle feature flags for Go, Java and Node</title>
-<meta name="description" content="ToToggle is a self hosted feature flag platform with a Go server and official libraries for Go, Java and Node." />
+<title>toToggle feature flags for Go, Java and Node</title>
+<meta name="description" content="toToggle is a self hosted feature flag platform with a Go server and official libraries for Go, Java and Node." />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="alternate icon" href="favicon.svg" />
 <style>
@@ -23,9 +23,9 @@
   header.top{padding:22px 0;border-bottom:1px solid var(--border)}
   .top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:500;letter-spacing:-0.01em}
-  .brand b{color:var(--accent);font-weight:700}
-  .brand-mark{flex:none;color:var(--ink-2)}
-  .brand-mark circle{fill:var(--accent)}
+  .brand-name{color:var(--ink);font-weight:600}
+  .brand-name b{color:var(--accent);font-weight:700}
+  .brand-mark{width:30px;height:30px;flex:none}
   nav.top-links{display:flex;gap:18px;font-size:14px;color:var(--ink-2)}
   nav.top-links a{color:var(--ink-2)}
   nav.top-links a:hover{color:var(--ink)}
@@ -50,9 +50,13 @@
   .sdk-card h3{margin:0;font-size:17px;display:flex;align-items:center;gap:10px}
   .sdk-tag{font-size:11px;font-weight:700;letter-spacing:.04em;background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:3px 9px;text-transform:uppercase}
   .sdk-card p.desc{margin:0;color:var(--ink-2);font-size:13.5px}
+  .install-label{margin:2px 0 -7px;color:var(--ink-3);font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
   .install-command{position:relative}
   pre{background:#0e1210;border:1px solid var(--border);border-radius:9px;padding:12px 52px 12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:12.5px;color:var(--ink);margin:0}
-  .copy-button{position:absolute;top:8px;right:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--ink-2);padding:5px 8px;font:600 11px/1 var(--font-sans);cursor:pointer}
+  .copy-button{position:absolute;top:8px;right:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--ink-2);padding:6px;line-height:0;cursor:pointer}
+  .copy-button svg{width:14px;height:14px}
+  .copy-button::after{content:attr(data-tooltip);position:absolute;right:0;bottom:calc(100% + 7px);padding:5px 7px;border-radius:5px;background:var(--ink);color:var(--bg);font:600 11px/1 var(--font-sans);white-space:nowrap;opacity:0;pointer-events:none;transform:translateY(3px);transition:opacity .15s,transform .15s}
+  .copy-button:hover::after,.copy-button:focus-visible::after{opacity:1;transform:translateY(0)}
   .copy-button:hover{color:var(--ink);background:#1d2420}
   .copy-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .sdk-card a.repo-link{font-size:13px}
@@ -76,15 +80,13 @@
 <header class="top">
   <div class="wrap">
     <div class="brand">
-      <svg class="brand-mark" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="4" y="8.5" width="16" height="7" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
-        <circle cx="15" cy="12" r="2.6"/>
-      </svg>
-      to<b>Toggle</b>
+      <img class="brand-mark" src="favicon.svg" alt="" />
+      <span class="brand-name">to<b>Toggle</b></span>
     </div>
     <nav class="top-links">
       <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/manorfm/toToggles/blob/main/docs/rest-flow.md" target="_blank" rel="noopener">API docs</a>
+      <a href="docs.html">Docs</a>
+      <a href="api.html">API docs</a>
       <a href="https://github.com/manorfm/toToggles/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
     </nav>
   </div>
@@ -93,17 +95,17 @@
 <div class="wrap">
   <section class="hero">
     <h1>Self hosted feature flags<br>with clients for <span class="accent">every stack</span>.</h1>
-    <p>ToToggle is a Go server with a role based admin UI, team management and an optional
+    <p>toToggle is a Go server with a role based admin UI, team management and an optional
       approval workflow. Its three official client libraries fetch and cache toggles locally
       while evaluating seven activation rule types with cascading validation.</p>
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">View on GitHub</a>
-      <a class="btn btn-soft" href="https://github.com/manorfm/toToggles#-quick-start" target="_blank" rel="noopener">Quick start</a>
+      <a class="btn btn-soft" href="docs.html">Quick start</a>
     </div>
   </section>
 
   <section>
-    <p class="section-title">Why ToToggle</p>
+    <p class="section-title">Why toToggle</p>
     <div class="features">
       <div class="feature">
         <h3>Hierarchical toggles</h3>
@@ -135,7 +137,9 @@
           on network operations.</p>
         <div class="install-command">
           <pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Go install command">Copy</button>
+          <button class="copy-button" type="button" aria-label="Copy Go install command" data-tooltip="Copy command">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          </button>
         </div>
         <span class="status live">● Available now with go get</span>
         <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_go" target="_blank" rel="noopener">Read the README</a>
@@ -143,11 +147,26 @@
       <div class="sdk-card">
         <h3>Java <span class="sdk-tag">totoggle_java</span></h3>
         <p class="desc">Builder style configuration with OkHttp handling the HTTP layer.</p>
+        <p class="install-label">Gradle</p>
         <div class="install-command">
           <pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Java install command">Copy</button>
+          <button class="copy-button" type="button" aria-label="Copy Gradle dependency" data-tooltip="Copy command">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          </button>
+        </div>
+        <p class="install-label">Maven POM</p>
+        <div class="install-command">
+          <pre><code>&lt;dependency&gt;
+  &lt;groupId&gt;io.github.manorfm&lt;/groupId&gt;
+  &lt;artifactId&gt;totoggle_java&lt;/artifactId&gt;
+  &lt;version&gt;1.0.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Maven dependency" data-tooltip="Copy command">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          </button>
         </div>
         <span class="status live">● Available on Maven Central</span>
+        <a class="repo-link" href="docs.html#java-sdk">Quick start</a>
         <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_java" target="_blank" rel="noopener">Read the README</a>
       </div>
       <div class="sdk-card">
@@ -156,7 +175,9 @@
           middleware included.</p>
         <div class="install-command">
           <pre><code>npm install totoggle-node</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Node install command">Copy</button>
+          <button class="copy-button" type="button" aria-label="Copy Node install command" data-tooltip="Copy command">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          </button>
         </div>
         <span class="status live">● Available on npm</span>
         <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_node" target="_blank" rel="noopener">Read the README</a>
@@ -167,7 +188,7 @@
   <section>
     <p class="section-title">License</p>
     <div class="license">
-      <h3>ToToggle License 1.0</h3>
+      <h3>toToggle License 1.0</h3>
       <p>Based on the Apache License 2.0 with one addition. Commercial use must keep visible
         attribution to this project. Noncommercial, internal and evaluation use is
         unrestricted.</p>
@@ -186,18 +207,22 @@
 <script>
   document.querySelectorAll('.copy-button').forEach((button) => {
     button.addEventListener('click', async () => {
-      const command = button.previousElementSibling.textContent.trim();
-      const originalLabel = button.textContent;
+      const command = button.closest('.install-command').querySelector('code').textContent.trim();
+      const originalTooltip = button.dataset.tooltip;
+      const originalLabel = button.getAttribute('aria-label');
 
       try {
         await navigator.clipboard.writeText(command);
-        button.textContent = 'Copied';
+        button.dataset.tooltip = 'Copied';
+        button.setAttribute('aria-label', 'Command copied');
       } catch {
-        button.textContent = 'Copy failed';
+        button.dataset.tooltip = 'Copy failed';
+        button.setAttribute('aria-label', 'Copy failed');
       }
 
       window.setTimeout(() => {
-        button.textContent = originalLabel;
+        button.dataset.tooltip = originalTooltip;
+        button.setAttribute('aria-label', originalLabel);
       }, 1800);
     });
   });

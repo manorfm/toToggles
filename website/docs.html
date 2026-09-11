@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>toToggle documentation</title>
+<meta name="description" content="Set up the toToggle server and configure the Java, Node and Go SDKs." />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<style>
+  :root{--bg:#0b0f0e;--surface:#121613;--surface-2:#171c19;--border:#232a26;--ink:#e9efec;--ink-2:#a9b6b0;--ink-3:#77857f;--accent:#3ddc84;--accent-ink:#062b16;--font-sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);line-height:1.55} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}.wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+  header.top{padding:22px 0;border-bottom:1px solid var(--border)}.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}.brand-name{color:var(--ink);font-weight:600}.brand-name b{color:var(--accent);font-weight:700}.brand-mark{width:30px;height:30px;flex:none}nav{display:flex;gap:18px;font-size:14px}nav a{color:var(--ink-2)}nav a[aria-current="page"]{color:var(--ink)}
+  .hero{padding:64px 0 42px;max-width:720px}.eyebrow{margin:0 0 12px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.hero h1{margin:0 0 14px;font-size:clamp(32px,5vw,52px);line-height:1.1;letter-spacing:-.03em}.hero p{margin:0;color:var(--ink-2);font-size:17px}
+  .docs-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:54px;padding:12px 0 70px}.toc{position:sticky;top:24px;align-self:start;padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}.toc p{margin:0 0 8px;color:var(--ink-3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.toc a{display:block;padding:5px 0;color:var(--ink-2);font-size:13px}.toc a:hover{color:var(--accent);text-decoration:none}
+  article{min-width:0}section{padding:32px 0;border-top:1px solid var(--border)}section:first-child{border-top:0;padding-top:0}h2{margin:0 0 10px;font-size:25px;letter-spacing:-.02em}h3{margin:28px 0 8px;font-size:16px}p{color:var(--ink-2);margin:0 0 14px}.step-list{display:grid;gap:12px;margin:22px 0}.step{display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:start}.step-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface-2);color:var(--accent);font-size:13px;font-weight:700}.step strong{display:block;margin:2px 0 2px;font-size:14px}.step p{margin:0;font-size:13.5px}.note{margin:18px 0;padding:14px 16px;border:1px solid #285b3c;border-radius:10px;background:#102217;color:var(--ink-2);font-size:13.5px}.note strong{color:var(--accent)}
+  .code-block{position:relative;margin:14px 0 20px}.code-label{display:block;margin:0 0 7px;color:var(--ink-3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}pre{margin:0;padding:14px 54px 14px 16px;overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:#0e1210;color:var(--ink);font:12.5px/1.6 var(--font-mono);white-space:pre}.copy-button{position:absolute;top:31px;right:9px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--ink-2);padding:6px;line-height:0;cursor:pointer}.copy-button svg{width:14px;height:14px}.copy-button:hover{color:var(--ink);background:#1d2420}.copy-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.copy-button::after{content:attr(data-tooltip);position:absolute;right:0;bottom:calc(100% + 7px);padding:5px 7px;border-radius:5px;background:var(--ink);color:var(--bg);font:600 11px/1 var(--font-sans);white-space:nowrap;opacity:0;pointer-events:none;transform:translateY(3px);transition:opacity .15s,transform .15s}.copy-button:hover::after,.copy-button:focus-visible::after{opacity:1;transform:translateY(0)}
+  .sdk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:18px}.sdk-card{padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.sdk-card h3{margin:0 0 8px}.sdk-card p{font-size:13.5px}.sdk-card code{font:12px var(--font-mono);color:var(--ink)}.sdk-card a{font-size:13px;font-weight:600}.inline-code{padding:2px 5px;border-radius:4px;background:var(--surface-2);font:12px var(--font-mono);color:var(--ink)}footer{border-top:1px solid var(--border);padding:26px 0;text-align:center;color:var(--ink-3);font-size:13px}
+  @media (max-width:720px){.docs-layout{grid-template-columns:1fr;gap:28px}.toc{position:static;display:flex;gap:13px;flex-wrap:wrap;padding:12px 0}.toc p{width:100%;margin:0}.toc a{padding:0}.hero{padding-top:46px}.wrap{padding:0 20px}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="toToggle home"><img class="brand-mark" src="favicon.svg" alt="" /><span class="brand-name">to<b>Toggle</b></span></a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="docs.html" aria-current="page">Docs</a>
+      <a href="api.html">API docs</a>
+      <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <p class="eyebrow">Documentation</p>
+    <h1>Set up toToggle</h1>
+    <p>Run the server, create an application and connect a client library in a few clear steps.</p>
+  </div>
+
+  <div class="docs-layout">
+    <aside class="toc" aria-label="Documentation sections">
+      <p>On this page</p>
+      <a href="#server">Run the server</a>
+      <a href="#application-key">Create an application</a>
+      <a href="#java-sdk">Set up Java</a>
+      <a href="#go-sdk">Set up Go</a>
+      <a href="#node-sdk">Set up Node</a>
+      <a href="#other-sdks">Other SDKs</a>
+    </aside>
+
+    <article>
+      <section id="server">
+        <h2>Run the server</h2>
+        <p>The server includes the admin application and applies database migrations when it starts.</p>
+        <div class="step-list">
+          <div class="step"><span class="step-number">1</span><div><strong>Get the source</strong><p>Clone the repository and enter the server directory.</p></div></div>
+          <div class="step"><span class="step-number">2</span><div><strong>Build the admin application</strong><p>Install the frontend dependencies and produce the static files served by Go.</p></div></div>
+          <div class="step"><span class="step-number">3</span><div><strong>Start toToggle</strong><p>Open the admin application at <span class="inline-code">http://localhost:3056</span>.</p></div></div>
+        </div>
+        <div class="code-block">
+          <span class="code-label">Terminal</span>
+          <pre><code>git clone https://github.com/manorfm/toToggles.git
+cd toToggles/server
+make web-install web-build
+make dev</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy server setup commands" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <div class="note"><strong>First login</strong> The first start creates a root user and writes a one time password to <span class="inline-code">initial-root-password.txt</span> in the database directory. Change that password at the first login.</div>
+        <h3>Server settings</h3>
+        <p>The defaults work for local development. Set environment variables before starting the server when you need different values.</p>
+        <div class="code-block">
+          <span class="code-label">Terminal</span>
+          <pre><code>SERVER_PORT=8080 DB_PATH=./db/totoggle.db make dev</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy server settings" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+      </section>
+
+      <section id="application-key">
+        <h2>Create an application and key</h2>
+        <p>Every SDK connects to one application with an application scoped secret key.</p>
+        <div class="step-list">
+          <div class="step"><span class="step-number">1</span><div><strong>Sign in to the admin application</strong><p>Use the root password from the first start and set a new password.</p></div></div>
+          <div class="step"><span class="step-number">2</span><div><strong>Create an application</strong><p>Open Applications and create the application your service will use.</p></div></div>
+          <div class="step"><span class="step-number">3</span><div><strong>Generate a secret key</strong><p>Open the application and select Generate Secret Key. Store the value in a secret manager because it is shown only once.</p></div></div>
+        </div>
+        <div class="note"><strong>Keep the key private</strong> Pass the key to your service through an environment variable such as <span class="inline-code">TOTOGGLE_SECRET_KEY</span>. Do not put it in browser code or commit it to the repository.</div>
+      </section>
+
+      <section id="java-sdk">
+        <h2>Set up the Java SDK</h2>
+        <p>Add one dependency, provide the server URL and secret key, then start the client with your application.</p>
+        <h3>Add the dependency</h3>
+        <div class="code-block">
+          <span class="code-label">Gradle Kotlin DSL</span>
+          <pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Gradle dependency" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <div class="code-block">
+          <span class="code-label">Maven POM</span>
+          <pre><code>&lt;dependency&gt;
+  &lt;groupId&gt;io.github.manorfm&lt;/groupId&gt;
+  &lt;artifactId&gt;totoggle_java&lt;/artifactId&gt;
+  &lt;version&gt;1.0.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Maven dependency" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <h3>Configure and start the client</h3>
+        <div class="code-block">
+          <span class="code-label">Java</span>
+          <pre><code>import com.totoggle.client.ToToggleClient;
+import com.totoggle.client.ToToggleClientRuntime;
+import com.totoggle.client.config.ToToggleConfig;
+import java.time.Duration;
+
+ToToggleConfig config = ToToggleConfig.Companion.builder()
+    .applicationName("my-app")
+    .serverUrl("http://localhost:3056")
+    .secretKey(System.getenv("TOTOGGLE_SECRET_KEY"))
+    .refreshInterval(Duration.ofMinutes(5))
+    .enableOfflineMode(true)
+    .build();
+
+ToToggleClient client = new ToToggleClient(
+    config,
+    ToToggleClientRuntime.Companion.production("my-app")
+);
+client.start();
+
+boolean enabled = client.isActive("user.payments");</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Java quick start" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <p>Call <span class="inline-code">client.shutdown()</span> when your application stops. The client fetches the catalog at startup and refreshes it in the background.</p>
+      </section>
+
+      <section id="other-sdks">
+        <h2>Other SDKs</h2>
+        <p>Go and Node use the same application name, server URL and secret key as Java.</p>
+        <div class="sdk-grid">
+          <div class="sdk-card"><h3>Go</h3><p><code>go get github.com/manorfm/toToggles/totoggle_go</code></p><a href="#go-sdk">Open the Go guide</a></div>
+          <div class="sdk-card"><h3>Node</h3><p><code>npm install totoggle-node</code></p><a href="#node-sdk">Open the Node guide</a></div>
+        </div>
+      </section>
+
+      <section id="go-sdk">
+        <h2>Set up the Go SDK</h2>
+        <p>Install the module, create a configuration with your application details and start the client before evaluating a flag.</p>
+        <div class="code-block">
+          <span class="code-label">Terminal</span>
+          <pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Go install command" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <div class="code-block">
+          <span class="code-label">Go</span>
+          <pre><code>package main
+
+import (
+    "context"
+    "log"
+    "os"
+
+    totoggle "github.com/manorfm/toToggles/totoggle_go"
+)
+
+func main() {
+    config, err := totoggle.NewConfig(
+        "my-app",
+        "http://localhost:3056",
+        os.Getenv("TOTOGGLE_SECRET_KEY"),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    client := totoggle.New(config)
+    if err := client.Start(context.Background()); err != nil {
+        log.Fatal(err)
+    }
+    defer client.Shutdown()
+
+    enabled := client.IsActive("user.payments")
+    log.Println(enabled)
+}</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Go quick start" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <p>Use <span class="inline-code">NewConfig</span> to validate the application name, server URL and key before the client is created.</p>
+      </section>
+
+      <section id="node-sdk">
+        <h2>Set up the Node SDK</h2>
+        <p>Install the package, read the secret key from your environment and start the client before it serves requests.</p>
+        <div class="code-block">
+          <span class="code-label">Terminal</span>
+          <pre><code>npm install totoggle-node</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Node install command" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <div class="code-block">
+          <span class="code-label">Node</span>
+          <pre><code>import { createConfig, ToToggleClient } from "totoggle-node";
+
+const config = createConfig(
+  "my-app",
+  "http://localhost:3056",
+  process.env.TOTOGGLE_SECRET_KEY ?? "",
+);
+
+const client = new ToToggleClient(config);
+await client.start();
+
+const enabled = client.isActive("user.payments");
+console.log(enabled);
+
+client.shutdown();</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Node quick start" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        </div>
+        <p><span class="inline-code">createConfig</span> validates the required values and the client keeps the catalog in memory for local evaluation.</p>
+      </section>
+    </article>
+  </div>
+</main>
+
+<footer><div class="wrap">Built by <a href="https://github.com/manorfm" target="_blank" rel="noopener">Manoel Medeiros</a> · <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">Source on GitHub</a></div></footer>
+
+<script>
+  document.querySelectorAll('.copy-button').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const command = button.previousElementSibling.textContent.trim();
+      const tooltip = button.dataset.tooltip;
+      const label = button.getAttribute('aria-label');
+      try {
+        await navigator.clipboard.writeText(command);
+        button.dataset.tooltip = 'Copied';
+        button.setAttribute('aria-label', 'Command copied');
+      } catch {
+        button.dataset.tooltip = 'Copy failed';
+        button.setAttribute('aria-label', 'Copy failed');
+      }
+      window.setTimeout(() => {
+        button.dataset.tooltip = tooltip;
+        button.setAttribute('aria-label', label);
+      }, 1800);
+    });
+  });
+</script>
+</body>
+</html>
