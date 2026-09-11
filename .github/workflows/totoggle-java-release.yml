@@ -4,11 +4,11 @@ name: totoggle-java-release
 #   git tag totoggle_java/v1.0.0 && git push origin totoggle_java/v1.0.0
 #
 # Builds, tests and packages the library (jar + sources + javadoc), then creates a GitHub
-# Release with those artifacts attached. Actual Maven Central publishing is a separate,
-# deliberately-disabled job below. GroupId is decided (io.github.manorfm — auto-verified via
-# GitHub OAuth login on the Sonatype Central Portal); it still needs Sonatype + GPG signing
-# secrets, plus a real `publishing { repositories { ... } }` target in build.gradle.kts, none of
-# which exist yet.
+# Release with those artifacts attached. Actual Maven Central publishing (via the
+# com.vanniktech.maven.publish plugin, see build.gradle.kts) is a separate, deliberately-disabled
+# job below — it needs a Sonatype Central Portal user token (SONATYPE_USERNAME/PASSWORD secrets)
+# that only a human can generate (central.sonatype.com login). The GPG signing key already exists
+# (GPG_PRIVATE_KEY/GPG_PASSPHRASE secrets).
 
 on:
   push:
@@ -48,11 +48,10 @@ jobs:
           body_path: totoggle_java/CHANGELOG.md
           files: totoggle_java/build/libs/*.jar
 
-  # Disabled until the Maven Central groupId/Sonatype/GPG setup is done (see project README).
-  # Flip `if: false` to `if: true` once SONATYPE_USERNAME, SONATYPE_PASSWORD, GPG_PRIVATE_KEY and
-  # GPG_PASSPHRASE secrets are configured and build.gradle.kts has a real publish repository.
+  # All 4 secrets (SONATYPE_USERNAME/PASSWORD, GPG_PRIVATE_KEY/PASSPHRASE) are configured —
+  # runs on every totoggle_java/v* tag push.
   publish-maven-central:
-    if: false
+    if: true
     needs: build-and-release
     runs-on: ubuntu-latest
     steps:
@@ -65,7 +64,7 @@ jobs:
         working-directory: totoggle_java
         run: ./gradlew publish --no-daemon
         env:
-          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}

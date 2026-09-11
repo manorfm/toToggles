@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm") version "2.4.10"
     id("maven-publish")
     id("jacoco")
+    id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
 group = "io.github.manorfm"
@@ -66,32 +67,40 @@ kotlin {
     jvmToolchain(21)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            from(components["java"])
-            
-            pom {
-                name.set("ToToggle Java Client")
-                description.set("Java/Kotlin client library for ToToggle feature flag service")
-                url.set("https://github.com/manorfm/totoggle")
-                
-                licenses {
-                    license {
-                        name.set("ToToggle License 1.0")
-                        url.set("https://github.com/manorfm/toToggles/blob/main/LICENSE")
-                        comments.set("Apache License 2.0, plus a commercial-use attribution clause (see LICENSE).")
-                    }
-                }
+// Publishes to Maven Central via the Sonatype Central Portal. Credentials/signing key come from
+// env vars the release workflow sets (ORG_GRADLE_PROJECT_mavenCentralUsername/Password,
+// ORG_GRADLE_PROJECT_signingInMemoryKey/KeyPassword) — see .github/workflows/totoggle-java-release.yml.
+mavenPublishing {
+    coordinates(project.group.toString(), "totoggle_java", project.version.toString())
 
-                developers {
-                    developer {
-                        id.set("manorfm")
-                        name.set("Manoel Medeiros")
-                        email.set("manoel.rodrigo@gmail.com")
-                    }
-                }
+    pom {
+        name.set("ToToggle Java Client")
+        description.set("Java/Kotlin client library for ToToggle feature flag service")
+        url.set("https://github.com/manorfm/toToggles")
+
+        licenses {
+            license {
+                name.set("ToToggle License 1.0")
+                url.set("https://github.com/manorfm/toToggles/blob/main/LICENSE")
+                comments.set("Apache License 2.0, plus a commercial-use attribution clause (see LICENSE).")
             }
         }
+
+        developers {
+            developer {
+                id.set("manorfm")
+                name.set("Manoel Medeiros")
+                email.set("manoel.rodrigo@gmail.com")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/manorfm/toToggles")
+            connection.set("scm:git:git://github.com/manorfm/toToggles.git")
+            developerConnection.set("scm:git:ssh://git@github.com/manorfm/toToggles.git")
+        }
     }
+
+    publishToMavenCentral()
+    signAllPublications()
 }

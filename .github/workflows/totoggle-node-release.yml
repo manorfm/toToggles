@@ -4,8 +4,10 @@ name: totoggle-node-release
 #   git tag totoggle_node/v1.0.0 && git push origin totoggle_node/v1.0.0
 #
 # Builds, tests and packages the library (npm pack tarball), then creates a GitHub Release with
-# that tarball attached. Actual npm registry publishing is a separate, deliberately-disabled job
-# below — it needs an NPM_TOKEN secret (npm login/automation token) that doesn't exist yet.
+# that tarball attached. Actual npm registry publishing uses npm Trusted Publishing (OIDC, no
+# token/secret) — it's a separate, deliberately-disabled job below because it needs the ONE-TIME
+# manual first publish + Trusted Publisher link described in the project README first (a package
+# that has never been published has no "package settings" page on npmjs.com to link yet).
 
 on:
   push:
@@ -50,21 +52,24 @@ jobs:
           body_path: totoggle_node/CHANGELOG.md
           files: totoggle_node/*.tgz
 
-  # Disabled until an NPM_TOKEN (npm automation token, 2FA enabled) secret is configured.
-  # Flip `if: false` to `if: true` once that secret exists.
+  # Disabled until the package has been published to npm at least once manually (see README) and
+  # a Trusted Publisher is linked to this exact repo + workflow filename on npmjs.com. Flip
+  # `if: false` to `if: true` once that's done — no secret needed, npm authenticates via the
+  # OIDC token this job's `id-token: write` permission lets GitHub Actions mint.
   publish-npm:
     if: false
     needs: build-and-release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22" # Trusted Publishing needs npm CLI >= 11.5.1 / Node >= 22.14.0
           registry-url: "https://registry.npmjs.org"
       - working-directory: totoggle_node
         run: npm ci && npm run build
       - working-directory: totoggle_node
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
