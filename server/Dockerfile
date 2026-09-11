@@ -42,6 +42,7 @@ COPY --from=runtime-files --chown=65532:65532 /app/data ./data
 
 ENV SERVER_PORT=3056
 ENV DB_PATH=/app/data/toggles.db
+ENV GIN_MODE=release
 
 VOLUME ["/app/data"]
 

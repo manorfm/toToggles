@@ -1,4 +1,5 @@
 APP_NAME = toToogle
+DOCKER_VOLUME ?= totoggle-data
 DB_PATH = ./db/toggles.db
 # Default `true` no servidor (env.go) — exige HTTPS pro cookie de sessão persistir, correto em
 # produção. `run`/`dev` são sempre HTTP puro (localhost), então viram `false` aqui só pra esses
@@ -28,7 +29,8 @@ docker-build: ## Constrói a imagem Docker
 	docker build -t $(APP_NAME) .
 
 docker-run: ## Roda o container Docker
-	docker run -p 3056:3056 -v $(PWD)/db:/app/db $(APP_NAME)
+	docker volume create $(DOCKER_VOLUME)
+	docker run --rm -p 3056:3056 -v $(DOCKER_VOLUME):/app/data -e COOKIE_SECURE=false $(APP_NAME)
 
 dev: run ## Alias de `run`
 
