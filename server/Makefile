@@ -28,7 +28,7 @@ docker-build: ## Constrói a imagem Docker
 	docker build -t $(APP_NAME) .
 
 docker-run: ## Roda o container Docker
-	docker run -p 3056:3056 -v $(PWD)/db:/root/db $(APP_NAME)
+	docker run -p 3056:3056 -v $(PWD)/db:/app/db $(APP_NAME)
 
 dev: run ## Alias de `run`
 

@@ -476,6 +476,22 @@ make docker-run
 docker-compose up -d
 ```
 
+### Published image
+
+Server releases publish a multi architecture image for Linux AMD64 and ARM64. Create a version
+tag in the form `server/vX.Y.Z` to run the release workflow. It runs the server and frontend test
+suites, builds the distroless image, publishes it to Docker Hub and creates a GitHub Release.
+
+```bash
+docker pull <dockerhub-user>/totoggle:1.0.0
+docker run --rm -p 3056:3056 \
+  -v totoggle-data:/app/db \
+  <dockerhub-user>/totoggle:1.0.0
+```
+
+The workflow requires the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. The
+token needs permission to write the `totoggle` repository in that Docker Hub account.
+
 ### Docker Compose
 ```bash
 # Start services

@@ -64,41 +64,40 @@ RUN npm run build
 # =============================================================================
 # Assets Stage - Preparação dos assets estáticos
 # =============================================================================
-FROM alpine:latest AS assets
+FROM alpine:3.22 AS assets
 
 WORKDIR /assets
 
 # Copiar apenas os assets necessários
 COPY static/ ./static/
-COPY db/migrations/ ./db/migrations/
 
 # Sobrescreve com o bundle buildado nesta imagem (nunca do working tree local)
 COPY --from=frontend-builder /static/app ./static/app
 
 # Remover arquivos desnecessários se existirem
 RUN find ./static -name "*.map" -delete 2>/dev/null || true && \
-    find ./static -name "*.tmp" -delete 2>/dev/null || true
+    find ./static -name "*.tmp" -delete 2>/dev/null || true && \
+    mkdir -p ./db
 
 # =============================================================================
 # Production Stage - Imagem mínima de produção
 # =============================================================================
-FROM scratch AS production
+FROM gcr.io/distroless/static-debian12:nonroot AS production
+
+WORKDIR /app
 
 # Copiar certificados CA e timezone data do builder
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Copiar binário compilado
-COPY --from=builder /build/totoogle /totoogle
+# Copiar binário compilado e assets. O UID 65532 é o usuário `nonroot` da imagem distroless.
+COPY --from=builder --chown=65532:65532 /build/totoogle /app/totoogle
 
 # Copiar assets otimizados
-COPY --from=assets /assets/static /static
-# --chown: o binário roda como USER 65534:65534 (abaixo) e cria o arquivo SQLite dentro de /db em
-# tempo de execução (config.DBPath() default "./db/toggles.db", CWD "/" nesse stage já que não há
-# WORKDIR aqui) — sem --chown, COPY cria /db como root:root e o processo não-root não consegue
-# escrever nele (falha "permission denied" no primeiro boot). --chown aplica tanto aos arquivos
-# copiados quanto ao diretório /db criado pela própria cópia.
-COPY --from=assets --chown=65534:65534 /assets/db/migrations /db/migrations
+COPY --from=assets --chown=65532:65532 /assets/static /app/static
+# O binário inclui migrations via go:embed. Este diretório existe apenas para o SQLite persistir
+# seu arquivo e precisa ser gravável pelo usuário não root.
+COPY --from=assets --chown=65532:65532 /assets/db /app/db
 
 # Definir timezone padrão
 ENV TZ=UTC
@@ -107,44 +106,11 @@ ENV TZ=UTC
 # default 3056) — precisa bater com esse valor ou com o SERVER_PORT passado no `docker run`/
 # docker-compose.yml, senão o mapeamento de porta do container não alcança nada.
 ENV SERVER_PORT=3056
+ENV DB_PATH=/app/db/toggles.db
 EXPOSE 3056
 
-# Definir usuário não-root (opcional, mas boa prática de segurança)
-USER 65534:65534
+# A imagem base já define esse usuário, mas a declaração deixa o contrato explícito.
+USER 65532:65532
 
 # Comando para executar a aplicação
-ENTRYPOINT ["/totoogle"]
-
-# =============================================================================
-# Alternative Production Stage - Com shell para debugging (comentado)
-# =============================================================================
-FROM alpine:latest AS production-debug
-
-# Instalar apenas o mínimo necessário
-RUN apk add --no-cache ca-certificates tzdata sqlite && \
-    addgroup -g 1001 -S appgroup && \
-    adduser -u 1001 -S appuser -G appgroup
-
-# Definir diretório de trabalho
-WORKDIR /app
-
-# Copiar binário
-COPY --from=builder /build/totoogle ./
-
-# Copiar assets
-COPY --from=assets /assets/static ./static
-COPY --from=assets /assets/db/migrations ./db/migrations
-
-# Criar diretório para banco de dados com permissões corretas
-RUN mkdir -p ./db && \
-    chown -R appuser:appgroup /app
-
-# Mudar para usuário não-root
-USER appuser:appgroup
-
-# Expor porta (ver a nota na production stage acima — precisa bater com o real SERVER_PORT)
-ENV SERVER_PORT=3056
-EXPOSE 3056
-
-# Comando para executar
-CMD ["./totoogle"]
+ENTRYPOINT ["/app/totoogle"]
