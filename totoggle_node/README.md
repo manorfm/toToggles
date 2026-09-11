@@ -52,7 +52,7 @@ throws `TotoggleConfigError` if something's wrong — a blank field, a secret ke
 
 | Option | Default | |
 |---|---|---|
-| `refreshIntervalMs` | `300_000` (5m) | Base delay for a background catalog refresh. Successful refreshes use this delay; failures use bounded exponential backoff with jitter. |
+| `refreshIntervalMs` | `300_000` (5m) | Base delay for a background catalog refresh. Successful refreshes use this delay; failures use bounded exponential backoff with jitter. **The kill switch (`POST /toggles/disable`) is instant server-side, but this client only observes it on its next poll** — if your app treats the kill switch as an incident-response control, set this materially shorter (e.g. 15_000–30_000) rather than relying on the default. |
 | `httpTimeoutMs` | `10_000` (10s) | Timeout for a single fetch request. |
 | `enableOfflineMode` | `true` | Keep serving the last successfully fetched data when the server becomes unreachable. |
 | `timeZone` | the runtime's own zone | IANA zone (e.g. `"America/Sao_Paulo"`) `time` activation rules (`"09:00-18:00"` windows) are evaluated in — the rule is documented as "24h window in server timezone," and a client has no way to know that zone on its own. |
@@ -78,7 +78,7 @@ All 7 server-defined rule types are supported:
 
 | Type | Rule value | Matched against |
 |---|---|---|
-| `percentage` | `"0"`-`"100"` | `rollout_key`; stable, toggle-specific cohort. Missing key fails closed. |
+| `percentage` | `"0"`-`"100"` | `rollout_key`; stable, toggle-specific cohort. Missing key fails closed. **Must resolve to a durable identity (user/account ID), never a raw IP or other value that can change between two requests from the same person — bucketing is deterministic per key, so an unstable key silently produces inconsistent results for that person across calls and across service instances.** |
 | `attribute` | comma-separated allowlist | A configured `attributes.<name>` key. |
 | `user_id` | comma-separated allowlist | `user_id`. |
 | `country` | comma-separated allowlist | `country`, an ISO alpha-2 code. |

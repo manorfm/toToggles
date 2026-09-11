@@ -284,6 +284,65 @@ func TestAuditIntegration_ToggleRuleSet_TextIncludesPercentageValue(t *testing.T
 	}
 }
 
+// See docs/sdd/rollout-consistency-guardrails.md Wave 3: saving a percentage rule whose
+// context_key names an attribute that looks ephemeral (e.g. an IP or session identifier) still
+// succeeds (200), but the response carries a non-fatal rule_context_warning — never blocking the
+// save, since context_key naming is the operator's call, not this API's to enforce.
+func TestAuditIntegration_ToggleRuleSet_WarnsOnEphemeralLookingContextKeyButStillSucceeds(t *testing.T) {
+	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
+
+	app := &entity.Application{ID: "app-1", Name: "Checkout Web"}
+	if err := db.Create(app).Error; err != nil {
+		t.Fatalf("failed to create application: %v", err)
+	}
+	if err := db.Create(&entity.TeamApplication{TeamID: "team-1", ApplicationID: app.ID, Permission: entity.PermissionAdmin}).Error; err != nil {
+		t.Fatalf("failed to associate application to team: %v", err)
+	}
+	toggle := &entity.Toggle{ID: "toggle-1", AppID: app.ID, Value: "rollout", Path: "rollout", Enabled: true}
+	if err := db.Create(toggle).Error; err != nil {
+		t.Fatalf("failed to create toggle: %v", err)
+	}
+
+	t.Run("attributes.ip_address context key returns a warning", func(t *testing.T) {
+		body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40", "config":{"context_key":"attributes.ip_address"}}}`
+		req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/toggle-1", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Test-User", teamAdmin.ID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 (advisory, never blocking), got %d: %s", w.Code, w.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		warning, _ := resp["rule_context_warning"].(string)
+		if warning == "" {
+			t.Errorf("expected a non-empty rule_context_warning, got response: %s", w.Body.String())
+		}
+	})
+
+	t.Run("rollout_key context key returns no warning", func(t *testing.T) {
+		body := `{"enabled": true, "has_activation_rule": true, "activation_rule": {"type": "percentage", "value": "40", "config":{"context_key":"rollout_key"}}}`
+		req := httptest.NewRequest(http.MethodPut, "/applications/app-1/toggles/toggle-1", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Test-User", teamAdmin.ID)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if _, present := resp["rule_context_warning"]; present {
+			t.Errorf("expected no rule_context_warning field, got response: %s", w.Body.String())
+		}
+	})
+}
+
 func TestAuditIntegration_KeyGenerate_SaysRotatedOnSecondCall(t *testing.T) {
 	router, db, teamAdmin, _, _ := setupAuditIntegrationTestRouter(t)
 

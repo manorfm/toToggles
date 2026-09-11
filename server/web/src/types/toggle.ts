@@ -61,6 +61,10 @@ export interface ToggleDetail {
   app_id: string;
   has_activation_rule: boolean;
   activation_rule: ActivationRule | null;
+  // Transient, never persisted (server: entity.Toggle#RuleContextWarning) — only present right
+  // after saving a rule whose context_key looks ephemeral rather than a durable identity (see
+  // docs/sdd/rollout-consistency-guardrails.md Wave 3). Advisory only; the save already succeeded.
+  rule_context_warning?: string;
 }
 
 export interface UpdateToggleInput {

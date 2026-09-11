@@ -61,7 +61,7 @@ wrong — a blank field, a secret key not starting with `sk_`, or a non-positive
 
 | Option | Default | |
 |---|---|---|
-| `WithRefreshInterval(time.Duration)` | `5m` | How often to re-fetch toggles from the server. |
+| `WithRefreshInterval(time.Duration)` | `5m` | How often to re-fetch toggles from the server. **The kill switch (`POST /toggles/disable`) is instant server-side, but this client only observes it on its next poll** — if your app treats the kill switch as an incident-response control, set this materially shorter (e.g. 15–30s) rather than relying on the default. |
 | `WithRefreshBackoffMax(time.Duration)` | `16 × RefreshInterval` | Upper bound for exponential retry delays after failed background refreshes. Each delay has bounded ±20% jitter. |
 | `WithHTTPTimeout(time.Duration)` | `10s` | Timeout for the whole fetch request. Ignored if `WithHTTPClient` is set. |
 | `WithHTTPClient(*http.Client)` | — | Use your own client (shared connection pooling/instrumentation) instead of one built from `WithHTTPTimeout`. |
@@ -89,7 +89,7 @@ All 7 server-defined rule types are supported:
 
 | Type | Rule value | Matched against |
 |---|---|---|
-| `percentage` | `"0"`-`"100"` | `rollout_key`; stable, toggle-specific cohort. Missing key fails closed. |
+| `percentage` | `"0"`-`"100"` | `rollout_key`; stable, toggle-specific cohort. Missing key fails closed. **Must resolve to a durable identity (user/account ID), never a raw IP or other value that can change between two requests from the same person — bucketing is deterministic per key, so an unstable key silently produces inconsistent results for that person across calls and across service instances.** |
 | `attribute` | comma-separated allowlist | `attributes.<name>`, declared by the rule. |
 | `user_id` | comma-separated allowlist | `user_id`. |
 | `country` | comma-separated allowlist | `country`, a normalized ISO 3166-1 alpha-2 code. |

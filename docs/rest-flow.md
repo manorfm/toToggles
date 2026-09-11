@@ -830,6 +830,20 @@ key. `time` must not include `config.context_key`. When
 `has_activation_rule` is `false`, any `activation_rule` in the body is ignored and the toggle's rule is
 cleared.
 
+> **Rollout-key contract for `percentage`/`cohort`**: every client SDK buckets deterministically
+> from a hash of `rule value + toggle path + the resolved context value` (confirmed
+> bit-identical across `totoggle_java`/`totoggle_go`/`totoggle_node` — see each SDK's
+> `PercentageStrategy`/`percentage.go`/`percentage.ts`), so the same real person always lands in
+> the same bucket for a given toggle, on any service instance, in any of the three SDKs — but
+> only if `context_key` resolves to a **durable, request-independent identity** (a user ID, an
+> account ID, an authenticated session subject). Pointing `context_key` at something that can
+> legitimately change between two requests from the same person — most commonly a raw client
+> `ip`, but also any per-request token or transient value — silently defeats this guarantee: the
+> same person can flip between the enabled and disabled cohort from one request to the next, on
+> the same service instance, with no error raised anywhere. This is a configuration choice, not
+> something the SDKs can validate on their own, since the server has no way to know which
+> `attributes.<name>` a given deployment fills with a durable value versus a transient one.
+
 Response: the updated `Toggle` entity.
 
 Unlike this endpoint's UI (`EditToggleDrawer`), the recursive one below leaves its own status
@@ -1102,6 +1116,19 @@ turn things off.
 Responses: `200 {"path": "...", "enabled": false}` on success; `401` missing `X-API-Key` header;
 `404` unknown/invalid key, or the path doesn't resolve within that key's application; `429` rate
 limit exceeded.
+
+> **Propagation latency — the kill switch is instant server-side, not fleet-wide.** This call
+> disables the toggle in the database immediately, but every SDK instance only *observes* that
+> change on its own next successful poll of `GET /api/toggles` above — there is no push/webhook
+> from server to SDKs (SSE was evaluated and rejected, see the note under that endpoint). Each
+> instance polls independently on its own `refreshInterval` (default **5 minutes** in all three
+> SDKs), deliberately jittered per instance so a fleet doesn't retry in lockstep — so the real
+> end-to-end reaction time across a fleet is **up to one `refreshInterval`, not instantaneous**,
+> and can be longer still for an instance currently in backoff after a network blip. If an
+> application treats this endpoint as an incident-response control, configure a materially
+> shorter `refreshInterval` for that application's client — e.g. 15–30s, accepting the added
+> polling load — rather than relying on the default: `WithRefreshInterval` (Go),
+> `ToToggleConfig.builder().refreshInterval(...)` (Java), `refreshIntervalMs` (Node).
 
 ## 9. Approval Workflow
 

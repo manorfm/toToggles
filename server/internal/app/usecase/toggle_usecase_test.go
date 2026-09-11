@@ -1148,6 +1148,64 @@ func TestToggleUseCase_UpdateToggleWithRule_EdgeCases(t *testing.T) {
 	})
 }
 
+// UpdateToggleWithRule attaches a non-fatal RuleContextWarning to the returned toggle (never
+// persisted, never blocks the save) when the saved rule has HasEphemeralContextKeyRisk() — see
+// docs/sdd/rollout-consistency-guardrails.md Wave 3.
+func TestToggleUseCase_UpdateToggleWithRule_EphemeralContextKeyWarning(t *testing.T) {
+	appMock := NewMockApplicationRepository()
+	toggleMock := NewMockToggleRepository()
+	useCase := NewToggleUseCase(toggleMock, appMock)
+
+	appID := "app123"
+
+	t.Run("percentage rule with attributes.ip_address context key returns a warning", func(t *testing.T) {
+		toggleID := "toggle-warn"
+		toggleMock.Toggles[toggleID] = &entity.Toggle{ID: toggleID, Value: "test", Path: "test.feature", AppID: appID}
+
+		updated, err := useCase.UpdateToggleWithRule(toggleID, true, true, &entity.ActivationRule{
+			Type:   entity.ActivationRuleTypePercentage,
+			Value:  "50",
+			Config: json.RawMessage(`{"context_key":"attributes.ip_address"}`),
+		}, appID)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if updated.RuleContextWarning == nil {
+			t.Fatal("expected a RuleContextWarning to be set")
+		}
+	})
+
+	t.Run("percentage rule with rollout_key context key returns no warning", func(t *testing.T) {
+		toggleID := "toggle-no-warn"
+		toggleMock.Toggles[toggleID] = &entity.Toggle{ID: toggleID, Value: "test", Path: "test.feature", AppID: appID}
+
+		updated, err := useCase.UpdateToggleWithRule(toggleID, true, true, &entity.ActivationRule{
+			Type:   entity.ActivationRuleTypePercentage,
+			Value:  "50",
+			Config: json.RawMessage(`{"context_key":"rollout_key"}`),
+		}, appID)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if updated.RuleContextWarning != nil {
+			t.Fatalf("expected no RuleContextWarning, got: %q", *updated.RuleContextWarning)
+		}
+	})
+
+	t.Run("clearing the rule returns no warning", func(t *testing.T) {
+		toggleID := "toggle-cleared"
+		toggleMock.Toggles[toggleID] = &entity.Toggle{ID: toggleID, Value: "test", Path: "test.feature", AppID: appID}
+
+		updated, err := useCase.UpdateToggleWithRule(toggleID, true, false, nil, appID)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+		if updated.RuleContextWarning != nil {
+			t.Fatalf("expected no RuleContextWarning, got: %q", *updated.RuleContextWarning)
+		}
+	})
+}
+
 // AncestorBlocker sustenta o sufixo "(no effect — X is off)" no evento de auditoria de
 // habilitar um toggle via drawer (v2.6 §3.3) — só olha o bit PRÓPRIO de cada ancestral (nunca o
 // do próprio nó), nomeando o mais próximo da raiz que estiver desligado.

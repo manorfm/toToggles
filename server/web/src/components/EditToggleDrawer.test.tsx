@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditToggleDrawer } from "./EditToggleDrawer";
+import { ToastProvider } from "./ToastProvider";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -28,7 +29,8 @@ describe("EditToggleDrawer", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 
     const { container } = render(
-      <EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />
+      <EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />,
+      { wrapper: ToastProvider }
     );
 
     await screen.findByText("Status");
@@ -46,7 +48,9 @@ describe("EditToggleDrawer", () => {
   it("exposes the status switch with a real role and accessible name", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
     await screen.findByText("Status");
 
     const statusSwitch = screen.getByRole("switch", { name: /status/i });
@@ -56,7 +60,9 @@ describe("EditToggleDrawer", () => {
   it("shows a cascade warning when the toggle has children", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={3} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={3} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
 
     expect(await screen.findByText(/3/)).toBeInTheDocument();
     expect(screen.getByText(/cascades down/i)).toBeInTheDocument();
@@ -76,7 +82,8 @@ describe("EditToggleDrawer", () => {
         onClose={vi.fn()}
         onSaved={vi.fn()}
         onPendingApproval={vi.fn()}
-      />
+      />,
+      { wrapper: ToastProvider }
     );
 
     expect(await screen.findByText(/no effect right now/i)).toBeInTheDocument();
@@ -100,7 +107,8 @@ describe("EditToggleDrawer", () => {
         onClose={vi.fn()}
         onSaved={vi.fn()}
         onPendingApproval={vi.fn()}
-      />
+      />,
+      { wrapper: ToastProvider }
     );
     await screen.findByText(/no effect right now/i);
 
@@ -113,7 +121,9 @@ describe("EditToggleDrawer", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
     const user = userEvent.setup();
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
     await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
@@ -122,17 +132,113 @@ describe("EditToggleDrawer", () => {
     expect(screen.getByText("Cohort")).toBeInTheDocument();
   });
 
+  it("uses a numeric input (0-100) for the percentage value", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
+    const user = userEvent.setup();
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
+    await screen.findByText("Status");
+
+    await user.click(screen.getByRole("button", { name: /activation rule/i }));
+    await user.click(screen.getByText("Percentage"));
+
+    const valueInput = screen.getByLabelText(/percentage value/i);
+    expect(valueInput).toHaveAttribute("type", "number");
+    expect(valueInput).toHaveAttribute("min", "0");
+    expect(valueInput).toHaveAttribute("max", "100");
+  });
+
+  // Achado real reportado pelo usuário: trocar de tipo sem apagar o valor deixava, por exemplo,
+  // "BR" (digitado com Country selecionado) sobrevivendo pra uma seleção de Percentage — o
+  // servidor rejeitava (não é numérico), mas só depois de uma ida e volta sem aviso nenhum antes.
+  it("clears the value field when switching rule type", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
+    const user = userEvent.setup();
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
+    await screen.findByText("Status");
+
+    await user.click(screen.getByRole("button", { name: /activation rule/i }));
+    await user.click(screen.getByText("Country"));
+    await user.type(screen.getByLabelText(/country value/i), "BR");
+    expect(screen.getByLabelText(/country value/i)).toHaveValue("BR");
+
+    await user.click(screen.getByText("Percentage"));
+
+    expect(screen.getByLabelText(/percentage value/i)).toHaveValue(null);
+  });
+
+  it("configures a time window with two time pickers, composing HH:mm-HH:mm on save", async () => {
+    const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(
+          jsonResponse(200, { ...toggle, has_activation_rule: true, activation_rule: { type: "time", value: "09:00-18:00" } })
+        );
+      }
+      return Promise.resolve(jsonResponse(200, toggle));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
+    await screen.findByText("Status");
+
+    await user.click(screen.getByRole("button", { name: /activation rule/i }));
+    await user.click(screen.getByText("Time window"));
+
+    // No generic free-text field for time — no "context key" row either (time needs no context).
+    expect(screen.queryByLabelText(/time window value/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Context key")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/start time/i), "0900");
+    await user.type(screen.getByLabelText(/end time/i), "1800");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/applications/app1/toggles/tgl1",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ enabled: true, has_activation_rule: true, activation_rule: { type: "time", value: "09:00-18:00", config: null } }),
+        })
+      )
+    );
+  });
+
+  it("loads an existing time rule's value split across the two pickers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(200, { ...toggle, has_activation_rule: true, activation_rule: { type: "time", value: "22:00-06:00" } }))
+    );
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
+    await screen.findByText("Status");
+
+    expect(screen.getByLabelText(/start time/i)).toHaveValue("22:00");
+    expect(screen.getByLabelText(/end time/i)).toHaveValue("06:00");
+  });
+
   it("describes canonical request-context resolution for attribute rules", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
     const user = userEvent.setup();
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
     await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
     await user.click(screen.getByText("Attribute"));
 
-    expect(screen.getByText("The SDK resolves this value through its request context resolver.")).toBeInTheDocument();
+    expect(screen.getByText(/configure that in your SDK integration, not here/i)).toBeInTheDocument();
     expect(screen.queryByText(/ToggleContextProvider/)).not.toBeInTheDocument();
   });
 
@@ -150,7 +256,9 @@ describe("EditToggleDrawer", () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={onClose} onSaved={onSaved} onPendingApproval={vi.fn()} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={onClose} onSaved={onSaved} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
     await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
@@ -169,12 +277,53 @@ describe("EditToggleDrawer", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // See docs/sdd/rollout-consistency-guardrails.md Wave 3: the server attaches a non-fatal
+  // rule_context_warning to the response when the saved rule's context_key looks ephemeral. The
+  // drawer closes right after a successful save, so this surfaces as a toast (same mechanism as
+  // every other post-save feedback in this app), not an in-drawer notice.
+  it("shows a toast with the server's warning when the saved rule's context key looks ephemeral, but still saves and closes", async () => {
+    const fetchMock = vi.fn().mockImplementation((_path: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return Promise.resolve(
+          jsonResponse(200, {
+            ...toggle,
+            has_activation_rule: true,
+            activation_rule: { type: "percentage", value: "25", config: { context_key: "attributes.ip_address" } },
+            rule_context_warning:
+              "context_key 'attributes.ip_address' does not look like a stable per-user identifier; percentage rollout may be inconsistent for the same person across requests",
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse(200, toggle));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onSaved = vi.fn();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={onClose} onSaved={onSaved} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
+    await screen.findByText("Status");
+
+    await user.click(screen.getByRole("button", { name: /activation rule/i }));
+    await user.click(screen.getByText("Percentage"));
+    await user.type(screen.getByLabelText(/percentage value/i), "25");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/does not look like a stable per-user identifier/i)).toBeInTheDocument();
+  });
+
   it("blocks saving with the rule on but no value typed", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, toggle)));
     const onSaved = vi.fn();
     const user = userEvent.setup();
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={onSaved} onPendingApproval={vi.fn()} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={onSaved} onPendingApproval={vi.fn()} />, {
+      wrapper: ToastProvider,
+    });
     await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /activation rule/i }));
@@ -195,7 +344,9 @@ describe("EditToggleDrawer", () => {
     const onPendingApproval = vi.fn();
     const user = userEvent.setup();
 
-    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={onSaved} onPendingApproval={onPendingApproval} />);
+    render(<EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot onClose={vi.fn()} onSaved={onSaved} onPendingApproval={onPendingApproval} />, {
+      wrapper: ToastProvider,
+    });
     await screen.findByText("Status");
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
@@ -214,7 +365,8 @@ describe("EditToggleDrawer", () => {
     const user = userEvent.setup();
 
     render(
-      <EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot={false} onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />
+      <EditToggleDrawer applicationId="app1" toggleId="tgl1" childrenCount={0} ancestorsOn blockerSeg={null} isRoot={false} onClose={vi.fn()} onSaved={vi.fn()} onPendingApproval={vi.fn()} />,
+      { wrapper: ToastProvider }
     );
     await screen.findByText("Status");
 

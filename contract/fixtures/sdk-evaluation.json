@@ -139,6 +139,21 @@
             "value": "00:00-23:59",
             "config": { "context_key": "country" }
           }
+        },
+        {
+          "id": "payments-percentage-rollout",
+          "path": "payments.percentage-rollout",
+          "value": "percentage-rollout",
+          "enabled": true,
+          "level": 1,
+          "parent_id": "payments",
+          "app_id": "contract-app",
+          "has_activation_rule": true,
+          "activation_rule": {
+            "type": "percentage",
+            "value": "50",
+            "config": { "context_key": "rollout_key" }
+          }
         }
       ]
     }
@@ -230,6 +245,24 @@
       "context": { "country": "BR" },
       "expected": false,
       "resolver_calls": 0
+    },
+    {
+      "name": "percentage rule activates a key that falls inside its deterministic bucket",
+      "path": "payments.percentage-rollout",
+      "context": { "rollout_key": "user-42" },
+      "expected": true
+    },
+    {
+      "name": "percentage rule rejects a key that falls outside its deterministic bucket",
+      "path": "payments.percentage-rollout",
+      "context": { "rollout_key": "user-7" },
+      "expected": false
+    },
+    {
+      "name": "percentage rule fails closed without a rollout key",
+      "path": "payments.percentage-rollout",
+      "context": {},
+      "expected": false
     }
   ]
 }

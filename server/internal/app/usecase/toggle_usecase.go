@@ -473,14 +473,18 @@ func (uc *ToggleUseCase) UpdateToggleWithRule(toggleID string, enabled bool, has
 		if err != nil {
 			return nil, entity.NewAppError(entity.ErrCodeValidation, err.Error())
 		}
+		if activationRule.HasEphemeralContextKeyRisk() {
+			warning := "context_key '" + activationRule.ContextKey() + "' does not look like a stable per-user identifier; percentage rollout may be inconsistent for the same person across requests"
+			toggle.RuleContextWarning = &warning
+		}
 	} else {
 		toggle.ClearActivationRule()
 	}
-	
+
 	// Salvar no banco
 	if err := uc.toggleRepo.Update(toggle); err != nil {
 		return nil, entity.NewAppError(entity.ErrCodeDatabase, "error updating toggle")
 	}
-	
+
 	return toggle, nil
 }

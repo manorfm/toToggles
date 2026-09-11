@@ -218,6 +218,12 @@ user or network data at each call site. The resolver exposes only the configured
 - `userId` comes only from an authenticated principal.
 - `rolloutKey` is a stable, non-secret identity used by percentage rules. It is intentionally
   never derived from a request ID; using the authenticated user ID is common when appropriate.
+  **It must resolve to the same value for the same real person on every call, across every
+  service instance** — bucketing is a deterministic hash of `rule value + toggle path + this
+  value`, so a durable identity (user ID, account ID) always lands the same person in the same
+  bucket everywhere, while an ephemeral value (a raw client IP, which changes across NAT/mobile
+  networks/proxies, or anything else that can differ between two requests from the same person)
+  silently produces inconsistent results for that person even within a single service.
 - `cohort` is a server-owned deployment or experiment ring, such as `beta`.
 - `attributes` uses unprefixed names (`"plan"` becomes `attributes.plan`).
 
@@ -375,6 +381,9 @@ val config = ToToggleConfig.builder()
     .applicationName("my-app")
     .serverUrl("https://your-server.com")
     .secretKey("sk_your_secret_key")
+    // The kill switch (POST /toggles/disable) is instant server-side, but this client only
+    // observes it on its next poll — if your app treats the kill switch as an incident-response
+    // control, set this materially shorter (e.g. Duration.ofSeconds(15-30)) rather than the default.
     .refreshInterval(Duration.ofMinutes(5))
     .refreshBackoffMax(Duration.ofMinutes(80))
     .connectionTimeout(Duration.ofSeconds(10))

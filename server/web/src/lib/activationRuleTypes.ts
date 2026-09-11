@@ -12,77 +12,80 @@ export interface RuleTypeMeta {
   contextKeyEditable?: boolean;
 }
 
-// name/description/icon/placeholder/hint confirmados 1:1 contra o RULE_TYPES real do
-// protótipo (data.js v2, decodificado do bundle embutido em "docs/toToggle v2.1.html" —
-// ver o header de lib/toggleLeaves.ts pro método). Uma fase anterior tinha inventado texto
-// em português aqui porque, na época, get_full_jsx("EditDrawer") só mostrava a REFERÊNCIA a
-// RULE_TYPES, não os dados — decodificar o bundle revelou os 7 valores reais (em inglês) e a
-// ORDEM real (cohort é o 4º item, não o último). O backend valida a chave de contexto canônica
-// por tipo (entity.ActivationRule.ValidateRule); placeholder/hint aqui são só orientação de UI.
+// name/description/icon/placeholder confirmados 1:1 contra o RULE_TYPES real do protótipo
+// (data.js v2, decodificado do bundle embutido em "docs/toToggle v2.1.html" — ver o header de
+// lib/toggleLeaves.ts pro método), MAS o campo `hint` foi deliberadamente reescrito (2026-09-11,
+// a pedido explícito do usuário) — divergência intencional do protótipo, não uma correção de
+// fidelidade. O hint original ("Requires a stable rollout key...", "Comma-separated user IDs.")
+// batia com o protótipo mas não explicava o EFEITO prático de cada regra (o que significa
+// true/false), o que o usuário reportou como confuso ao configurar uma regra de verdade. Cada
+// hint agora nomeia explicitamente o que fica "true" (ativo) vs "false" (inativo). Descrição do
+// backend em `entity.ActivationRule.ValidateRule`/`server/CLAUDE.md`; este arquivo é só
+// orientação de UI, nunca a fonte de validação.
 export const RULE_TYPES: RuleTypeMeta[] = [
   {
     type: "percentage",
     name: "Percentage",
-    description: "Activate for X% of a keyed population",
+    description: "Statistical rollout to X% of people",
     icon: "percent",
     placeholder: "e.g. 25",
-    hint: "Requires a stable rollout key supplied by the SDK context provider. Always enables the matching percentage.",
+    hint: "Not a global on/off — each person is hashed into a bucket from their rollout key. Below 25% of the bucket range: enabled (true) for that person, every time. At or above it: disabled (false). Requires the SDK to supply a stable identity (e.g. user ID), or it fails closed.",
     contextKey: "rollout_key",
     contextKeyEditable: true,
   },
   {
     type: "attribute",
     name: "Attribute",
-    description: "Match a named context attribute",
+    description: "Match a custom value your app sends",
     icon: "sliders",
     placeholder: "premium,enterprise",
-    hint: "Comma-separated values matched against a named SDK context attribute.",
+    hint: "Enabled (true) only when the named attribute your app sends (e.g. a plan or feature flag of your own) matches one of these comma-separated values. Everyone else: disabled (false).",
     contextKey: "attributes.",
     contextKeyEditable: true,
   },
   {
     type: "user_id",
     name: "User ID",
-    description: "Specific users",
+    description: "Only these specific people",
     icon: "user",
     placeholder: "12,48,103",
-    hint: "Comma-separated user IDs.",
+    hint: "Enabled (true) only for the exact user IDs listed here, comma-separated. Everyone else: disabled (false). Use this for targeting named individuals, not a percentage or a group.",
     contextKey: "user_id",
   },
   {
     type: "cohort",
     name: "Cohort",
-    description: "Deployment or request cohort",
+    description: "Only requests tagged with a rollout ring",
     icon: "rocket",
     placeholder: "canary,beta",
-    hint: "Comma-separated deployment/request cohorts. Avoid boolean true/false values.",
+    hint: "Enabled (true) only when your app tags the request with one of these ring labels (e.g. canary, beta) — this is about which deployment wave a request belongs to, decided by your app, not about a specific end user. Avoid true/false as values here.",
     contextKey: "cohort",
   },
   {
     type: "ip",
     name: "IP Address",
-    description: "Specific IPs / ranges",
+    description: "Only these networks",
     icon: "globe",
     placeholder: "10.0.0.0/24",
-    hint: "Comma-separated IPs or CIDR ranges.",
+    hint: "Enabled (true) only for requests coming from one of these IPs or CIDR ranges (e.g. an office network or VPN). Everyone else: disabled (false).",
     contextKey: "ip",
   },
   {
     type: "country",
     name: "Country",
-    description: "Geo targeting",
+    description: "Only these countries",
     icon: "map",
     placeholder: "BR,PT",
-    hint: "ISO country codes, comma-separated.",
+    hint: "Enabled (true) only for requests whose resolved country matches one of these ISO codes, comma-separated (e.g. BR, US). Everyone else: disabled (false).",
     contextKey: "country",
   },
   {
     type: "time",
     name: "Time window",
-    description: "Active during a window",
+    description: "Only during a daily time window",
     icon: "clock",
     placeholder: "09:00-18:00",
-    hint: "24h time window in server timezone.",
+    hint: "Enabled (true) only during this window, every day (24h clock, server timezone) — not a calendar date, and there's no way to schedule a one-time start date today. Outside the window: disabled (false). An end time earlier than the start wraps past midnight (e.g. 22:00 to 06:00).",
   },
 ];
 

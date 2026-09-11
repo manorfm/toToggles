@@ -129,6 +129,59 @@ func TestActivationRule_ValidateRule(t *testing.T) {
 			errorMsg:    "valor do tempo é obrigatório",
 		},
 		{
+			name: "time value with garbage text",
+			rule: ActivationRule{
+				Type:  ActivationRuleTypeTime,
+				Value: "asdkjh",
+			},
+			expectError: true,
+			errorMsg:    "valor do tempo deve estar no formato HH:mm-HH:mm (ex.: 09:00-18:00)",
+		},
+		{
+			name: "time value missing the dash separator",
+			rule: ActivationRule{
+				Type:  ActivationRuleTypeTime,
+				Value: "09:0018:00",
+			},
+			expectError: true,
+			errorMsg:    "valor do tempo deve estar no formato HH:mm-HH:mm (ex.: 09:00-18:00)",
+		},
+		{
+			name: "time value with an out-of-range hour",
+			rule: ActivationRule{
+				Type:  ActivationRuleTypeTime,
+				Value: "25:00-18:00",
+			},
+			expectError: true,
+			errorMsg:    "valor do tempo deve estar no formato HH:mm-HH:mm (ex.: 09:00-18:00)",
+		},
+		{
+			name: "time value with an out-of-range minute",
+			rule: ActivationRule{
+				Type:  ActivationRuleTypeTime,
+				Value: "09:60-18:00",
+			},
+			expectError: true,
+			errorMsg:    "valor do tempo deve estar no formato HH:mm-HH:mm (ex.: 09:00-18:00)",
+		},
+		{
+			name: "time value without zero-padded hour",
+			rule: ActivationRule{
+				Type:  ActivationRuleTypeTime,
+				Value: "9:00-18:00",
+			},
+			expectError: true,
+			errorMsg:    "valor do tempo deve estar no formato HH:mm-HH:mm (ex.: 09:00-18:00)",
+		},
+		{
+			name: "valid overnight time window",
+			rule: ActivationRule{
+				Type:  ActivationRuleTypeTime,
+				Value: "22:00-06:00",
+			},
+			expectError: false,
+		},
+		{
 			name: "empty cohort value",
 			rule: ActivationRule{
 				Type:  ActivationRuleTypeCohort,
@@ -178,6 +231,92 @@ func TestActivationRule_AttributeRequiresNamedAttributeContextKey(t *testing.T) 
 	}
 	if err := invalid.ValidateRule(); err == nil {
 		t.Fatal("expected non-attribute context key to be rejected")
+	}
+}
+
+func TestActivationRule_ContextKey(t *testing.T) {
+	withKey := ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"rollout_key"}`)}
+	if got := withKey.ContextKey(); got != "rollout_key" {
+		t.Errorf("expected 'rollout_key', got %q", got)
+	}
+
+	noConfig := ActivationRule{Type: ActivationRuleTypeTime, Value: "09:00-17:00"}
+	if got := noConfig.ContextKey(); got != "" {
+		t.Errorf("expected empty context key for a rule with no config, got %q", got)
+	}
+
+	malformed := ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`not json`)}
+	if got := malformed.ContextKey(); got != "" {
+		t.Errorf("expected empty context key for malformed config, got %q", got)
+	}
+}
+
+// HasEphemeralContextKeyRisk is advisory-only: validContextKey already restricts percentage's
+// context_key to "rollout_key" or "attributes.<name>" (never a bare "ip"/"user_id"/etc — see
+// TestActivationRule_ValidateRule), and cohort's to exactly "cohort" — so cohort can never
+// exercise this warning at all, and percentage only through an admin-chosen attribute name that
+// happens to look ephemeral. This is a heuristic over the NAME an operator picked, not proof of
+// what the app resolver actually returns for it — see docs/sdd/rollout-consistency-guardrails.md
+// Wave 3.
+func TestActivationRule_EphemeralContextKeyWarning(t *testing.T) {
+	tests := []struct {
+		name string
+		rule ActivationRule
+		want bool
+	}{
+		{
+			name: "percentage with attributes.ip_address warns",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"attributes.ip_address"}`)},
+			want: true,
+		},
+		{
+			name: "percentage with attributes.client_ip warns",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"attributes.client_ip"}`)},
+			want: true,
+		},
+		{
+			name: "percentage with attributes.session_id warns",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"attributes.session_id"}`)},
+			want: true,
+		},
+		{
+			name: "percentage with attributes.request_token warns",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"attributes.request_token"}`)},
+			want: true,
+		},
+		{
+			name: "percentage with rollout_key does not warn",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"rollout_key"}`)},
+			want: false,
+		},
+		{
+			name: "percentage with attributes.account_id does not warn",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"attributes.account_id"}`)},
+			want: false,
+		},
+		{
+			name: "percentage with attributes.recipient_id does not false-positive on 'ip' substring",
+			rule: ActivationRule{Type: ActivationRuleTypePercentage, Value: "50", Config: json.RawMessage(`{"context_key":"attributes.recipient_id"}`)},
+			want: false,
+		},
+		{
+			name: "cohort can never carry an ephemeral key (its context_key is always the literal 'cohort')",
+			rule: ActivationRule{Type: ActivationRuleTypeCohort, Value: "canary", Config: json.RawMessage(`{"context_key":"cohort"}`)},
+			want: false,
+		},
+		{
+			name: "ip rule type itself never warns (ip is its canonical, correct key)",
+			rule: ActivationRule{Type: ActivationRuleTypeIP, Value: "10.0.0.0/24", Config: json.RawMessage(`{"context_key":"ip"}`)},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.rule.HasEphemeralContextKeyRisk(); got != tt.want {
+				t.Errorf("expected %v, got %v", tt.want, got)
+			}
+		})
 	}
 }
 

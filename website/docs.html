@@ -24,7 +24,7 @@
 <main class="wrap">
   <div class="hero"><p class="eyebrow">Documentação</p><h1>Execute o toToggle com Docker</h1><p>Inicie o servidor sem instalar Go, Node ou baixar o código. Depois configure a organização, as permissões e as bibliotecas clientes pela interface administrativa.</p></div>
   <div class="docs-layout">
-    <aside class="toc" aria-label="Seções da documentação"><p>Nesta página</p><a href="#docker">Executar com Docker</a><a href="#config">Configuração</a><a href="#first-login">Primeiro acesso</a><a href="#model">Modelo de acesso</a><a href="#applications">Aplicações</a><a href="#teams-users">Equipes e usuários</a><a href="#approvals">Aprovações</a><a href="#keys">Chaves de acesso</a><a href="#sdks">Bibliotecas clientes</a></aside>
+    <aside class="toc" aria-label="Seções da documentação"><p>Nesta página</p><a href="#docker">Executar com Docker</a><a href="#config">Configuração</a><a href="#first-login">Primeiro acesso</a><a href="#model">Modelo de acesso</a><a href="#applications">Aplicações</a><a href="#activation-rules">Regras de ativação</a><a href="#teams-users">Equipes e usuários</a><a href="#approvals">Aprovações</a><a href="#keys">Chaves de acesso</a><a href="#sdks">Bibliotecas clientes</a></aside>
     <article>
       <section id="docker">
         <h2>Executar com Docker</h2>
@@ -98,6 +98,25 @@ docker run --detach \
         <p>Uma aplicação representa o serviço ou produto que consumirá feature flags. Ao criar uma aplicação, escolha a equipe proprietária. Ela recebe permissão administrativa automaticamente.</p>
         <div class="step-list"><div class="step"><span class="step-number">1</span><div><strong>Crie ou escolha uma equipe</strong><p>A equipe deve existir antes da aplicação.</p></div></div><div class="step"><span class="step-number">2</span><div><strong>Abra Applications e crie a aplicação</strong><p>Informe o nome e selecione a equipe responsável.</p></div></div><div class="step"><span class="step-number">3</span><div><strong>Crie os toggles</strong><p>Use nomes hierárquicos como <span class="inline-code">checkout.payments.card</span>. Desativar um pai também desativa os descendentes.</p></div></div></div>
         <p>O root pode conectar a mesma aplicação a outras equipes e definir acesso <span class="inline-code">read</span>, <span class="inline-code">write</span> ou <span class="inline-code">admin</span>. Leitura permite consultar, escrita permite alterar e administração permite controle completo dentro da aplicação.</p>
+      </section>
+
+      <section id="activation-rules">
+        <h2>Regras de ativação</h2>
+        <p>Além de ligado/desligado, um toggle pode ter uma regra opcional que decide, por requisição, se ele fica ativo (<span class="inline-code">true</span>) ou inativo (<span class="inline-code">false</span>) — a regra só é avaliada quando o toggle (e toda a cadeia de pais acima dele) já está ligado. Existem 7 tipos, e a maioria funciona do mesmo jeito por baixo dos panos: compara um valor que sua aplicação envia contra uma lista que você configura aqui.</p>
+        <table class="settings">
+          <thead><tr><th>Tipo</th><th>O que compara</th><th>Quando fica "true" (ativo)</th><th>Exemplo de valor</th></tr></thead>
+          <tbody>
+            <tr><td>Percentage</td><td>Uma chave estável (ex.: ID do usuário) enviada pelo SDK</td><td>Não é um número global — cada pessoa é distribuída de forma determinística num "balde" de 0 a 100 a partir dessa chave. Quem cai abaixo do valor configurado fica sempre <span class="inline-code">true</span>; o resto, sempre <span class="inline-code">false</span>. A mesma pessoa nunca muda de lado sozinha.</td><td><span class="inline-code">25</span> (ativa para ~25% das pessoas)</td></tr>
+            <tr><td>Attribute</td><td>Um atributo customizado que a sua aplicação define e envia (ex.: plano do cliente)</td><td>Quando o valor enviado está na lista configurada aqui</td><td><span class="inline-code">premium,enterprise</span></td></tr>
+            <tr><td>User ID</td><td>O ID do usuário autenticado</td><td>Quando o ID bate com um da lista — para apontar pessoas específicas, não uma fatia percentual</td><td><span class="inline-code">12,48,103</span></td></tr>
+            <tr><td>Cohort</td><td>Um rótulo de "onda" de rollout que a própria aplicação decide (não é sobre uma pessoa)</td><td>Quando a requisição chega marcada com um dos rótulos da lista</td><td><span class="inline-code">canary,beta</span></td></tr>
+            <tr><td>IP Address</td><td>O IP de origem da requisição</td><td>Quando o IP está dentro de um dos endereços/faixas configurados</td><td><span class="inline-code">10.0.0.0/24</span></td></tr>
+            <tr><td>Country</td><td>O país de origem, resolvido pelo servidor</td><td>Quando o país está na lista de códigos ISO configurados</td><td><span class="inline-code">BR,PT</span></td></tr>
+            <tr><td>Time window</td><td>O horário atual do servidor</td><td>Quando o horário atual está dentro da janela configurada, <strong>todos os dias</strong> — não é uma data específica, se repete diariamente</td><td><span class="inline-code">09:00-18:00</span> (vira <span class="inline-code">22:00-06:00</span> se precisar virar a noite)</td></tr>
+          </tbody>
+        </table>
+        <div class="note"><strong>O que é a "Context key"?</strong> É o nome da informação que a aplicação cliente (via SDK) precisa fornecer pra que a regra saiba quem/o quê está sendo avaliado — por exemplo, qual é o ID do usuário atual. Nos tipos User ID, IP, Country e Cohort essa chave é fixa (o SDK já sabe onde procurar) e não pode ser editada; em Percentage e Attribute ela é configurável porque depende de um dado próprio da sua aplicação, que precisa ser configurado na integração do SDK, não só aqui na regra.</div>
+        <div class="note warn"><strong>Duas pegadinhas comuns.</strong> Time window não tem noção de data — só de horário do dia, repetido todo dia; não existe hoje uma forma de agendar "a partir de tal data". E Percentage só funciona de verdade se a aplicação enviar uma identidade estável (ex.: sempre o mesmo ID de usuário) pro SDK — sem isso, o resultado deixa de ser consistente para a mesma pessoa entre uma requisição e outra.</div>
       </section>
 
       <section id="teams-users">

@@ -34,6 +34,11 @@ type Toggle struct {
 	// Relacionamentos
 	Parent   *Toggle   `json:"parent,omitempty" gorm:"foreignKey:ParentID"`
 	Children []*Toggle `json:"children,omitempty" gorm:"foreignKey:ParentID"`
+
+	// RuleContextWarning is a transient, non-persisted advisory (gorm:"-") set only by
+	// UpdateToggleWithRule right before returning, when the just-saved rule has
+	// HasEphemeralContextKeyRisk() — never read back from the database, never blocks the save.
+	RuleContextWarning *string `json:"rule_context_warning,omitempty" gorm:"-"`
 }
 
 // NewToggle cria uma nova instância de Toggle

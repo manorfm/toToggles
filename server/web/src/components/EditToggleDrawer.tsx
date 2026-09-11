@@ -4,6 +4,7 @@ import { DottedPath } from "./DottedPath";
 import { Icon } from "./Icon";
 import { ApiError } from "../api/client";
 import { getToggle, updateToggleRule } from "../api/toggles";
+import { useToast } from "./ToastProvider";
 import { useApprovalIntercept } from "../hooks/useApprovalIntercept";
 import { RULE_TYPES, deriveInitialRuleState } from "../lib/activationRuleTypes";
 import type { ActivationRule, ActivationRuleType, ToggleDetail } from "../types/toggle";
@@ -55,9 +56,15 @@ export function EditToggleDrawer({
   const [ruleType, setRuleType] = useState<ActivationRuleType | null>(null);
   const [ruleValue, setRuleValue] = useState("");
   const [contextKey, setContextKey] = useState("");
+  // "time" doesn't use the generic free-text ruleValue input (see below) — two native
+  // <input type="time"> fields compose it instead, which both gets a real picker and guarantees
+  // the zero-padded "HH:mm" format the server now validates (activation_rule.go#ValidateRule).
+  const [timeStart, setTimeStart] = useState("");
+  const [timeEnd, setTimeEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { intercept, busy: interceptBusy, guard, cancel: cancelIntercept, confirm: confirmIntercept } = useApprovalIntercept(isRoot);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +78,11 @@ export function EditToggleDrawer({
         setRuleType(ruleType);
         setRuleValue(ruleValue);
         setContextKey(toggle.activation_rule?.config?.context_key ?? RULE_TYPES.find((r) => r.type === ruleType)?.contextKey ?? "");
+        if (ruleType === "time") {
+          const [start, end] = ruleValue.split("-");
+          setTimeStart(start ?? "");
+          setTimeEnd(end ?? "");
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -83,10 +95,26 @@ export function EditToggleDrawer({
 
   const selectedRuleMeta = RULE_TYPES.find((r) => r.type === ruleType);
   const ineffective = enabled && !ancestorsOn;
+  // The single source of truth for "time"'s value is the pair of pickers, not ruleValue — see
+  // the timeStart/timeEnd state declaration above.
+  const effectiveRuleValue = ruleType === "time" ? (timeStart && timeEnd ? `${timeStart}-${timeEnd}` : "") : ruleValue;
+
+  function selectRuleType(type: ActivationRuleType) {
+    // A stale value from a previously selected type must never survive a type switch — e.g.
+    // typing "BR" while "Country" is selected, then switching to "Percentage" without touching
+    // the value field again, used to leave "BR" sitting in the request body (the server rejects
+    // it, but only after a round trip with no client-side warning).
+    setRuleType(type);
+    setRuleValue("");
+    setTimeStart("");
+    setTimeEnd("");
+    setContextKey(RULE_TYPES.find((r) => r.type === type)?.contextKey ?? "");
+    setError(null);
+  }
 
   async function save() {
     if (loadState.status !== "loaded") return;
-    if (ruleOn && (!ruleType || !ruleValue.trim() || (selectedRuleMeta?.contextKey && !contextKey.trim()))) {
+    if (ruleOn && (!ruleType || !effectiveRuleValue.trim() || (selectedRuleMeta?.contextKey && !contextKey.trim()))) {
       setError(`${selectedRuleMeta?.name ?? "Rule"} value is required.`);
       return;
     }
@@ -104,7 +132,7 @@ export function EditToggleDrawer({
         const result = await updateToggleRule(applicationId, toggleId, {
           enabled,
           hasActivationRule: ruleOn,
-          activationRule: ruleOn && ruleType ? { type: ruleType, value: ruleValue.trim(), config: selectedRuleMeta?.contextKey ? { context_key: contextKey.trim() } : null } : undefined,
+          activationRule: ruleOn && ruleType ? { type: ruleType, value: effectiveRuleValue.trim(), config: selectedRuleMeta?.contextKey ? { context_key: contextKey.trim() } : null } : undefined,
         });
         if (result.kind === "pending_approval") {
           onPendingApproval(result.actionType);
@@ -114,6 +142,13 @@ export function EditToggleDrawer({
             hasActivationRule: loadState.toggle.has_activation_rule,
             activationRule: loadState.toggle.has_activation_rule ? loadState.toggle.activation_rule : null,
           });
+          // Advisory only (server: entity.Toggle#RuleContextWarning) — the save already
+          // succeeded, this never blocks it. See docs/sdd/rollout-consistency-guardrails.md
+          // Wave 3. Surfaced as a toast (not an in-drawer notice) since the drawer closes right
+          // after a successful save, same reasoning as every other post-save toast in this file.
+          if (result.toggle.rule_context_warning) {
+            toast(result.toggle.rule_context_warning);
+          }
         }
         onClose();
       } catch (err) {
@@ -205,7 +240,7 @@ export function EditToggleDrawer({
                         <button
                           key={r.type}
                           className={"rule-opt" + (ruleType === r.type ? " sel" : "")}
-                          onClick={() => { setRuleType(r.type); setContextKey(r.contextKey ?? ""); }}
+                          onClick={() => selectRuleType(r.type)}
                         >
                           <Icon name={r.icon} size={16} />
                           <div>
@@ -217,19 +252,58 @@ export function EditToggleDrawer({
                     </div>
                     {selectedRuleMeta && (
                       <div className="field" style={{ marginTop: 14 }}>
-                        <label className="field-label" htmlFor="rule-value">
-                          {selectedRuleMeta.name} value
-                        </label>
-                        <input
-                          className="input mono"
-                          id="rule-value"
-                          placeholder={selectedRuleMeta.placeholder}
-                          value={ruleValue}
-                          onChange={(e) => {
-                            setRuleValue(e.target.value);
-                            setError(null);
-                          }}
-                        />
+                        {selectedRuleMeta.type === "time" ? (
+                          <>
+                            <label className="field-label" htmlFor="rule-time-start">
+                              Time window (daily, server timezone)
+                            </label>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <input
+                                className="input mono"
+                                type="time"
+                                id="rule-time-start"
+                                aria-label="Start time"
+                                value={timeStart}
+                                onChange={(e) => {
+                                  setTimeStart(e.target.value);
+                                  setError(null);
+                                }}
+                              />
+                              <span>–</span>
+                              <input
+                                className="input mono"
+                                type="time"
+                                id="rule-time-end"
+                                aria-label="End time"
+                                value={timeEnd}
+                                onChange={(e) => {
+                                  setTimeEnd(e.target.value);
+                                  setError(null);
+                                }}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <label className="field-label" htmlFor="rule-value">
+                              {selectedRuleMeta.name} value
+                            </label>
+                            <input
+                              className="input mono"
+                              id="rule-value"
+                              type={selectedRuleMeta.type === "percentage" ? "number" : "text"}
+                              min={selectedRuleMeta.type === "percentage" ? 0 : undefined}
+                              max={selectedRuleMeta.type === "percentage" ? 100 : undefined}
+                              step={selectedRuleMeta.type === "percentage" ? "0.01" : undefined}
+                              placeholder={selectedRuleMeta.placeholder}
+                              value={ruleValue}
+                              onChange={(e) => {
+                                setRuleValue(e.target.value);
+                                setError(null);
+                              }}
+                            />
+                          </>
+                        )}
                         <div className="field-hint">{selectedRuleMeta.hint}</div>
                         {selectedRuleMeta.contextKey && (
                           <>
@@ -244,7 +318,11 @@ export function EditToggleDrawer({
                               placeholder={selectedRuleMeta.contextKeyEditable ? "rollout_key or attributes.account_id" : undefined}
                               onChange={(e) => setContextKey(e.target.value)}
                             />
-                            <div className="field-hint">The SDK resolves this value through its request context resolver.</div>
+                            <div className="field-hint">
+                              {selectedRuleMeta.contextKeyEditable
+                                ? "The name your app's SDK integration must supply in its request context for this exact value — configure that in your SDK integration, not here."
+                                : `Fixed for this rule type: the SDK always resolves "${selectedRuleMeta.contextKey}" automatically. Nothing to configure here.`}
+                            </div>
                           </>
                         )}
                       </div>
