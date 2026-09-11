@@ -48,7 +48,7 @@ RUN ls -la totoogle && file totoogle
 # .gitignore) — antes disso o Dockerfile dependia de alguém ter rodado `npm run build`
 # manualmente e commitado o resultado. Agora o build acontece aqui, sempre a partir do
 # código-fonte real (server/web/src), nunca de um bundle stale ou ausente.
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /web
 
@@ -147,4 +147,4 @@ ENV SERVER_PORT=3056
 EXPOSE 3056
 
 # Comando para executar
-CMD ["./totoogle"] 
+CMD ["./totoogle"]

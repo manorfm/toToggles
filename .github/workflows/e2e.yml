@@ -33,10 +33,10 @@ jobs:
       - name: Warm Go build cache
         run: go build ./...
 
-      # Matches the node:20-alpine image used by server/Dockerfile's frontend-builder stage.
+      # Matches the node:22-alpine image used by server/Dockerfile's frontend-builder stage.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: server/web/package-lock.json
 
@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: server/e2e/package-lock.json
 
