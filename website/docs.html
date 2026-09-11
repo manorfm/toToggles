@@ -1,244 +1,203 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>toToggle documentation</title>
-<meta name="description" content="Set up the toToggle server and configure the Java, Node and Go SDKs." />
+<title>Documentação do toToggle</title>
+<meta name="description" content="Execute o toToggle com Docker e administre aplicações, equipes, usuários, aprovações e chaves." />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <style>
-  :root{--bg:#0b0f0e;--surface:#121613;--surface-2:#171c19;--border:#232a26;--ink:#e9efec;--ink-2:#a9b6b0;--ink-3:#77857f;--accent:#3ddc84;--accent-ink:#062b16;--font-sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
-  *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);line-height:1.55} a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}.wrap{max-width:1160px;margin:0 auto;padding:0 24px}
-  header.top{padding:22px 0;border-bottom:1px solid var(--border)}.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}.brand-name{color:var(--ink);font-weight:600}.brand-name b{color:var(--accent);font-weight:700}.brand-mark{width:30px;height:30px;flex:none}nav{display:flex;gap:18px;font-size:14px}nav a{color:var(--ink-2)}nav a[aria-current="page"]{color:var(--ink)}
-  .hero{padding:64px 0 42px;max-width:720px}.eyebrow{margin:0 0 12px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.hero h1{margin:0 0 14px;font-size:clamp(32px,5vw,52px);line-height:1.1;letter-spacing:-.03em}.hero p{margin:0;color:var(--ink-2);font-size:17px}
-  .docs-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:54px;padding:12px 0 70px}.toc{position:sticky;top:24px;align-self:start;padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}.toc p{margin:0 0 8px;color:var(--ink-3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.toc a{display:block;padding:5px 0;color:var(--ink-2);font-size:13px}.toc a:hover{color:var(--accent);text-decoration:none}
-  article{min-width:0}section{padding:32px 0;border-top:1px solid var(--border)}section:first-child{border-top:0;padding-top:0}h2{margin:0 0 10px;font-size:25px;letter-spacing:-.02em}h3{margin:28px 0 8px;font-size:16px}p{color:var(--ink-2);margin:0 0 14px}.step-list{display:grid;gap:12px;margin:22px 0}.step{display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:start}.step-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface-2);color:var(--accent);font-size:13px;font-weight:700}.step strong{display:block;margin:2px 0 2px;font-size:14px}.step p{margin:0;font-size:13.5px}.note{margin:18px 0;padding:14px 16px;border:1px solid #285b3c;border-radius:10px;background:#102217;color:var(--ink-2);font-size:13.5px}.note strong{color:var(--accent)}
+  :root{--bg:#0b0f0e;--surface:#121613;--surface-2:#171c19;--border:#232a26;--ink:#e9efec;--ink-2:#a9b6b0;--ink-3:#77857f;--accent:#3ddc84;--accent-ink:#062b16;--warn:#f0bd4f;--font-sans:"Space Grotesk",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans);line-height:1.55}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+  header.top{padding:22px 0;border-bottom:1px solid var(--border)}.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{display:flex;align-items:center;gap:9px;font-size:19px;font-weight:500;color:var(--ink)}.brand-name{font-weight:600}.brand-name b{color:var(--accent);font-weight:700}.brand-mark{width:30px;height:30px;flex:none}nav{display:flex;gap:18px;font-size:14px}nav a{color:var(--ink-2)}nav a[aria-current="page"]{color:var(--ink)}
+  .hero{padding:64px 0 42px;max-width:760px}.eyebrow{margin:0 0 12px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.hero h1{margin:0 0 14px;font-size:clamp(32px,5vw,52px);line-height:1.1;letter-spacing:-.03em}.hero p{margin:0;color:var(--ink-2);font-size:17px}
+  .docs-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:54px;padding:12px 0 70px}.toc{position:sticky;top:24px;align-self:start;padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}.toc p{margin:0 0 8px;color:var(--ink-3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.toc a{display:block;padding:5px 0;color:var(--ink-2);font-size:13px}.toc a:hover{color:var(--accent);text-decoration:none}
+  article{min-width:0}section{padding:34px 0;border-top:1px solid var(--border)}section:first-child{border-top:0;padding-top:0}h2{margin:0 0 10px;font-size:26px;letter-spacing:-.02em}h3{margin:26px 0 8px;font-size:16px}p{color:var(--ink-2);margin:0 0 14px}.step-list{display:grid;gap:12px;margin:22px 0}.step{display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:start}.step-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface-2);color:var(--accent);font-size:13px;font-weight:700}.step strong{display:block;margin:2px 0 2px;font-size:14px}.step p{margin:0;font-size:13.5px}.note{margin:18px 0;padding:14px 16px;border:1px solid #285b3c;border-radius:10px;background:#102217;color:var(--ink-2);font-size:13.5px}.note strong{color:var(--accent)}.note.warn{border-color:#725824;background:#211c0f}.note.warn strong{color:var(--warn)}
   .code-block{position:relative;margin:14px 0 20px}.code-label{display:block;margin:0 0 7px;color:var(--ink-3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}pre{margin:0;padding:14px 54px 14px 16px;overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:#0e1210;color:var(--ink);font:12.5px/1.6 var(--font-mono);white-space:pre}.copy-button{position:absolute;top:31px;right:9px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--ink-2);padding:6px;line-height:0;cursor:pointer}.copy-button svg{width:14px;height:14px}.copy-button:hover{color:var(--ink);background:#1d2420}.copy-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.copy-button::after{content:attr(data-tooltip);position:absolute;right:0;bottom:calc(100% + 7px);padding:5px 7px;border-radius:5px;background:var(--ink);color:var(--bg);font:600 11px/1 var(--font-sans);white-space:nowrap;opacity:0;pointer-events:none;transform:translateY(3px);transition:opacity .15s,transform .15s}.copy-button:hover::after,.copy-button:focus-visible::after{opacity:1;transform:translateY(0)}
-  .sdk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:18px}.sdk-card{padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}.sdk-card h3{margin:0 0 8px}.sdk-card p{font-size:13.5px}.sdk-card code{font:12px var(--font-mono);color:var(--ink)}.sdk-card a{font-size:13px;font-weight:600}.inline-code{padding:2px 5px;border-radius:4px;background:var(--surface-2);font:12px var(--font-mono);color:var(--ink)}footer{border-top:1px solid var(--border);padding:26px 0;text-align:center;color:var(--ink-3);font-size:13px}
-  @media (max-width:720px){.docs-layout{grid-template-columns:1fr;gap:28px}.toc{position:static;display:flex;gap:13px;flex-wrap:wrap;padding:12px 0}.toc p{width:100%;margin:0}.toc a{padding:0}.hero{padding-top:46px}.wrap{padding:0 20px}}
+  .inline-code{padding:2px 5px;border-radius:4px;background:var(--surface-2);font:12px var(--font-mono);color:var(--ink)}.settings{width:100%;border-collapse:collapse;margin:17px 0 4px;font-size:13px}.settings th,.settings td{padding:11px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}.settings th{color:var(--ink-3);font-size:11px;text-transform:uppercase;letter-spacing:.06em}.settings td{color:var(--ink-2)}.settings code{color:var(--ink);font:12px var(--font-mono)}.flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:20px 0}.flow-card{padding:15px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}.flow-card span{display:block;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.flow-card strong{display:block;margin:5px 0;color:var(--ink);font-size:14px}.flow-card p{margin:0;font-size:12.5px}.role-grid,.sdk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.role,.sdk-card{padding:16px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}.role h3,.sdk-card h3{margin:0 0 6px}.role p,.sdk-card p{margin:0;font-size:13px}.sdk-card a{display:inline-block;margin-top:10px;font-size:13px;font-weight:600}footer{border-top:1px solid var(--border);padding:26px 0;text-align:center;color:var(--ink-3);font-size:13px}
+  @media (max-width:720px){.docs-layout{grid-template-columns:1fr;gap:28px}.toc{position:static;display:flex;gap:13px;flex-wrap:wrap;padding:12px 0}.toc p{width:100%;margin:0}.toc a{padding:0}.hero{padding-top:46px}.wrap{padding:0 20px}.flow{grid-template-columns:1fr}.settings{display:block;overflow-x:auto;white-space:nowrap}}
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <a class="brand" href="index.html" aria-label="toToggle home"><img class="brand-mark" src="favicon.svg" alt="" /><span class="brand-name">to<b>Toggle</b></span></a>
-    <nav>
-      <a href="index.html">Home</a>
-      <a href="docs.html" aria-current="page">Docs</a>
-      <a href="api.html">API docs</a>
-      <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">GitHub</a>
-    </nav>
-  </div>
-</header>
+<header class="top"><div class="wrap"><a class="brand" href="index.html" aria-label="Página inicial do toToggle"><img class="brand-mark" src="favicon.svg" alt="" /><span class="brand-name">to<b>Toggle</b></span></a><nav><a href="index.html">Início</a><a href="docs.html" aria-current="page">Documentação</a><a href="api.html">API docs</a><a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">GitHub</a></nav></div></header>
 
 <main class="wrap">
-  <div class="hero">
-    <p class="eyebrow">Documentation</p>
-    <h1>Set up toToggle</h1>
-    <p>Run the server, create an application and connect a client library in a few clear steps.</p>
-  </div>
-
+  <div class="hero"><p class="eyebrow">Documentação</p><h1>Execute o toToggle com Docker</h1><p>Inicie o servidor sem instalar Go, Node ou baixar o código. Depois configure a organização, as permissões e as bibliotecas clientes pela interface administrativa.</p></div>
   <div class="docs-layout">
-    <aside class="toc" aria-label="Documentation sections">
-      <p>On this page</p>
-      <a href="#server">Run the server</a>
-      <a href="#application-key">Create an application</a>
-      <a href="#java-sdk">Set up Java</a>
-      <a href="#go-sdk">Set up Go</a>
-      <a href="#node-sdk">Set up Node</a>
-      <a href="#other-sdks">Other SDKs</a>
-    </aside>
-
+    <aside class="toc" aria-label="Seções da documentação"><p>Nesta página</p><a href="#docker">Executar com Docker</a><a href="#config">Configuração</a><a href="#first-login">Primeiro acesso</a><a href="#model">Modelo de acesso</a><a href="#applications">Aplicações</a><a href="#teams-users">Equipes e usuários</a><a href="#approvals">Aprovações</a><a href="#keys">Chaves de acesso</a><a href="#sdks">Bibliotecas clientes</a></aside>
     <article>
-      <section id="server">
-        <h2>Run the server</h2>
-        <p>The server includes the admin application and applies database migrations when it starts.</p>
+      <section id="docker">
+        <h2>Executar com Docker</h2>
+        <p>A imagem inclui o servidor, a interface administrativa e as migrations. O banco SQLite é criado no primeiro início dentro do volume persistente.</p>
+        <div class="note warn"><strong>Disponibilidade da imagem</strong> A imagem estará disponível no Docker Hub após a primeira release do servidor. Use sempre uma tag de versão publicada em vez de uma tag de desenvolvimento.</div>
         <div class="step-list">
-          <div class="step"><span class="step-number">1</span><div><strong>Get the source</strong><p>Clone the repository and enter the server directory.</p></div></div>
-          <div class="step"><span class="step-number">2</span><div><strong>Build the admin application</strong><p>Install the frontend dependencies and produce the static files served by Go.</p></div></div>
-          <div class="step"><span class="step-number">3</span><div><strong>Start toToggle</strong><p>Open the admin application at <span class="inline-code">http://localhost:3056</span>.</p></div></div>
+          <div class="step"><span class="step-number">1</span><div><strong>Defina a imagem publicada</strong><p>Substitua o usuário e a versão pelos valores da release que deseja executar.</p></div></div>
+          <div class="step"><span class="step-number">2</span><div><strong>Crie um volume nomeado</strong><p>O volume mantém banco, migrations aplicadas e o arquivo da senha inicial fora do ciclo de vida do container.</p></div></div>
+          <div class="step"><span class="step-number">3</span><div><strong>Inicie o serviço</strong><p>A interface fica disponível em <span class="inline-code">http://localhost:3056</span>.</p></div></div>
         </div>
-        <div class="code-block">
-          <span class="code-label">Terminal</span>
-          <pre><code>git clone https://github.com/manorfm/toToggles.git
-cd toToggles/server
-make web-install web-build
-make dev</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy server setup commands" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <div class="note"><strong>First login</strong> The first start creates a root user and writes a one time password to <span class="inline-code">initial-root-password.txt</span> in the database directory. Change that password at the first login.</div>
-        <h3>Server settings</h3>
-        <p>The defaults work for local development. Set environment variables before starting the server when you need different values.</p>
-        <div class="code-block">
-          <span class="code-label">Terminal</span>
-          <pre><code>SERVER_PORT=8080 DB_PATH=./db/totoggle.db make dev</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy server settings" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
+        <div class="code-block"><span class="code-label">Terminal</span><pre><code>export TOTOGGLE_IMAGE=&lt;dockerhub-user&gt;/totoggle:&lt;version&gt;
+docker volume create totoggle-data
+docker run --detach \
+  --name totoggle \
+  --publish 3056:3056 \
+  --volume totoggle-data:/app/data \
+  --env GIN_MODE=release \
+  --env COOKIE_SECURE=false \
+  "$TOTOGGLE_IMAGE"</code></pre><button class="copy-button" type="button" aria-label="Copiar comando para iniciar o Docker" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <h3>Persistência em um diretório do host</h3>
+        <p>Para guardar os dados em um caminho conhecido do host, monte esse diretório em <span class="inline-code">/app/data</span>. O processo do container usa o identificador 65532 e precisa poder escrever nesse caminho.</p>
+        <div class="code-block"><span class="code-label">Terminal</span><pre><code>sudo install -d -m 700 -o 65532 -g 65532 /srv/totoggle
+docker run --detach \
+  --name totoggle \
+  --publish 3056:3056 \
+  --volume /srv/totoggle:/app/data \
+  --env GIN_MODE=release \
+  --env COOKIE_SECURE=false \
+  "$TOTOGGLE_IMAGE"</code></pre><button class="copy-button" type="button" aria-label="Copiar comando com diretório persistente" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
       </section>
 
-      <section id="application-key">
-        <h2>Create an application and key</h2>
-        <p>Every SDK connects to one application with an application scoped secret key.</p>
-        <div class="step-list">
-          <div class="step"><span class="step-number">1</span><div><strong>Sign in to the admin application</strong><p>Use the root password from the first start and set a new password.</p></div></div>
-          <div class="step"><span class="step-number">2</span><div><strong>Create an application</strong><p>Open Applications and create the application your service will use.</p></div></div>
-          <div class="step"><span class="step-number">3</span><div><strong>Generate a secret key</strong><p>Open the application and select Generate Secret Key. Store the value in a secret manager because it is shown only once.</p></div></div>
-        </div>
-        <div class="note"><strong>Keep the key private</strong> Pass the key to your service through an environment variable such as <span class="inline-code">TOTOGGLE_SECRET_KEY</span>. Do not put it in browser code or commit it to the repository.</div>
+      <section id="config">
+        <h2>Configuração do servidor</h2>
+        <p>Configure o processo com variáveis de ambiente no comando Docker ou no seu orquestrador. <span class="inline-code">DB_PATH</span> deve permanecer dentro de um volume persistente.</p>
+        <table class="settings"><thead><tr><th>Variável</th><th>Padrão</th><th>Uso</th></tr></thead><tbody>
+          <tr><td><code>SERVER_PORT</code></td><td>3056</td><td>Porta HTTP ou HTTPS do servidor</td></tr>
+          <tr><td><code>DB_PATH</code></td><td>/app/data/toggles.db</td><td>Caminho do arquivo SQLite</td></tr>
+          <tr><td><code>COOKIE_SECURE</code></td><td>true</td><td>Exige HTTPS no cookie de sessão. Use false somente para HTTP local</td></tr>
+          <tr><td><code>GIN_MODE</code></td><td>debug</td><td>Use release em produção para reduzir os logs do framework</td></tr>
+          <tr><td><code>TLS_CERT_FILE</code></td><td>vazio</td><td>Caminho do certificado quando o próprio servidor termina TLS</td></tr>
+          <tr><td><code>TLS_KEY_FILE</code></td><td>vazio</td><td>Caminho da chave privada. Configure junto com o certificado</td></tr>
+        </tbody></table>
+        <h3>HTTPS no servidor</h3>
+        <p>Em produção use um proxy reverso com TLS ou forneça certificado e chave ao container. As duas variáveis TLS devem ser configuradas juntas.</p>
+        <div class="code-block"><span class="code-label">Terminal</span><pre><code>docker run --detach \
+  --name totoggle \
+  --publish 3056:3056 \
+  --volume totoggle-data:/app/data \
+  --volume /srv/totoggle/tls:/tls:ro \
+  --env GIN_MODE=release \
+  --env COOKIE_SECURE=true \
+  --env TLS_CERT_FILE=/tls/cert.pem \
+  --env TLS_KEY_FILE=/tls/key.pem \
+  "$TOTOGGLE_IMAGE"</code></pre><button class="copy-button" type="button" aria-label="Copiar configuração TLS" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+      </section>
+
+      <section id="first-login">
+        <h2>Primeiro acesso</h2>
+        <p>No primeiro início o toToggle cria o usuário <span class="inline-code">root</span>, gera uma senha temporária e grava o valor no volume de dados. Entre em <span class="inline-code">http://localhost:3056/login</span> e altere a senha quando solicitado.</p>
+        <div class="code-block"><span class="code-label">Terminal</span><pre><code>docker run --rm \
+  --volume totoggle-data:/app/data \
+  alpine:3.22 cat /app/data/initial-root-password.txt</code></pre><button class="copy-button" type="button" aria-label="Copiar comando da senha inicial" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <div class="note"><strong>Proteja a senha inicial</strong> O arquivo é removido automaticamente depois da troca de senha. Não compartilhe o volume de dados nem registre o conteúdo da senha nos logs.</div>
+      </section>
+
+      <section id="model">
+        <h2>Modelo de acesso</h2>
+        <p>As equipes são o ponto de ligação entre pessoas e aplicações. Crie a estrutura abaixo antes de integrar uma biblioteca cliente.</p>
+        <div class="flow"><div class="flow-card"><span>1</span><strong>Equipe</strong><p>Reúne as pessoas responsáveis por um domínio ou produto.</p></div><div class="flow-card"><span>2</span><strong>Aplicação</strong><p>Pertence a uma equipe e contém os toggles e as chaves de serviço.</p></div><div class="flow-card"><span>3</span><strong>Biblioteca cliente</strong><p>Usa a chave da aplicação para buscar e avaliar os toggles.</p></div></div>
+        <div class="role-grid"><div class="role"><h3>Root</h3><p>Administra equipes, permissões, usuários, configuração de aprovações e todo o histórico.</p></div><div class="role"><h3>Admin</h3><p>Cria e altera dados nas aplicações às quais possui permissão. Pode criar usuários apenas nas próprias equipes.</p></div><div class="role"><h3>User</h3><p>Consulta os dados liberados para suas equipes e pode propor alterações de toggle.</p></div></div>
+      </section>
+
+      <section id="applications">
+        <h2>Aplicações e toggles</h2>
+        <p>Uma aplicação representa o serviço ou produto que consumirá feature flags. Ao criar uma aplicação, escolha a equipe proprietária. Ela recebe permissão administrativa automaticamente.</p>
+        <div class="step-list"><div class="step"><span class="step-number">1</span><div><strong>Crie ou escolha uma equipe</strong><p>A equipe deve existir antes da aplicação.</p></div></div><div class="step"><span class="step-number">2</span><div><strong>Abra Applications e crie a aplicação</strong><p>Informe o nome e selecione a equipe responsável.</p></div></div><div class="step"><span class="step-number">3</span><div><strong>Crie os toggles</strong><p>Use nomes hierárquicos como <span class="inline-code">checkout.payments.card</span>. Desativar um pai também desativa os descendentes.</p></div></div></div>
+        <p>O root pode conectar a mesma aplicação a outras equipes e definir acesso <span class="inline-code">read</span>, <span class="inline-code">write</span> ou <span class="inline-code">admin</span>. Leitura permite consultar, escrita permite alterar e administração permite controle completo dentro da aplicação.</p>
+      </section>
+
+      <section id="teams-users">
+        <h2>Equipes e usuários</h2>
+        <p>O root administra a estrutura de equipes. Em Teams, crie a equipe, inclua os membros e associe as aplicações que ela deve administrar.</p>
+        <div class="step-list"><div class="step"><span class="step-number">1</span><div><strong>Crie a equipe</strong><p>Use um nome que represente a responsabilidade de produto ou domínio.</p></div></div><div class="step"><span class="step-number">2</span><div><strong>Crie o usuário</strong><p>Informe nome, login, função e uma equipe. A senha temporária é exibida uma única vez e a troca é obrigatória no primeiro login.</p></div></div><div class="step"><span class="step-number">3</span><div><strong>Associe aplicações e permissões</strong><p>Defina quais aplicações cada equipe pode ler, editar ou administrar.</p></div></div></div>
+        <div class="note"><strong>Escopo dos admins</strong> Um admin só pode criar usuários em equipes das quais participa. O root pode editar e remover usuários, equipes e seus vínculos em qualquer escopo.</div>
+      </section>
+
+      <section id="approvals">
+        <h2>Aprovações e aprovadores</h2>
+        <p>O fluxo de aprovação é opcional e começa desabilitado. Ele permite que alterações sensíveis aguardem uma revisão antes de entrar em vigor.</p>
+        <div class="step-list"><div class="step"><span class="step-number">1</span><div><strong>Abra Approval settings como root</strong><p>Ative o fluxo e escolha as ações que exigem aprovação. A expiração padrão pode ser configurada entre um e trinta dias.</p></div></div><div class="step"><span class="step-number">2</span><div><strong>Defina os aprovadores da equipe</strong><p>Em Teams, marque um membro admin ou root como approver. Somente o root altera essa designação.</p></div></div><div class="step"><span class="step-number">3</span><div><strong>Revise e execute</strong><p>O aprovador da equipe ou o root aprova ou rejeita a solicitação. A alteração só é aplicada depois da aprovação e da execução.</p></div></div></div>
+        <p>O root pode exigir aprovação para criação, alteração e exclusão de aplicações, mudanças de toggle, regras de ativação e criação ou revogação de chaves. Usuários membros de uma equipe podem propor uma mudança de toggle mesmo sem permissão de escrita.</p>
+        <div class="note warn"><strong>Equipe sem aprovador</strong> Se o fluxo estiver ativo e a equipe não tiver aprovador, as solicitações dessa equipe não terão quem as revise. Defina ao menos um aprovador antes de exigir aprovação para ações críticas.</div>
+      </section>
+
+      <section id="keys">
+        <h2>Chaves de acesso</h2>
+        <p>Cada biblioteca cliente usa uma chave secreta vinculada a uma aplicação. Admins e root geram a chave na página da aplicação. Dê um nome que permita identificar o consumidor, como produção do checkout.</p>
+        <div class="step-list"><div class="step"><span class="step-number">1</span><div><strong>Abra a aplicação</strong><p>Acesse a seção de chaves e gere uma nova chave para o serviço consumidor.</p></div></div><div class="step"><span class="step-number">2</span><div><strong>Copie e armazene o valor</strong><p>O texto da chave é mostrado apenas no momento da criação. Guarde-o em um gerenciador de segredos.</p></div></div><div class="step"><span class="step-number">3</span><div><strong>Entregue pelo ambiente</strong><p>Configure o serviço consumidor com <span class="inline-code">TOTOGGLE_SECRET_KEY</span>. Nunca coloque uma chave em código de navegador ou no repositório.</p></div></div></div>
+        <p>Uma nova chave se torna a chave atual. A anterior continua válida durante a janela de transição e é revogada quando uma rotação posterior a substitui. Quando a criação de chaves exige aprovação, a chave permanece inativa até a solicitação ser aprovada e executada.</p>
+      </section>
+
+      <section id="sdks">
+        <h2>Bibliotecas clientes</h2>
+        <p>As bibliotecas usam o nome da aplicação, a URL do servidor e a chave secreta. Elas buscam o catálogo e avaliam os toggles localmente.</p>
+        <div class="sdk-grid"><div class="sdk-card"><h3>Java</h3><p>Disponível no Maven Central para projetos Gradle e Maven.</p><a href="#java-sdk">Abrir guia Java</a></div><div class="sdk-card"><h3>Go</h3><p>Disponível como módulo Go.</p><a href="#go-sdk">Abrir guia Go</a></div><div class="sdk-card"><h3>Node</h3><p>Disponível no npm para serviços Node.</p><a href="#node-sdk">Abrir guia Node</a></div></div>
       </section>
 
       <section id="java-sdk">
-        <h2>Set up the Java SDK</h2>
-        <p>Add one dependency, provide the server URL and secret key, then start the client with your application.</p>
-        <h3>Add the dependency</h3>
-        <div class="code-block">
-          <span class="code-label">Gradle Kotlin DSL</span>
-          <pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Gradle dependency" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <div class="code-block">
-          <span class="code-label">Maven POM</span>
-          <pre><code>&lt;dependency&gt;
+        <h2>Java</h2><p>Adicione a dependência e forneça a URL e a chave pelo ambiente da sua aplicação.</p>
+        <div class="code-block"><span class="code-label">Gradle</span><pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre><button class="copy-button" type="button" aria-label="Copiar dependência Gradle" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <div class="code-block"><span class="code-label">Maven POM</span><pre><code>&lt;dependency&gt;
   &lt;groupId&gt;io.github.manorfm&lt;/groupId&gt;
   &lt;artifactId&gt;totoggle_java&lt;/artifactId&gt;
   &lt;version&gt;1.0.0&lt;/version&gt;
-&lt;/dependency&gt;</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Maven dependency" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <h3>Configure and start the client</h3>
-        <div class="code-block">
-          <span class="code-label">Java</span>
-          <pre><code>import com.totoggle.client.ToToggleClient;
-import com.totoggle.client.ToToggleClientRuntime;
-import com.totoggle.client.config.ToToggleConfig;
-import java.time.Duration;
-
-ToToggleConfig config = ToToggleConfig.Companion.builder()
-    .applicationName("my-app")
-    .serverUrl("http://localhost:3056")
+&lt;/dependency&gt;</code></pre><button class="copy-button" type="button" aria-label="Copiar dependência Maven" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <div class="code-block"><span class="code-label">Java</span><pre><code>ToToggleConfig config = ToToggleConfig.Companion.builder()
+    .applicationName("checkout")
+    .serverUrl(System.getenv("TOTOGGLE_URL"))
     .secretKey(System.getenv("TOTOGGLE_SECRET_KEY"))
-    .refreshInterval(Duration.ofMinutes(5))
-    .enableOfflineMode(true)
     .build();
 
 ToToggleClient client = new ToToggleClient(
     config,
-    ToToggleClientRuntime.Companion.production("my-app")
+    ToToggleClientRuntime.Companion.production("checkout")
 );
 client.start();
-
-boolean enabled = client.isActive("user.payments");</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Java quick start" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <p>Call <span class="inline-code">client.shutdown()</span> when your application stops. The client fetches the catalog at startup and refreshes it in the background.</p>
-      </section>
-
-      <section id="other-sdks">
-        <h2>Other SDKs</h2>
-        <p>Go and Node use the same application name, server URL and secret key as Java.</p>
-        <div class="sdk-grid">
-          <div class="sdk-card"><h3>Go</h3><p><code>go get github.com/manorfm/toToggles/totoggle_go</code></p><a href="#go-sdk">Open the Go guide</a></div>
-          <div class="sdk-card"><h3>Node</h3><p><code>npm install totoggle-node</code></p><a href="#node-sdk">Open the Node guide</a></div>
-        </div>
+boolean enabled = client.isActive("checkout.payments.card");</code></pre><button class="copy-button" type="button" aria-label="Copiar exemplo Java" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
       </section>
 
       <section id="go-sdk">
-        <h2>Set up the Go SDK</h2>
-        <p>Install the module, create a configuration with your application details and start the client before evaluating a flag.</p>
-        <div class="code-block">
-          <span class="code-label">Terminal</span>
-          <pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Go install command" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <div class="code-block">
-          <span class="code-label">Go</span>
-          <pre><code>package main
-
-import (
-    "context"
-    "log"
-    "os"
-
-    totoggle "github.com/manorfm/toToggles/totoggle_go"
+        <h2>Go</h2><div class="code-block"><span class="code-label">Terminal</span><pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre><button class="copy-button" type="button" aria-label="Copiar instalação Go" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <div class="code-block"><span class="code-label">Go</span><pre><code>config, err := totoggle.NewConfig(
+    "checkout",
+    os.Getenv("TOTOGGLE_URL"),
+    os.Getenv("TOTOGGLE_SECRET_KEY"),
 )
+if err != nil { log.Fatal(err) }
 
-func main() {
-    config, err := totoggle.NewConfig(
-        "my-app",
-        "http://localhost:3056",
-        os.Getenv("TOTOGGLE_SECRET_KEY"),
-    )
-    if err != nil {
-        log.Fatal(err)
-    }
+client := totoggle.New(config)
+if err := client.Start(context.Background()); err != nil { log.Fatal(err) }
+defer client.Shutdown()
 
-    client := totoggle.New(config)
-    if err := client.Start(context.Background()); err != nil {
-        log.Fatal(err)
-    }
-    defer client.Shutdown()
-
-    enabled := client.IsActive("user.payments")
-    log.Println(enabled)
-}</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Go quick start" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <p>Use <span class="inline-code">NewConfig</span> to validate the application name, server URL and key before the client is created.</p>
+enabled := client.IsActive("checkout.payments.card")</code></pre><button class="copy-button" type="button" aria-label="Copiar exemplo Go" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
       </section>
 
       <section id="node-sdk">
-        <h2>Set up the Node SDK</h2>
-        <p>Install the package, read the secret key from your environment and start the client before it serves requests.</p>
-        <div class="code-block">
-          <span class="code-label">Terminal</span>
-          <pre><code>npm install totoggle-node</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Node install command" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <div class="code-block">
-          <span class="code-label">Node</span>
-          <pre><code>import { createConfig, ToToggleClient } from "totoggle-node";
+        <h2>Node</h2><div class="code-block"><span class="code-label">Terminal</span><pre><code>npm install totoggle-node</code></pre><button class="copy-button" type="button" aria-label="Copiar instalação Node" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <div class="code-block"><span class="code-label">Node</span><pre><code>import { createConfig, ToToggleClient } from "totoggle-node";
 
 const config = createConfig(
-  "my-app",
-  "http://localhost:3056",
+  "checkout",
+  process.env.TOTOGGLE_URL ?? "",
   process.env.TOTOGGLE_SECRET_KEY ?? "",
 );
 
 const client = new ToToggleClient(config);
 await client.start();
-
-const enabled = client.isActive("user.payments");
-console.log(enabled);
-
-client.shutdown();</code></pre>
-          <button class="copy-button" type="button" aria-label="Copy Node quick start" data-tooltip="Copy command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
-        </div>
-        <p><span class="inline-code">createConfig</span> validates the required values and the client keeps the catalog in memory for local evaluation.</p>
+const enabled = client.isActive("checkout.payments.card");
+client.shutdown();</code></pre><button class="copy-button" type="button" aria-label="Copiar exemplo Node" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
       </section>
     </article>
   </div>
 </main>
-
-<footer><div class="wrap">Built by <a href="https://github.com/manorfm" target="_blank" rel="noopener">Manoel Medeiros</a> · <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">Source on GitHub</a></div></footer>
-
+<footer><div class="wrap">Criado por <a href="https://github.com/manorfm" target="_blank" rel="noopener">Manoel Medeiros</a> · <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">Código no GitHub</a></div></footer>
 <script>
   document.querySelectorAll('.copy-button').forEach((button) => {
     button.addEventListener('click', async () => {
-      const command = button.previousElementSibling.textContent.trim();
+      const code = button.previousElementSibling.textContent.trim();
       const tooltip = button.dataset.tooltip;
       const label = button.getAttribute('aria-label');
-      try {
-        await navigator.clipboard.writeText(command);
-        button.dataset.tooltip = 'Copied';
-        button.setAttribute('aria-label', 'Command copied');
-      } catch {
-        button.dataset.tooltip = 'Copy failed';
-        button.setAttribute('aria-label', 'Copy failed');
-      }
-      window.setTimeout(() => {
-        button.dataset.tooltip = tooltip;
-        button.setAttribute('aria-label', label);
-      }, 1800);
+      try { await navigator.clipboard.writeText(code); button.dataset.tooltip = 'Copiado'; button.setAttribute('aria-label', 'Comando copiado'); }
+      catch { button.dataset.tooltip = 'Falhou'; button.setAttribute('aria-label', 'Não foi possível copiar'); }
+      window.setTimeout(() => { button.dataset.tooltip = tooltip; button.setAttribute('aria-label', label); }, 1800);
     });
   });
 </script>
