@@ -1,3 +1,7 @@
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.KotlinJvm
+import com.vanniktech.maven.publish.SourcesJar
+
 plugins {
     kotlin("jvm") version "2.4.10"
     id("maven-publish")
@@ -59,8 +63,6 @@ jacoco {
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
-    withSourcesJar()
-    withJavadocJar()
 }
 
 kotlin {
@@ -72,6 +74,16 @@ kotlin {
 // ORG_GRADLE_PROJECT_signingInMemoryKey/KeyPassword) — see .github/workflows/totoggle-java-release.yml.
 mavenPublishing {
     coordinates(project.group.toString(), "totoggle_java", project.version.toString())
+
+    // Owns sources/javadoc jar generation exclusively — java.withSourcesJar()/withJavadocJar()
+    // must stay removed above, or Gradle produces two tasks writing the same jar with no
+    // declared dependency between them (the "implicit dependency" validation failure this fixed).
+    configure(
+        KotlinJvm(
+            javadocJar = JavadocJar.Javadoc(),
+            sourcesJar = SourcesJar.Sources(),
+        )
+    )
 
     pom {
         name.set("ToToggle Java Client")
