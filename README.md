@@ -348,17 +348,19 @@ internal and evaluation use is unrestricted). See the [LICENSE](LICENSE) file fo
 
 ## 📦 Publishing status
 
-Each client library ships from this monorepo with its own CI (test-on-push) and a release
-pipeline (`*-release.yml`) that triggers automatically on a version tag (`totoggle_go/vX.Y.Z`,
-`totoggle_java/vX.Y.Z`, `totoggle_node/vX.Y.Z`) — it builds, tests, packages, and publishes a
-GitHub Release with the artifacts attached. Publishing to each language's official registry
-(Maven Central, npm) is the next step and is currently disabled pending package naming/signing
-decisions — see each release workflow for the (deliberately disabled) publish job. `totoggle_go`
-needs no registry: `go get github.com/manorfm/toToggles/totoggle_go` already works off any
-pushed tag.
+All 3 client libraries are published to their official registries:
+
+- **Go**: `go get github.com/manorfm/toToggles/totoggle_go` — no registry needed, resolves off the `totoggle_go/v*` tag directly.
+- **Java/Kotlin**: [`io.github.manorfm:totoggle_java:1.0.0`](https://repo1.maven.org/maven2/io/github/manorfm/totoggle_java/1.0.0/) on Maven Central.
+- **Node/TypeScript**: [`totoggle-node@1.0.0`](https://www.npmjs.com/package/totoggle-node) on npm.
+
+Each library ships from this monorepo with its own CI (test-on-push) and a release pipeline
+(`*-release.yml`) that triggers automatically on a version tag (`totoggle_go/vX.Y.Z`,
+`totoggle_java/vX.Y.Z`, `totoggle_node/vX.Y.Z`) — it builds, tests, packages, publishes a GitHub
+Release, and (Java/Node) publishes to the registry via Maven Central / npm Trusted Publishing.
 
 See **[the project landing page](https://manorfm.github.io/toToggles/)** for an overview of all 3
-SDKs (once GitHub Pages is enabled for this repo — Settings → Pages → Source: GitHub Actions).
+SDKs.
 
 ## 📞 Support
 
