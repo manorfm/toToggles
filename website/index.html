@@ -62,6 +62,7 @@
   .sdk-card a.repo-link{font-size:13px}
   .status{font-size:12px;color:var(--ink-3)}
   .status.live{color:var(--accent)}
+  .release-badges{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:22px 0 -14px}.release-badge{display:inline-flex;overflow:hidden;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--ink-2);font:600 12px var(--font-mono)}.release-badge span{padding:4px 8px}.release-badge strong{padding:4px 8px;background:var(--surface-2);color:var(--accent);font:inherit}.release-badge:hover{text-decoration:none;border-color:var(--accent)}
   .license{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px}
   .license h3{margin:0 0 10px;font-size:15px}
   .license p{margin:0 0 10px;color:var(--ink-2);font-size:13.5px}
@@ -102,6 +103,12 @@
       <a class="btn btn-primary" href="docs.html#docker">Run with Docker</a>
       <a class="btn btn-soft" href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">View on GitHub</a>
     </div>
+    <div class="release-badges" aria-label="Latest release versions">
+      <a class="release-badge" href="https://hub.docker.com/r/manorfm/totoggle/tags" target="_blank" rel="noopener"><span>Server</span><strong>v<span data-version="server">1.0.2</span></strong></a>
+      <a class="release-badge" href="https://central.sonatype.com/artifact/io.github.manorfm/totoggle_java" target="_blank" rel="noopener"><span>Java</span><strong>v<span data-version="java">1.0.0</span></strong></a>
+      <a class="release-badge" href="https://www.npmjs.com/package/totoggle-node" target="_blank" rel="noopener"><span>Node</span><strong>v<span data-version="node">1.0.0</span></strong></a>
+      <a class="release-badge" href="https://github.com/manorfm/toToggles/tree/main/totoggle_go" target="_blank" rel="noopener"><span>Go</span><strong data-version-label="go">latest</strong></a>
+    </div>
   </section>
 
   <section>
@@ -136,7 +143,7 @@
         <p class="desc">Functional options, <code>error</code> returns, <code>context.Context</code>
           on network operations.</p>
         <div class="install-command">
-          <pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre>
+          <pre><code>go get github.com/manorfm/toToggles/totoggle_go<span data-version-suffix="go"></span></code></pre>
           <button class="copy-button" type="button" aria-label="Copy Go install command" data-tooltip="Copy command">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
           </button>
@@ -149,7 +156,7 @@
         <p class="desc">Builder style configuration with OkHttp handling the HTTP layer.</p>
         <p class="install-label">Gradle</p>
         <div class="install-command">
-          <pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre>
+          <pre><code>implementation("io.github.manorfm:totoggle_java:<span data-version="java">1.0.0</span>")</code></pre>
           <button class="copy-button" type="button" aria-label="Copy Gradle dependency" data-tooltip="Copy command">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
           </button>
@@ -159,7 +166,7 @@
           <pre><code>&lt;dependency&gt;
   &lt;groupId&gt;io.github.manorfm&lt;/groupId&gt;
   &lt;artifactId&gt;totoggle_java&lt;/artifactId&gt;
-  &lt;version&gt;1.0.0&lt;/version&gt;
+  &lt;version&gt;<span data-version="java">1.0.0</span>&lt;/version&gt;
 &lt;/dependency&gt;</code></pre>
           <button class="copy-button" type="button" aria-label="Copy Maven dependency" data-tooltip="Copy command">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
@@ -174,7 +181,7 @@
         <p class="desc">Zero runtime dependencies with native <code>fetch</code> and Express or Fastify
           middleware included.</p>
         <div class="install-command">
-          <pre><code>npm install totoggle-node</code></pre>
+          <pre><code>npm install totoggle-node@<span data-version="node">1.0.0</span></code></pre>
           <button class="copy-button" type="button" aria-label="Copy Node install command" data-tooltip="Copy command">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
           </button>
@@ -226,6 +233,27 @@
       }, 1800);
     });
   });
+
+  const releasePrefixes = { server: 'server/v', java: 'totoggle_java/v', node: 'totoggle_node/v', go: 'totoggle_go/v' };
+  const applyVersion = (component, version) => {
+    if (!version) return;
+    document.querySelectorAll(`[data-version="${component}"]`).forEach((element) => { element.textContent = version; });
+    document.querySelectorAll(`[data-version-label="${component}"]`).forEach((element) => { element.textContent = `v${version}`; });
+    document.querySelectorAll(`[data-version-suffix="${component}"]`).forEach((element) => { element.textContent = `@v${version}`; });
+  };
+
+  Promise.all([
+    fetch('releases.json').then((response) => response.ok ? response.json() : {}),
+    fetch('https://api.github.com/repos/manorfm/toToggles/releases?per_page=100').then((response) => response.ok ? response.json() : [])
+  ])
+    .then(([fallbackVersions, releases]) => {
+      Object.entries(fallbackVersions).forEach(([component, version]) => applyVersion(component, version));
+      Object.entries(releasePrefixes).forEach(([component, prefix]) => {
+        const release = releases.find((entry) => entry.tag_name.startsWith(prefix));
+        if (release) applyVersion(component, release.tag_name.replace(prefix, ''));
+      });
+    })
+    .catch(() => {});
 </script>
 
 </body>

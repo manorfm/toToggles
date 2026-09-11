@@ -29,8 +29,8 @@
       <section id="docker">
         <h2>Executar com Docker</h2>
         <p>A imagem inclui o servidor, a interface administrativa e as migrations. O banco SQLite é criado no primeiro início dentro do volume persistente.</p>
-        <div class="note"><strong>Imagem estável</strong> Use <span class="inline-code">manorfm/totoggle:latest</span> para receber a última release estável. Cada release também mantém sua tag de versão para implantações fixadas.</div>
-        <p class="release-status">Última release do servidor <code id="server-release-version">latest</code></p>
+        <div class="note"><strong>Imagem estável</strong> Os comandos usam a tag da última release estável para manter a implantação reproduzível.</div>
+        <p class="release-status">Última release do servidor <code>v<span data-version="server">1.0.2</span></code></p>
         <div class="step-list">
           <div class="step"><span class="step-number">1</span><div><strong>Inicie o serviço</strong><p>O Docker cria o volume nomeado quando ele ainda não existe.</p></div></div>
           <div class="step"><span class="step-number">2</span><div><strong>Acesse a interface</strong><p>A interface fica disponível em <span class="inline-code">http://localhost:3056</span>.</p></div></div>
@@ -41,7 +41,7 @@
   --publish 3056:3056 \
   --volume totoggle-data:/app/data \
   --env COOKIE_SECURE=false \
-  manorfm/totoggle:latest</code></pre><button class="copy-button" type="button" aria-label="Copiar comando para iniciar o Docker" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+  manorfm/totoggle:<span data-version="server">1.0.2</span></code></pre><button class="copy-button" type="button" aria-label="Copiar comando para iniciar o Docker" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
         <h3>Persistência em um diretório do host</h3>
         <p>Para guardar os dados em um caminho conhecido do host, monte esse diretório em <span class="inline-code">/app/data</span>. O processo do container usa o identificador 65532 e precisa poder escrever nesse caminho.</p>
         <div class="code-block"><span class="code-label">Terminal</span><pre><code>sudo install -d -m 700 -o 65532 -g 65532 /srv/totoggle
@@ -50,7 +50,7 @@ docker run --detach \
   --publish 3056:3056 \
   --volume /srv/totoggle:/app/data \
   --env COOKIE_SECURE=false \
-  manorfm/totoggle:latest</code></pre><button class="copy-button" type="button" aria-label="Copiar comando com diretório persistente" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+  manorfm/totoggle:<span data-version="server">1.0.2</span></code></pre><button class="copy-button" type="button" aria-label="Copiar comando com diretório persistente" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
       </section>
 
       <section id="config">
@@ -74,7 +74,7 @@ docker run --detach \
   --env COOKIE_SECURE=true \
   --env TLS_CERT_FILE=/tls/cert.pem \
   --env TLS_KEY_FILE=/tls/key.pem \
-  manorfm/totoggle:latest</code></pre><button class="copy-button" type="button" aria-label="Copiar configuração TLS" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+  manorfm/totoggle:<span data-version="server">1.0.2</span></code></pre><button class="copy-button" type="button" aria-label="Copiar configuração TLS" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
       </section>
 
       <section id="first-login">
@@ -130,11 +130,11 @@ docker run --detach \
 
       <section id="java-sdk">
         <h2>Java</h2><p>Adicione a dependência e forneça a URL e a chave pelo ambiente da sua aplicação.</p>
-        <div class="code-block"><span class="code-label">Gradle</span><pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre><button class="copy-button" type="button" aria-label="Copiar dependência Gradle" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <div class="code-block"><span class="code-label">Gradle</span><pre><code>implementation("io.github.manorfm:totoggle_java:<span data-version="java">1.0.0</span>")</code></pre><button class="copy-button" type="button" aria-label="Copiar dependência Gradle" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
         <div class="code-block"><span class="code-label">Maven POM</span><pre><code>&lt;dependency&gt;
   &lt;groupId&gt;io.github.manorfm&lt;/groupId&gt;
   &lt;artifactId&gt;totoggle_java&lt;/artifactId&gt;
-  &lt;version&gt;1.0.0&lt;/version&gt;
+  &lt;version&gt;<span data-version="java">1.0.0</span>&lt;/version&gt;
 &lt;/dependency&gt;</code></pre><button class="copy-button" type="button" aria-label="Copiar dependência Maven" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
         <div class="code-block"><span class="code-label">Java</span><pre><code>ToToggleConfig config = ToToggleConfig.Companion.builder()
     .applicationName("checkout")
@@ -151,7 +151,7 @@ boolean enabled = client.isActive("checkout.payments.card");</code></pre><button
       </section>
 
       <section id="go-sdk">
-        <h2>Go</h2><div class="code-block"><span class="code-label">Terminal</span><pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre><button class="copy-button" type="button" aria-label="Copiar instalação Go" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <h2>Go</h2><div class="code-block"><span class="code-label">Terminal</span><pre><code>go get github.com/manorfm/toToggles/totoggle_go<span data-version-suffix="go"></span></code></pre><button class="copy-button" type="button" aria-label="Copiar instalação Go" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
         <div class="code-block"><span class="code-label">Go</span><pre><code>config, err := totoggle.NewConfig(
     "checkout",
     os.Getenv("TOTOGGLE_URL"),
@@ -167,7 +167,7 @@ enabled := client.IsActive("checkout.payments.card")</code></pre><button class="
       </section>
 
       <section id="node-sdk">
-        <h2>Node</h2><div class="code-block"><span class="code-label">Terminal</span><pre><code>npm install totoggle-node</code></pre><button class="copy-button" type="button" aria-label="Copiar instalação Node" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        <h2>Node</h2><div class="code-block"><span class="code-label">Terminal</span><pre><code>npm install totoggle-node@<span data-version="node">1.0.0</span></code></pre><button class="copy-button" type="button" aria-label="Copiar instalação Node" data-tooltip="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
         <div class="code-block"><span class="code-label">Node</span><pre><code>import { createConfig, ToToggleClient } from "totoggle-node";
 
 const config = createConfig(
@@ -197,12 +197,23 @@ client.shutdown();</code></pre><button class="copy-button" type="button" aria-la
     });
   });
 
-  const serverRelease = document.querySelector('#server-release-version');
-  fetch('https://api.github.com/repos/manorfm/toToggles/releases?per_page=100')
-    .then((response) => response.ok ? response.json() : Promise.reject())
-    .then((releases) => releases.find((release) => release.tag_name.startsWith('server/v')))
-    .then((release) => {
-      if (release) serverRelease.textContent = release.tag_name.replace('server/', '');
+  const releasePrefixes = { server: 'server/v', java: 'totoggle_java/v', node: 'totoggle_node/v', go: 'totoggle_go/v' };
+  const applyVersion = (component, version) => {
+    if (!version) return;
+    document.querySelectorAll(`[data-version="${component}"]`).forEach((element) => { element.textContent = version; });
+    document.querySelectorAll(`[data-version-suffix="${component}"]`).forEach((element) => { element.textContent = `@v${version}`; });
+  };
+
+  Promise.all([
+    fetch('releases.json').then((response) => response.ok ? response.json() : {}),
+    fetch('https://api.github.com/repos/manorfm/toToggles/releases?per_page=100').then((response) => response.ok ? response.json() : [])
+  ])
+    .then(([fallbackVersions, releases]) => {
+      Object.entries(fallbackVersions).forEach(([component, version]) => applyVersion(component, version));
+      Object.entries(releasePrefixes).forEach(([component, prefix]) => {
+        const release = releases.find((entry) => entry.tag_name.startsWith(prefix));
+        if (release) applyVersion(component, release.tag_name.replace(prefix, ''));
+      });
     })
     .catch(() => {});
 </script>

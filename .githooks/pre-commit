@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+make sync-release-metadata
+git add website/releases.json

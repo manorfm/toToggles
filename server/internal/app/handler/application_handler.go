@@ -74,7 +74,10 @@ func (h *ApplicationHandler) CreateApplication(c *gin.Context) {
 	err = h.teamUseCase.AddApplicationToTeam(req.TeamID, app.ID, entity.PermissionAdmin)
 	if err != nil {
 		// Se falhar ao associar ao team, remover a aplicação criada
-		h.appUseCase.DeleteApplication(app.ID)
+		if rollbackErr := h.appUseCase.DeleteApplication(app.ID); rollbackErr != nil {
+			c.JSON(http.StatusInternalServerError, entity.NewAppError(entity.ErrCodeInternal, "failed to roll back application creation"))
+			return
+		}
 		c.JSON(http.StatusBadRequest, entity.NewAppError(entity.ErrCodeValidation, "failed to associate application with team"))
 		return
 	}

@@ -5,6 +5,10 @@
 [![totoggle-go](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-go.yml)
 [![totoggle-node](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/totoggle-node.yml)
 [![frontend-web](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml/badge.svg)](https://github.com/manorfm/toToggles/actions/workflows/frontend-web.yml)
+[![Server version](https://img.shields.io/docker/v/manorfm/totoggle?sort=semver&label=server)](https://hub.docker.com/r/manorfm/totoggle/tags)
+[![Java version](https://img.shields.io/maven-central/v/io.github.manorfm/totoggle_java?label=java)](https://central.sonatype.com/artifact/io.github.manorfm/totoggle_java)
+[![Node version](https://img.shields.io/npm/v/totoggle-node?label=node)](https://www.npmjs.com/package/totoggle-node)
+[![Go module](https://img.shields.io/badge/go-module-00ADD8?logo=go)](https://pkg.go.dev/github.com/manorfm/toToggles/totoggle_go)
 [![License](https://img.shields.io/badge/license-ToToggle%201.0-blue)](LICENSE)
 
 A feature flag (feature toggle) management platform: a Go server with a role-based admin UI, team

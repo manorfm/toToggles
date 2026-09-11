@@ -21,7 +21,7 @@ const (
 	ApprovalActionApplicationCreate ApprovalActionType = "application_create"
 	ApprovalActionApplicationUpdate ApprovalActionType = "application_update"
 	ApprovalActionApplicationDelete ApprovalActionType = "application_delete"
-	ApprovalActionSecretKeyCreate   ApprovalActionType = "secret_key_create"
+	ApprovalActionSecretKeyCreate   ApprovalActionType = "secret_key_create" // #nosec G101 -- action identifier, not a credential.
 	ApprovalActionSecretKeyDelete   ApprovalActionType = "secret_key_delete"
 )
 
@@ -259,7 +259,7 @@ type TeamApproverInfo struct {
 
 // GetActionTypeDisplayName retorna o nome amigável do tipo de ação
 func GetActionTypeDisplayName(actionType ApprovalActionType) string {
-	names := map[ApprovalActionType]string{
+	names := map[ApprovalActionType]string{ // #nosec G101 -- translated action labels, not credentials.
 		ApprovalActionToggleCreate:      "Criar Toggle",
 		ApprovalActionToggleUpdate:      "Atualizar Toggle",
 		ApprovalActionToggleDelete:      "Excluir Toggle",

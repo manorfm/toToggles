@@ -17,15 +17,18 @@ func verifyDbFile(dbPath string) error {
 		// Create the database file's own parent directory — dbPath is caller-configured
 		// (DB_PATH) and isn't always under "./db" (e.g. docker-compose.yml points it at a
 		// mounted volume elsewhere).
-		err = os.MkdirAll(filepath.Dir(dbPath), os.ModePerm)
+		err = os.MkdirAll(filepath.Dir(dbPath), 0o700)
 		if err != nil {
 			return err
 		}
+		// #nosec G304 -- DB_PATH is trusted deployment configuration, not request input.
 		file, err := os.Create(dbPath)
 		if err != nil {
 			return err
 		}
-		file.Close()
+		if err := file.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

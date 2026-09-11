@@ -1,0 +1,121 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/security.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go-sast:
+    name: Go SAST and dependency analysis
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: server/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Reachable dependency vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+      - name: Static application security testing
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 ./...
+
+  codeql:
+    name: CodeQL ${{ matrix.language }}
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - uses: actions/setup-go@v5
+        if: matrix.language == 'go'
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: server/go.sum
+
+      - name: Build Go application
+        if: matrix.language == 'go'
+        working-directory: server
+        run: go build ./...
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  dast:
+    name: OWASP ZAP baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image locally
+        run: docker build --tag totoggle-dast:${{ github.sha }} ./server
+
+      - name: Start isolated application
+        run: |
+          docker run --detach --rm --name totoggle-dast --publish 3056:3056 \
+            --env COOKIE_SECURE=false \
+            totoggle-dast:${{ github.sha }}
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3056/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs totoggle-dast
+          exit 1
+
+      - name: Passive dynamic application security testing
+        run: |
+          docker run --rm --network host \
+            --volume "$RUNNER_TEMP:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://127.0.0.1:3056 -m 1 -I \
+            -J /zap/wrk/zap-report.json -r /zap/wrk/zap-report.html
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: ${{ runner.temp }}/zap-report.*
+          if-no-files-found: warn
+
+      - name: Stop isolated application
+        if: always()
+        run: docker stop totoggle-dast || true

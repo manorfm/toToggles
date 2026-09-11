@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+
+subject="$(sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d;q' "$1")"
+if [ -z "$subject" ]; then
+  exit 0
+fi
+
+if ! printf '%s\n' "$subject" | grep -Eq '^(feat|fix|perf|security|refactor|docs|test|build|ci|chore|style)(\([a-z0-9_-]+\))?!?: .+'; then
+  echo "Use Conventional Commits, for example: fix(server): upgraded Go runtime" >&2
+  exit 1
+fi

@@ -26,9 +26,14 @@ func Initialize() {
 	}
 
 	addr := ":" + config.ServerPort()
+	logger := config.GetLogger("router")
 	if hasTLS {
-		router.RunTLS(addr, config.TLSCertFile(), config.TLSKeyFile())
+		if err := router.RunTLS(addr, config.TLSCertFile(), config.TLSKeyFile()); err != nil {
+			logger.Errorf("server stopped: %v", err)
+		}
 	} else {
-		router.Run(addr)
+		if err := router.Run(addr); err != nil {
+			logger.Errorf("server stopped: %v", err)
+		}
 	}
 }

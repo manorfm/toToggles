@@ -76,8 +76,11 @@ func InitHandlers(db *gorm.DB) {
 	)
 	globalApprovalUseCase = approvalUseCase
 
-	// Inicializar usuário root padrão
-	authUseCase.InitializeRootUser()
+	// Inicializar usuário root padrão. Um erro é registrado para o boot continuar compatível com
+	// bancos pré-existentes e fixtures que não disponibilizam o arquivo de senha inicial.
+	if err := authUseCase.InitializeRootUser(); err != nil {
+		config.GetLogger("handlers").Errorf("initializing root user error: %v", err)
+	}
 
 	// Inicializa handlers
 	appHandler = NewApplicationHandler(appUseCase, toggleUseCase, teamUseCase, auditUseCase)
