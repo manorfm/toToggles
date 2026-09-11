@@ -4,8 +4,9 @@ import com.vanniktech.maven.publish.SourcesJar
 
 plugins {
     kotlin("jvm") version "2.4.10"
-    id("maven-publish")
     id("jacoco")
+    // Applies maven-publish itself — applying it again separately caused a non-deterministic
+    // task-ordering conflict with its own generated `plainJavadocJar` task.
     id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
@@ -115,4 +116,13 @@ mavenPublishing {
 
     publishToMavenCentral()
     signAllPublications()
+}
+
+// Workaround for a task-ordering gap in com.vanniktech.maven.publish 0.37.0 under Gradle 9:
+// `generateMetadataFileForMavenPublication` reads `plainJavadocJar`'s output without the plugin
+// declaring that dependency itself, which Gradle's stricter validation now rejects outright
+// (this isn't the documented withJavadocJar()-on-java{} conflict — that was already removed
+// above). Declaring it here directly is Gradle's own suggested fix for this exact error.
+tasks.matching { it.name == "generateMetadataFileForMavenPublication" }.configureEach {
+    dependsOn(tasks.named("plainJavadocJar"))
 }
