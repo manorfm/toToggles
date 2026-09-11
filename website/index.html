@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ToToggle — feature flags for Go, Java/Kotlin and Node</title>
-<meta name="description" content="ToToggle: a self-hosted feature-flag platform with a Go server and 3 official client libraries (Go, Java/Kotlin, Node/TypeScript)." />
+<title>ToToggle feature flags for Go, Java and Node</title>
+<meta name="description" content="ToToggle is a self hosted feature flag platform with a Go server and official libraries for Go, Java and Node." />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="alternate icon" href="favicon.svg" />
 <style>
@@ -50,7 +50,11 @@
   .sdk-card h3{margin:0;font-size:17px;display:flex;align-items:center;gap:10px}
   .sdk-tag{font-size:11px;font-weight:700;letter-spacing:.04em;background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:3px 9px;text-transform:uppercase}
   .sdk-card p.desc{margin:0;color:var(--ink-2);font-size:13.5px}
-  pre{background:#0e1210;border:1px solid var(--border);border-radius:9px;padding:12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:12.5px;color:var(--ink);margin:0}
+  .install-command{position:relative}
+  pre{background:#0e1210;border:1px solid var(--border);border-radius:9px;padding:12px 52px 12px 14px;overflow-x:auto;font-family:var(--font-mono);font-size:12.5px;color:var(--ink);margin:0}
+  .copy-button{position:absolute;top:8px;right:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--ink-2);padding:5px 8px;font:600 11px/1 var(--font-sans);cursor:pointer}
+  .copy-button:hover{color:var(--ink);background:#1d2420}
+  .copy-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .sdk-card a.repo-link{font-size:13px}
   .status{font-size:12px;color:var(--ink-3)}
   .status.live{color:var(--accent)}
@@ -88,10 +92,10 @@
 
 <div class="wrap">
   <section class="hero">
-    <h1>Self-hosted feature flags,<br>with a client for <span class="accent">every stack</span>.</h1>
-    <p>ToToggle is a Go server with a role-based admin UI, team management and an optional
-      approval workflow — plus 3 official client libraries that fetch and cache toggles locally
-      and evaluate 7 activation rule types with cascading validation.</p>
+    <h1>Self hosted feature flags<br>with clients for <span class="accent">every stack</span>.</h1>
+    <p>ToToggle is a Go server with a role based admin UI, team management and an optional
+      approval workflow. Its three official client libraries fetch and cache toggles locally
+      while evaluating seven activation rule types with cascading validation.</p>
     <div class="cta">
       <a class="btn btn-primary" href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">View on GitHub</a>
       <a class="btn btn-soft" href="https://github.com/manorfm/toToggles#-quick-start" target="_blank" rel="noopener">Quick start</a>
@@ -103,7 +107,7 @@
     <div class="features">
       <div class="feature">
         <h3>Hierarchical toggles</h3>
-        <p><code>service.feature.flag</code> paths with cascading validation — a disabled parent
+        <p><code>service.feature.flag</code> paths with cascading validation. A disabled parent
           disables every descendant.</p>
       </div>
       <div class="feature">
@@ -112,11 +116,11 @@
       </div>
       <div class="feature">
         <h3>Local evaluation</h3>
-        <p>Every client caches the catalog in memory — evaluation never blocks on the network.</p>
+        <p>Every client caches the catalog in memory so evaluation never blocks on the network.</p>
       </div>
       <div class="feature">
         <h3>Approval workflow</h3>
-        <p>Optional propose → approve → execute flow for sensitive changes, with a full audit
+        <p>Optional propose, approve and execute flow for sensitive changes with a full audit
           trail.</p>
       </div>
     </div>
@@ -129,24 +133,33 @@
         <h3>Go <span class="sdk-tag">totoggle_go</span></h3>
         <p class="desc">Functional options, <code>error</code> returns, <code>context.Context</code>
           on network operations.</p>
-        <pre>go get github.com/manorfm/toToggles/totoggle_go</pre>
-        <span class="status live">● live — available now via go get</span>
-        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_go" target="_blank" rel="noopener">README →</a>
+        <div class="install-command">
+          <pre><code>go get github.com/manorfm/toToggles/totoggle_go</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Go install command">Copy</button>
+        </div>
+        <span class="status live">● Available now with go get</span>
+        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_go" target="_blank" rel="noopener">Read the README</a>
       </div>
       <div class="sdk-card">
-        <h3>Java / Kotlin <span class="sdk-tag">totoggle_java</span></h3>
-        <p class="desc">Builder-style config, coroutines-friendly, OkHttp under the hood.</p>
-        <pre>implementation("io.github.manorfm:totoggle_java:1.0.0")</pre>
-        <span class="status live">● live — on Maven Central</span>
-        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_java" target="_blank" rel="noopener">README →</a>
+        <h3>Java <span class="sdk-tag">totoggle_java</span></h3>
+        <p class="desc">Builder style configuration with OkHttp handling the HTTP layer.</p>
+        <div class="install-command">
+          <pre><code>implementation("io.github.manorfm:totoggle_java:1.0.0")</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Java install command">Copy</button>
+        </div>
+        <span class="status live">● Available on Maven Central</span>
+        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_java" target="_blank" rel="noopener">Read the README</a>
       </div>
       <div class="sdk-card">
-        <h3>Node / TypeScript <span class="sdk-tag">totoggle-node</span></h3>
-        <p class="desc">Zero runtime dependencies, native <code>fetch</code>, Express/Fastify
+        <h3>Node <span class="sdk-tag">totoggle-node</span></h3>
+        <p class="desc">Zero runtime dependencies with native <code>fetch</code> and Express or Fastify
           middleware included.</p>
-        <pre>npm install totoggle-node</pre>
-        <span class="status live">● live — on npm</span>
-        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_node" target="_blank" rel="noopener">README →</a>
+        <div class="install-command">
+          <pre><code>npm install totoggle-node</code></pre>
+          <button class="copy-button" type="button" aria-label="Copy Node install command">Copy</button>
+        </div>
+        <span class="status live">● Available on npm</span>
+        <a class="repo-link" href="https://github.com/manorfm/toToggles/tree/main/totoggle_node" target="_blank" rel="noopener">Read the README</a>
       </div>
     </div>
   </section>
@@ -155,10 +168,10 @@
     <p class="section-title">License</p>
     <div class="license">
       <h3>ToToggle License 1.0</h3>
-      <p>Based on the Apache License 2.0, with one addition: commercial use must keep visible
-        attribution back to this project. Non-commercial, internal and evaluation use is
+      <p>Based on the Apache License 2.0 with one addition. Commercial use must keep visible
+        attribution to this project. Noncommercial, internal and evaluation use is
         unrestricted.</p>
-      <p><a href="https://github.com/manorfm/toToggles/blob/main/LICENSE" target="_blank" rel="noopener">Read the full license →</a></p>
+      <p><a href="https://github.com/manorfm/toToggles/blob/main/LICENSE" target="_blank" rel="noopener">Read the full license</a></p>
     </div>
   </section>
 </div>
@@ -169,6 +182,26 @@
     · <a href="https://github.com/manorfm/toToggles" target="_blank" rel="noopener">Source on GitHub</a>
   </div>
 </footer>
+
+<script>
+  document.querySelectorAll('.copy-button').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const command = button.previousElementSibling.textContent.trim();
+      const originalLabel = button.textContent;
+
+      try {
+        await navigator.clipboard.writeText(command);
+        button.textContent = 'Copied';
+      } catch {
+        button.textContent = 'Copy failed';
+      }
+
+      window.setTimeout(() => {
+        button.textContent = originalLabel;
+      }, 1800);
+    });
+  });
+</script>
 
 </body>
 </html>
