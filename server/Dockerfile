@@ -36,7 +36,6 @@ WORKDIR /app
 
 COPY --from=server-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=server-builder --chown=65532:65532 /out/totoggle ./totoggle
-COPY --chown=65532:65532 static ./static
 COPY --from=web-builder --chown=65532:65532 /static/app ./static/app
 COPY --from=runtime-files --chown=65532:65532 /app/data ./data
 
